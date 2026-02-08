@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             targetNamespace="http://flowable.org/examples">
+
+  <process id="approvalWorkflow" name="Approval Workflow">
+
+    <!-- Start Event -->
+    <startEvent id="start" name="Start"/>
+
+    <!-- Flow: Start → Review Task -->
+    <sequenceFlow id="flow1" sourceRef="start" targetRef="reviewTask"/>
+
+    <!-- User Task: Review Request -->
+    <userTask id="reviewTask" name="Review Request" flowable:assignee="reviewer">
+      <extensionElements>
+        <flowable:taskListener event="create" class="org.flowable.engine.impl.bpmn.listener.ScriptTaskListener"/>
+      </extensionElements>
+    </userTask>
+
+    <!-- Flow: Review Task → Decision Gateway -->
+    <sequenceFlow id="flow2" sourceRef="reviewTask" targetRef="decision"/>
+
+    <!-- Exclusive Gateway: Approve or Reject -->
+    <exclusiveGateway id="decision" name="Decision"/>
+
+    <!-- Flow: Decision → Approved (if approved == true) -->
+    <sequenceFlow id="flow3" sourceRef="decision" targetRef="approveEnd" name="Approve">
+      <conditionExpression xsi:type="tFormalExpression">${approved == true}</conditionExpression>
+    </sequenceFlow>
+
+    <!-- Flow: Decision → Rejected (if approved == false) -->
+    <sequenceFlow id="flow4" sourceRef="decision" targetRef="rejectEnd" name="Reject">
+      <conditionExpression xsi:type="tFormalExpression">${approved == false}</conditionExpression>
+    </sequenceFlow>
+
+    <!-- End Event: Approved -->
+    <endEvent id="approveEnd" name="Approved"/>
+
+    <!-- End Event: Rejected -->
+    <endEvent id="rejectEnd" name="Rejected"/>
+
+  </process>
+
+</definitions>
