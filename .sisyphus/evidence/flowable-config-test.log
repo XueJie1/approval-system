@@ -1,0 +1,76 @@
+Prepended http:// to '127.0.0.1:7890'
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------< com.flowablecollab:approval-system >-----------------
+[INFO] Building approval-system 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.5.10:run (default-cli) > test-compile @ approval-system >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ approval-system ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ approval-system ---
+[INFO] Recompiling the module because of added or removed source files.
+[INFO] Compiling 1 source file with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ approval-system ---
+[INFO] skip non existing resourceDirectory /home/cao/workspace/graduation_project/approval-system/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ approval-system ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 1 source file with javac [debug parameters release 17] to target/test-classes
+[INFO] 
+[INFO] <<< spring-boot:3.5.10:run (default-cli) < test-compile @ approval-system <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.5.10:run (default-cli) @ approval-system ---
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-buildpack-platform/3.5.10/spring-boot-buildpack-platform-3.5.10.pom
+Progress (1): 3.2 kB                    Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-buildpack-platform/3.5.10/spring-boot-buildpack-platform-3.5.10.pom (3.2 kB at 13 kB/s)
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/apache/httpcomponents/client5/httpclient5/5.5.2/httpclient5-5.5.2.pom
+Progress (1): 1.9/6.1 kBProgress (1): 6.1 kB                        Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/apache/httpcomponents/client5/httpclient5/5.5.2/httpclient5-5.5.2.pom (6.1 kB at 145 kB/s)
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/apache/httpcomponents/client5/httpclient5-parent/5.5.2/httpclient5-parent-5.5.2.pom
+Progress (1): 3.3/17 kBProgress (1): 17 kB                       Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/apache/httpcomponents/client5/httpclient5-parent/5.5.2/httpclient5-parent-5.5.2.pom (17 kB at 478 kB/s)
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-loader-tools/3.5.10/spring-boot-loader-tools-3.5.10.pom
+Progress (1): 2.2 kB                    Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-loader-tools/3.5.10/spring-boot-loader-tools-3.5.10.pom (2.2 kB at 36 kB/s)
+Downloading from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-observation/1.14.14/micrometer-observation-1.14.14.pom
+Progress (1): 3.8 kB                    Downloaded from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-observation/1.14.14/micrometer-observation-1.14.14.pom (3.8 kB at 120 kB/s)
+Downloading from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-commons/1.14.14/micrometer-commons-1.14.14.pom
+Progress (1): 3.4 kB                    Downloaded from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-commons/1.14.14/micrometer-commons-1.14.14.pom (3.4 kB at 83 kB/s)
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-buildpack-platform/3.5.10/spring-boot-buildpack-platform-3.5.10.jar
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/apache/httpcomponents/client5/httpclient5/5.5.2/httpclient5-5.5.2.jar
+Downloading from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-loader-tools/3.5.10/spring-boot-loader-tools-3.5.10.jar
+Downloading from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-observation/1.14.14/micrometer-observation-1.14.14.jar
+Downloading from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-commons/1.14.14/micrometer-commons-1.14.14.jar
+Progress (1): 7.3/75 kBProgress (1): 15/75 kB Progress (1): 32/75 kBProgress (1): 48/75 kBProgress (1): 63/75 kBProgress (1): 75 kB                      Downloaded from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-observation/1.14.14/micrometer-observation-1.14.14.jar (75 kB at 1.4 MB/s)
+Progress (1): 7.3/961 kBProgress (1): 7.7/961 kBProgress (2): 7.7/961 kB | 7.3/455 kBProgress (2): 7.7/961 kB | 15/455 kB Progress (2): 24/961 kB | 15/455 kB Progress (2): 24/961 kB | 32/455 kBProgress (3): 24/961 kB | 32/455 kB | 7.3/321 kBProgress (3): 24/961 kB | 32/455 kB | 15/321 kB Progress (3): 40/961 kB | 32/455 kB | 15/321 kBProgress (3): 40/961 kB | 32/455 kB | 32/321 kBProgress (3): 57/961 kB | 32/455 kB | 32/321 kBProgress (3): 57/961 kB | 48/455 kB | 32/321 kBProgress (3): 57/961 kB | 63/455 kB | 32/321 kBProgress (3): 73/961 kB | 63/455 kB | 32/321 kBProgress (4): 73/961 kB | 63/455 kB | 32/321 kB | 7.3/48 kBProgress (4): 73/961 kB | 63/455 kB | 32/321 kB | 15/48 kB Progress (4): 73/961 kB | 63/455 kB | 32/321 kB | 32/48 kBProgress (4): 73/961 kB | 63/455 kB | 48/321 kB | 32/48 kBProgress (4): 73/961 kB | 80/455 kB | 48/321 kB | 32/48 kBProgress (4): 73/961 kB | 80/455 kB | 64/321 kB | 32/48 kBProgress (4): 73/961 kB | 80/455 kB | 81/321 kB | 32/48 kBProgress (4): 73/961 kB | 96/455 kB | 81/321 kB | 32/48 kBProgress (4): 90/961 kB | 96/455 kB | 81/321 kB | 32/48 kBProgress (4): 92/961 kB | 96/455 kB | 81/321 kB | 32/48 kBProgress (4): 92/961 kB | 96/455 kB | 81/321 kB | 48 kB   Progress (4): 94/961 kB | 96/455 kB | 81/321 kB | 48 kBProgress (4): 98/961 kB | 96/455 kB | 81/321 kB | 48 kBProgress (4): 98/961 kB | 96/455 kB | 97/321 kB | 48 kBProgress (4): 98/961 kB | 112/455 kB | 97/321 kB | 48 kBProgress (4): 98/961 kB | 112/455 kB | 114/321 kB | 48 kBProgress (4): 115/961 kB | 112/455 kB | 114/321 kB | 48 kBProgress (4): 115/961 kB | 127/455 kB | 114/321 kB | 48 kBProgress (4): 115/961 kB | 127/455 kB | 130/321 kB | 48 kBProgress (4): 115/961 kB | 143/455 kB | 130/321 kB | 48 kBProgress (4): 131/961 kB | 143/455 kB | 130/321 kB | 48 kBProgress (4): 131/961 kB | 143/455 kB | 146/321 kB | 48 kBProgress (4): 131/961 kB | 160/455 kB | 146/321 kB | 48 kBProgress (4): 147/961 kB | 160/455 kB | 146/321 kB | 48 kBProgress (4): 147/961 kB | 160/455 kB | 163/321 kB | 48 kBProgress (4): 147/961 kB | 160/455 kB | 179/321 kB | 48 kBProgress (4): 147/961 kB | 176/455 kB | 179/321 kB | 48 kBProgress (4): 157/961 kB | 176/455 kB | 179/321 kB | 48 kBProgress (4): 160/961 kB | 176/455 kB | 179/321 kB | 48 kBProgress (4): 168/961 kB | 176/455 kB | 179/321 kB | 48 kBProgress (4): 168/961 kB | 192/455 kB | 179/321 kB | 48 kBProgress (4): 168/961 kB | 192/455 kB | 196/321 kB | 48 kBProgress (4): 168/961 kB | 196/455 kB | 196/321 kB | 48 kBProgress (4): 174/961 kB | 196/455 kB | 196/321 kB | 48 kBProgress (4): 181/961 kB | 196/455 kB | 196/321 kB | 48 kBProgress (4): 181/961 kB | 196/455 kB | 212/321 kB | 48 kBProgress (4): 181/961 kB | 212/455 kB | 212/321 kB | 48 kBProgress (4): 181/961 kB | 214/455 kB | 212/321 kB | 48 kBProgress (4): 198/961 kB | 214/455 kB | 212/321 kB | 48 kBProgress (4): 205/961 kB | 214/455 kB | 212/321 kB | 48 kBProgress (4): 205/961 kB | 214/455 kB | 228/321 kB | 48 kBProgress (4): 205/961 kB | 214/455 kB | 245/321 kB | 48 kBProgress (4): 205/961 kB | 230/455 kB | 245/321 kB | 48 kB                                                          Downloaded from alimaven: https://maven.aliyun.com/repository/public/io/micrometer/micrometer-commons/1.14.14/micrometer-commons-1.14.14.jar (48 kB at 299 kB/s)
+Progress (3): 221/961 kB | 230/455 kB | 245/321 kBProgress (3): 225/961 kB | 230/455 kB | 245/321 kBProgress (3): 225/961 kB | 244/455 kB | 245/321 kBProgress (3): 225/961 kB | 244/455 kB | 261/321 kBProgress (3): 225/961 kB | 244/455 kB | 277/321 kBProgress (3): 237/961 kB | 244/455 kB | 277/321 kBProgress (3): 237/961 kB | 256/455 kB | 277/321 kBProgress (3): 237/961 kB | 259/455 kB | 277/321 kBProgress (3): 253/961 kB | 259/455 kB | 277/321 kBProgress (3): 253/961 kB | 272/455 kB | 277/321 kBProgress (3): 268/961 kB | 272/455 kB | 277/321 kBProgress (3): 268/961 kB | 288/455 kB | 277/321 kBProgress (3): 268/961 kB | 288/455 kB | 294/321 kBProgress (3): 268/961 kB | 288/455 kB | 310/321 kBProgress (3): 268/961 kB | 297/455 kB | 310/321 kBProgress (3): 282/961 kB | 297/455 kB | 310/321 kBProgress (3): 282/961 kB | 297/455 kB | 321 kB    Progress (3): 299/961 kB | 297/455 kB | 321 kBProgress (3): 299/961 kB | 313/455 kB | 321 kBProgress (3): 299/961 kB | 320/455 kB | 321 kBProgress (3): 299/961 kB | 323/455 kB | 321 kBProgress (3): 303/961 kB | 323/455 kB | 321 kBProgress (3): 313/961 kB | 323/455 kB | 321 kBProgress (3): 326/961 kB | 323/455 kB | 321 kBProgress (3): 326/961 kB | 336/455 kB | 321 kBProgress (3): 342/961 kB | 336/455 kB | 321 kBProgress (3): 342/961 kB | 351/455 kB | 321 kBProgress (3): 349/961 kB | 351/455 kB | 321 kBProgress (3): 366/961 kB | 351/455 kB | 321 kBProgress (3): 366/961 kB | 367/455 kB | 321 kBProgress (3): 366/961 kB | 370/455 kB | 321 kBProgress (3): 366/961 kB | 384/455 kB | 321 kBProgress (3): 366/961 kB | 387/455 kB | 321 kBProgress (3): 381/961 kB | 387/455 kB | 321 kBProgress (3): 381/961 kB | 396/455 kB | 321 kBProgress (3): 381/961 kB | 412/455 kB | 321 kBProgress (3): 381/961 kB | 429/455 kB | 321 kBProgress (3): 398/961 kB | 429/455 kB | 321 kBProgress (3): 411/961 kB | 429/455 kB | 321 kBProgress (3): 427/961 kB | 429/455 kB | 321 kBProgress (3): 427/961 kB | 445/455 kB | 321 kBProgress (3): 427/961 kB | 455 kB | 321 kB    Progress (3): 443/961 kB | 455 kB | 321 kBProgress (3): 459/961 kB | 455 kB | 321 kBProgress (3): 476/961 kB | 455 kB | 321 kB                                          Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-buildpack-platform/3.5.10/spring-boot-buildpack-platform-3.5.10.jar (321 kB at 1.5 MB/s)
+Progress (2): 492/961 kB | 455 kBProgress (2): 508/961 kB | 455 kBProgress (2): 524/961 kB | 455 kBProgress (2): 525/961 kB | 455 kBProgress (2): 541/961 kB | 455 kBProgress (2): 557/961 kB | 455 kBProgress (2): 573/961 kB | 455 kBProgress (2): 590/961 kB | 455 kB                                 Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/springframework/boot/spring-boot-loader-tools/3.5.10/spring-boot-loader-tools-3.5.10.jar (455 kB at 2.0 MB/s)
+Progress (1): 606/961 kBProgress (1): 623/961 kBProgress (1): 639/961 kBProgress (1): 655/961 kBProgress (1): 672/961 kBProgress (1): 688/961 kBProgress (1): 705/961 kBProgress (1): 721/961 kBProgress (1): 737/961 kBProgress (1): 754/961 kBProgress (1): 770/961 kBProgress (1): 786/961 kBProgress (1): 803/961 kBProgress (1): 819/961 kBProgress (1): 836/961 kBProgress (1): 852/961 kBProgress (1): 868/961 kBProgress (1): 885/961 kBProgress (1): 901/961 kBProgress (1): 918/961 kBProgress (1): 934/961 kBProgress (1): 950/961 kBProgress (1): 961 kB                        Downloaded from alimaven: https://maven.aliyun.com/repository/public/org/apache/httpcomponents/client5/httpclient5/5.5.2/httpclient5-5.5.2.jar (961 kB at 3.3 MB/s)
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.5.10)
+
+2026-02-08T17:44:51.814+08:00  INFO 258059 --- [approval-system] [           main] c.f.a.ApprovalSystemApplication          : Starting ApprovalSystemApplication using Java 17.0.18 with PID 258059 (/home/cao/workspace/graduation_project/approval-system/target/classes started by cao in /home/cao/workspace/graduation_project/approval-system)
+2026-02-08T17:44:51.818+08:00  INFO 258059 --- [approval-system] [           main] c.f.a.ApprovalSystemApplication          : No active profile set, falling back to 1 default profile: "default"
+2026-02-08T17:44:52.319+08:00  INFO 258059 --- [approval-system] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-02-08T17:44:52.321+08:00  INFO 258059 --- [approval-system] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-02-08T17:44:52.346+08:00  INFO 258059 --- [approval-system] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 Redis repository interfaces.
+2026-02-08T17:44:52.743+08:00  INFO 258059 --- [approval-system] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-02-08T17:44:52.756+08:00  INFO 258059 --- [approval-system] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-02-08T17:44:52.756+08:00  INFO 258059 --- [approval-system] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.50]
+2026-02-08T17:44:52.815+08:00  INFO 258059 --- [approval-system] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-02-08T17:44:52.816+08:00  INFO 258059 --- [approval-system] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 961 ms
+2026-02-08T17:44:53.372+08:00  INFO 258059 --- [approval-system] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-02-08T17:44:53.382+08:00  INFO 258059 --- [approval-system] [           main] c.f.a.ApprovalSystemApplication          : Started ApprovalSystemApplication in 1.98 seconds (process running for 2.248)
+2026-02-08T17:45:27.881+08:00  INFO 258059 --- [approval-system] [ionShutdownHook] o.s.b.w.e.tomcat.GracefulShutdown        : Commencing graceful shutdown. Waiting for active requests to complete
+2026-02-08T17:45:27.889+08:00  INFO 258059 --- [approval-system] [tomcat-shutdown] o.s.b.w.e.tomcat.GracefulShutdown        : Graceful shutdown complete

@@ -13,11 +13,7 @@
     <sequenceFlow id="flow1" sourceRef="start" targetRef="reviewTask"/>
 
     <!-- User Task: Review Request -->
-    <userTask id="reviewTask" name="Review Request" flowable:assignee="reviewer">
-      <extensionElements>
-        <flowable:taskListener event="create" class="org.flowable.engine.impl.bpmn.listener.ScriptTaskListener"/>
-      </extensionElements>
-    </userTask>
+    <userTask id="reviewTask" name="Review Request" flowable:assignee="reviewer"/>
 
     <!-- Flow: Review Task → Decision Gateway -->
     <sequenceFlow id="flow2" sourceRef="reviewTask" targetRef="decision"/>
