@@ -4,12 +4,11 @@
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              targetNamespace="http://flowable.org/examples">
 
-  <process id="approvalWorkflow" name="Approval Workflow" isExecutable="true">
-
+  <process id="approvalOrSign" name="Approval Or-Sign" isExecutable="true">
     <startEvent id="start" name="Start"/>
-    <sequenceFlow id="flow1" sourceRef="start" targetRef="countersignTask"/>
+    <sequenceFlow id="flow1" sourceRef="start" targetRef="orSignTask"/>
 
-    <userTask id="countersignTask" name="Countersign Task" flowable:assignee="${countersignUser}">
+    <userTask id="orSignTask" name="Or-Sign Task" flowable:assignee="${countersignUser}">
       <extensionElements>
         <flowable:taskListener event="complete" delegateExpression="${countersignTaskListener}"/>
       </extensionElements>
@@ -17,29 +16,25 @@
                                         flowable:collection="countersignUsers"
                                         flowable:elementVariable="countersignUser">
         <completionCondition>
-          ${countersignMode == 'ALL' ? (rejectCount == 0 &amp;&amp; nrOfCompletedInstances == nrOfInstances)
-            : (approveCount >= requiredApprove || rejectCount > (nrOfInstances - requiredApprove))}
+          ${approveCount >= 1 || rejectCount == nrOfInstances}
         </completionCondition>
       </multiInstanceLoopCharacteristics>
     </userTask>
 
-    <sequenceFlow id="flow2" sourceRef="countersignTask" targetRef="decision"/>
-
     <userTask id="applicantRework" name="Applicant Rework" flowable:assignee="${applicantId}"/>
-    <sequenceFlow id="flowReworkToCountersign" sourceRef="applicantRework" targetRef="countersignTask"/>
+    <sequenceFlow id="flowReworkToOrSign" sourceRef="applicantRework" targetRef="orSignTask"/>
+
+    <sequenceFlow id="flow2" sourceRef="orSignTask" targetRef="decision"/>
 
     <exclusiveGateway id="decision" name="Decision"/>
-
     <sequenceFlow id="flow3" sourceRef="decision" targetRef="approveEnd" name="Approve">
-      <conditionExpression xsi:type="tFormalExpression">${countersignResult == 'APPROVE'}</conditionExpression>
+      <conditionExpression xsi:type="tFormalExpression">${approveCount >= 1}</conditionExpression>
     </sequenceFlow>
-
     <sequenceFlow id="flow4" sourceRef="decision" targetRef="rejectEnd" name="Reject">
-      <conditionExpression xsi:type="tFormalExpression">${countersignResult == 'REJECT'}</conditionExpression>
+      <conditionExpression xsi:type="tFormalExpression">${approveCount == 0}</conditionExpression>
     </sequenceFlow>
 
     <endEvent id="approveEnd" name="Approved"/>
     <endEvent id="rejectEnd" name="Rejected"/>
-
   </process>
 </definitions>

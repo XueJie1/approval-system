@@ -4,8 +4,7 @@
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              targetNamespace="http://flowable.org/examples">
 
-  <process id="approvalWorkflow" name="Approval Workflow" isExecutable="true">
-
+  <process id="approvalCountersign" name="Approval Countersign" isExecutable="true">
     <startEvent id="start" name="Start"/>
     <sequenceFlow id="flow1" sourceRef="start" targetRef="countersignTask"/>
 
@@ -23,23 +22,20 @@
       </multiInstanceLoopCharacteristics>
     </userTask>
 
-    <sequenceFlow id="flow2" sourceRef="countersignTask" targetRef="decision"/>
-
     <userTask id="applicantRework" name="Applicant Rework" flowable:assignee="${applicantId}"/>
     <sequenceFlow id="flowReworkToCountersign" sourceRef="applicantRework" targetRef="countersignTask"/>
 
-    <exclusiveGateway id="decision" name="Decision"/>
+    <sequenceFlow id="flow2" sourceRef="countersignTask" targetRef="decision"/>
 
+    <exclusiveGateway id="decision" name="Decision"/>
     <sequenceFlow id="flow3" sourceRef="decision" targetRef="approveEnd" name="Approve">
       <conditionExpression xsi:type="tFormalExpression">${countersignResult == 'APPROVE'}</conditionExpression>
     </sequenceFlow>
-
     <sequenceFlow id="flow4" sourceRef="decision" targetRef="rejectEnd" name="Reject">
       <conditionExpression xsi:type="tFormalExpression">${countersignResult == 'REJECT'}</conditionExpression>
     </sequenceFlow>
 
     <endEvent id="approveEnd" name="Approved"/>
     <endEvent id="rejectEnd" name="Rejected"/>
-
   </process>
 </definitions>

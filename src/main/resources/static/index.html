@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智能协同审批系统</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <style>
+    body { background: #f5f7fb; }
+    #app { max-width: 1200px; margin: 32px auto; padding: 0 16px; }
+    .card { margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .muted { color: #6b7280; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <el-page-header content="智能协同审批系统"></el-page-header>
+
+  <el-card class="card" shadow="hover">
+    <template #header>发起申请</template>
+    <div class="actions" style="margin-bottom: 12px;">
+      <el-input v-model="formKey" placeholder="表单Key，如 travel_form"></el-input>
+      <el-button @click="loadForm">加载表单</el-button>
+    </div>
+    <el-form :model="startForm" label-width="110px" class="grid">
+      <el-form-item label="业务单号">
+        <el-input v-model="startForm.businessKey" placeholder="可留空自动生成"></el-input>
+      </el-form-item>
+      <el-form-item label="标题">
+        <el-input v-model="startForm.title" placeholder="如：差旅申请"></el-input>
+      </el-form-item>
+      <el-form-item label="申请人ID">
+        <el-input v-model="startForm.applicantId" placeholder="例如 10001"></el-input>
+      </el-form-item>
+      <el-form-item label="部门ID">
+        <el-input v-model="startForm.applicantDeptId" placeholder="可选"></el-input>
+      </el-form-item>
+      <el-form-item label="岗位ID">
+        <el-input v-model="startForm.applicantPostId" placeholder="可选"></el-input>
+      </el-form-item>
+      <el-form-item label="会签用户">
+        <el-input v-model="startForm.countersignUsers" placeholder="逗号分隔用户ID"></el-input>
+      </el-form-item>
+      <el-form-item label="会签模式">
+        <el-select v-model="startForm.countersignMode">
+          <el-option label="全票通过" value="ALL"></el-option>
+          <el-option label="多数通过" value="MAJORITY"></el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="流程类型">
+        <el-select v-model="startForm.processKey">
+          <el-option label="并行会签" value="approvalCountersign"></el-option>
+          <el-option label="或签" value="approvalOrSign"></el-option>
+          <el-option label="顺序审批" value="approvalSequential"></el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="通过比例">
+        <el-input v-model="startForm.passRatio" placeholder="0.6 表示 60%"></el-input>
+      </el-form-item>
+      <el-form-item label="变量(JSON)">
+        <el-input type="textarea" rows="3" v-model="startForm.variables" placeholder='{"amount": 3000}'></el-input>
+      </el-form-item>
+    </el-form>
+    <el-form v-if="dynamicFields.length" :model="dynamicForm" label-width="110px" class="grid">
+      <el-form-item v-for="field in dynamicFields" :key="field.key" :label="field.label || field.key">
+        <el-input v-if="field.type === 'string'" v-model="dynamicForm[field.key]"></el-input>
+        <el-input v-else-if="field.type === 'number'" v-model.number="dynamicForm[field.key]"></el-input>
+        <el-input v-else-if="field.type === 'date'" v-model="dynamicForm[field.key]" placeholder="YYYY-MM-DD"></el-input>
+        <el-select v-else-if="field.type === 'select'" v-model="dynamicForm[field.key]">
+          <el-option v-for="opt in field.options || []" :key="opt.value" :label="opt.label" :value="opt.value"></el-option>
+        </el-select>
+        <el-input v-else v-model="dynamicForm[field.key]"></el-input>
+      </el-form-item>
+    </el-form>
+    <div class="actions">
+      <el-button type="primary" @click="startProcess">发起流程</el-button>
+      <span class="muted">流程启动后可在下方查询待办。</span>
+    </div>
+  </el-card>
+
+  <el-card class="card" shadow="hover">
+    <template #header>任务列表</template>
+    <div class="actions" style="margin-bottom: 12px;">
+      <el-input v-model="taskQuery.assignee" placeholder="输入用户ID"></el-input>
+      <el-checkbox v-model="taskQuery.includeCandidate">包含候选任务</el-checkbox>
+      <el-button type="primary" @click="fetchTasks">查询任务</el-button>
+    </div>
+    <el-table :data="tasks" style="width: 100%">
+      <el-table-column prop="taskId" label="任务ID" width="220"></el-table-column>
+      <el-table-column prop="taskName" label="任务名称" width="180"></el-table-column>
+      <el-table-column prop="processInstanceId" label="流程实例" width="220"></el-table-column>
+      <el-table-column prop="assignee" label="办理人" width="120"></el-table-column>
+    </el-table>
+  </el-card>
+
+  <el-card class="card" shadow="hover">
+    <template #header>任务操作</template>
+    <el-form :model="taskAction" label-width="110px" class="grid">
+      <el-form-item label="任务ID">
+        <el-input v-model="taskAction.taskId"></el-input>
+      </el-form-item>
+      <el-form-item label="用户ID">
+        <el-input v-model="taskAction.userId"></el-input>
+      </el-form-item>
+      <el-form-item label="审批结果">
+        <el-select v-model="taskAction.approvalResult">
+          <el-option label="同意" value="APPROVE"></el-option>
+          <el-option label="拒绝" value="REJECT"></el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="意见">
+        <el-input v-model="taskAction.comment"></el-input>
+      </el-form-item>
+      <el-form-item label="委派人ID">
+        <el-input v-model="taskAction.delegateUserId"></el-input>
+      </el-form-item>
+      <el-form-item label="转办人ID">
+        <el-input v-model="taskAction.newAssigneeId"></el-input>
+      </el-form-item>
+      <el-form-item label="流程实例ID">
+        <el-input v-model="taskAction.processInstanceId"></el-input>
+      </el-form-item>
+      <el-form-item label="回退节点ID">
+        <el-input v-model="taskAction.targetActivityId" placeholder="如 countersignTask"></el-input>
+      </el-form-item>
+    </el-form>
+    <div class="actions">
+      <el-button @click="claimTask">认领</el-button>
+      <el-button type="success" @click="completeTask">提交审批</el-button>
+      <el-button type="warning" @click="delegateTask">委派</el-button>
+      <el-button type="info" @click="resolveTask">委派处理</el-button>
+      <el-button type="danger" @click="reassignTask">转办</el-button>
+      <el-button type="primary" @click="returnTask">回退到会签</el-button>
+      <el-button type="primary" plain @click="returnToPrevious">回退到上一步</el-button>
+      <el-button type="primary" plain @click="returnToTarget">回退到指定节点</el-button>
+      <el-button type="primary" plain @click="returnToApplicant">回退到发起人</el-button>
+      <el-button type="danger" plain @click="cancelProcess">撤销流程</el-button>
+    </div>
+  </el-card>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+<script>
+  const { createApp, reactive } = Vue;
+
+  createApp({
+    setup() {
+      const startForm = reactive({
+        businessKey: "",
+        title: "",
+        applicantId: "",
+        applicantDeptId: "",
+        applicantPostId: "",
+        countersignUsers: "",
+        countersignMode: "ALL",
+        processKey: "approvalCountersign",
+        passRatio: "1.0",
+        variables: ""
+      });
+      const formKey = Vue.ref("");
+      const dynamicFields = reactive([]);
+      const dynamicForm = reactive({});
+
+      const taskQuery = reactive({ assignee: "", includeCandidate: false });
+      const tasks = reactive([]);
+      const taskAction = reactive({
+        taskId: "",
+        userId: "",
+        approvalResult: "APPROVE",
+        comment: "",
+        delegateUserId: "",
+        newAssigneeId: "",
+        processInstanceId: "",
+        targetActivityId: ""
+      });
+
+      const startProcess = async () => {
+        let variables = {};
+        if (startForm.variables) {
+          try {
+            variables = JSON.parse(startForm.variables);
+          } catch (err) {
+            ElMessage.error("变量 JSON 格式错误");
+            return;
+          }
+        }
+        const formData = Object.keys(dynamicForm).length ? { ...dynamicForm } : null;
+        const formVersionId = dynamicForm.__versionId || null;
+        if (formData && formData.__versionId) {
+          delete formData.__versionId;
+        }
+        const payload = {
+          businessKey: startForm.businessKey || null,
+          title: startForm.title,
+          applicantId: Number(startForm.applicantId),
+          applicantDeptId: startForm.applicantDeptId ? Number(startForm.applicantDeptId) : null,
+          applicantPostId: startForm.applicantPostId ? Number(startForm.applicantPostId) : null,
+          formKey: formKey.value || null,
+          formData,
+          processKey: startForm.processKey,
+          countersignUsers: startForm.countersignUsers
+            ? startForm.countersignUsers.split(",").map(v => v.trim()).filter(Boolean)
+            : [],
+          countersignMode: startForm.countersignMode,
+          passRatio: startForm.passRatio ? Number(startForm.passRatio) : null,
+          variables
+        };
+        if (formKey.value && formData && formVersionId) {
+          await fetch("/api/forms/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: Number(startForm.applicantId),
+              formVersionId: Number(formVersionId),
+              data: formData
+            })
+          });
+        }
+        await fetch("/api/workflow/requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        ElMessage.success("流程已发起");
+      };
+
+      const loadForm = async () => {
+        if (!formKey.value) {
+          ElMessage.warning("请输入表单Key");
+          return;
+        }
+        const res = await fetch(`/api/forms/versions/latest?formKey=${formKey.value}`);
+        const version = await res.json();
+        const fieldRes = await fetch(`/api/forms/fields?formVersionId=${version.id}`);
+        const fieldList = await fieldRes.json();
+        const fields = (fieldList || []).map(field => ({
+          key: field.fieldKey,
+          type: field.fieldType || "string",
+          label: field.label || field.fieldKey,
+          options: field.optionsJson ? JSON.parse(field.optionsJson) : []
+        }));
+        dynamicFields.splice(0, dynamicFields.length, ...fields);
+        Object.keys(dynamicForm).forEach(k => delete dynamicForm[k]);
+        dynamicForm.__versionId = version.id;
+      };
+
+      const fetchTasks = async () => {
+        const params = new URLSearchParams({
+          assignee: taskQuery.assignee,
+          includeCandidate: String(taskQuery.includeCandidate)
+        });
+        const res = await fetch(`/api/workflow/tasks?${params.toString()}`);
+        const data = await res.json();
+        tasks.splice(0, tasks.length, ...data);
+      };
+
+      const claimTask = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/claim`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: taskAction.userId })
+        });
+        ElMessage.success("任务已认领");
+      };
+
+      const completeTask = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            approvalResult: taskAction.approvalResult,
+            comments: taskAction.comment
+          })
+        });
+        ElMessage.success("任务已提交");
+      };
+
+      const delegateTask = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/delegate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            delegateUserId: taskAction.delegateUserId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("任务已委派");
+      };
+
+      const resolveTask = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            approvalResult: taskAction.approvalResult,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("委派处理完成");
+      };
+
+      const reassignTask = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/reassign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            newAssigneeId: taskAction.newAssigneeId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("任务已转办");
+      };
+
+      const returnTask = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/return`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("任务已回退");
+      };
+
+      const returnToPrevious = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/return/previous`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("已回退到上一步");
+      };
+
+      const returnToTarget = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/return/target`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            targetActivityId: taskAction.targetActivityId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("已回退到指定节点");
+      };
+
+      const returnToApplicant = async () => {
+        await fetch(`/api/workflow/tasks/${taskAction.taskId}/return/applicant`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("已回退到发起人");
+      };
+
+      const cancelProcess = async () => {
+        await fetch(`/api/workflow/process/${taskAction.processInstanceId}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: taskAction.userId,
+            comment: taskAction.comment
+          })
+        });
+        ElMessage.success("流程已撤销");
+      };
+
+      return {
+        startForm,
+        taskQuery,
+        tasks,
+        taskAction,
+        formKey,
+        dynamicFields,
+        dynamicForm,
+        startProcess,
+        loadForm,
+        fetchTasks,
+        claimTask,
+        completeTask,
+        delegateTask,
+        resolveTask,
+        reassignTask,
+        returnTask,
+        returnToPrevious,
+        returnToTarget,
+        returnToApplicant,
+        cancelProcess
+      };
+    }
+  }).use(ElementPlus).mount("#app");
+</script>
+</body>
+</html>

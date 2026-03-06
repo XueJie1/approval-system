@@ -1,0 +1,1866 @@
+openapi: 3.0.3
+info:
+  title: Approval System API
+  version: 1.0.0
+  description: 基于当前代码实现整理的接口文档（Spring Boot + Flowable）
+
+servers:
+  - url: http://localhost:8080
+    description: Local
+
+tags:
+  - name: Workflow
+  - name: Requests
+  - name: Forms
+  - name: RBAC
+
+paths:
+  /api/workflow/requests:
+    post:
+      tags: [Workflow]
+      summary: 发起流程
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartProcessRequest'
+            example:
+              businessKey: BR-20260224-0001
+              title: 差旅申请-上海
+              applicantId: 1001
+              applicantDeptId: 10
+              applicantPostId: 101
+              processKey: approvalWorkflow
+              variables:
+                amount: 3200
+                reason: 客户拜访
+              countersignUsers: ["1002", "1003"]
+              countersignMode: ALL
+              passRatio: 1
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartProcessResponse'
+              example:
+                processInstanceId: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+                message: Process started successfully
+        '403':
+          description: 权限不足（非 EMPLOYEE）
+
+  /api/workflow/tasks:
+    get:
+      tags: [Workflow]
+      summary: 查询用户任务
+      parameters:
+        - name: assignee
+          in: query
+          required: true
+          description: 任务办理人（用户ID字符串）
+          schema:
+            type: string
+            example: "1002"
+        - name: includeCandidate
+          in: query
+          required: false
+          description: 是否同时查询候选任务
+          schema:
+            type: boolean
+            default: false
+            example: true
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskInfo'
+              example:
+                - taskId: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+                  taskName: 部门主管审批
+                  processInstanceId: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+                  assignee: "1002"
+                  createTime: "2026-02-24T10:20:30Z"
+
+  /api/workflow/tasks/{taskId}/claim:
+    post:
+      tags: [Workflow]
+      summary: 认领任务
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimTaskRequest'
+            example:
+              userId: "1002"
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task claimed
+
+  /api/workflow/tasks/{taskId}/complete:
+    post:
+      tags: [Workflow]
+      summary: 完成审批任务
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteTaskRequest'
+            example:
+              userId: "1002"
+              approvalResult: APPROVE
+              comments: 同意，预算合理
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task completed
+
+  /api/workflow/tasks/{taskId}/delegate:
+    post:
+      tags: [Workflow]
+      summary: 委派任务
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelegateTaskRequest'
+            example:
+              userId: "1002"
+              delegateUserId: "1005"
+              comment: 我出差中，委派处理
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task delegated
+
+  /api/workflow/tasks/{taskId}/resolve:
+    post:
+      tags: [Workflow]
+      summary: 委派处理完成（resolve）
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveTaskRequest'
+            example:
+              userId: "1005"
+              approvalResult: APPROVE
+              comment: 已核实，同意
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task resolved
+
+  /api/workflow/tasks/{taskId}/reassign:
+    post:
+      tags: [Workflow]
+      summary: 转办任务
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignTaskRequest'
+            example:
+              userId: "1"
+              newAssigneeId: "1006"
+              comment: 按组织调整转办
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task reassigned
+
+  /api/workflow/tasks/{taskId}/return:
+    post:
+      tags: [Workflow]
+      summary: 回退到会签节点
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnTaskRequest'
+            example:
+              userId: "1002"
+              comment: 信息不完整，退回补充
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task returned
+
+  /api/workflow/tasks/{taskId}/return/previous:
+    post:
+      tags: [Workflow]
+      summary: 回退到上一步
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnTaskRequest'
+            example:
+              userId: "1002"
+              comment: 退回上一步重新审批
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task returned to previous
+
+  /api/workflow/tasks/{taskId}/return/target:
+    post:
+      tags: [Workflow]
+      summary: 回退到指定节点
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnToTargetRequest'
+            example:
+              userId: "1002"
+              targetActivityId: managerApproveTask
+              comment: 回退到部门主管节点
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task returned to target
+
+  /api/workflow/tasks/{taskId}/return/applicant:
+    post:
+      tags: [Workflow]
+      summary: 回退到发起人
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnTaskRequest'
+            example:
+              userId: "1002"
+              comment: 退回申请人修改
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Task returned to applicant
+
+  /api/workflow/process/{processInstanceId}/cancel:
+    post:
+      tags: [Workflow]
+      summary: 撤销流程
+      parameters:
+        - name: processInstanceId
+          in: path
+          required: true
+          description: 流程实例ID
+          schema:
+            type: string
+            example: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelProcessRequest'
+            example:
+              userId: "1001"
+              comment: 申请内容有误，撤销后重提
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Process cancelled
+
+  /api/requests:
+    get:
+      tags: [Requests]
+      summary: 按数据权限查询申请单
+      parameters:
+        - $ref: '#/components/parameters/UserIdQuery'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BizRequest'
+              example:
+                - id: 1
+                  businessKey: BR-20260224-0001
+                  processInstanceId: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+                  processDefinitionId: approvalWorkflow:3:7504
+                  formInstanceId: 88
+                  applicantId: 1001
+                  applicantDeptId: 10
+                  applicantPostId: 101
+                  title: 差旅申请-上海
+                  status: 2
+                  currentTaskId: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+                  currentAssigneeId: 1002
+                  submitTime: "2026-02-24T10:20:30Z"
+                  finishTime: null
+                  createdAt: "2026-02-24T10:20:00Z"
+                  updatedAt: "2026-02-24T10:30:00Z"
+                  isDeleted: 0
+
+  /api/requests/tasks:
+    get:
+      tags: [Requests]
+      summary: 查询可见流程任务
+      parameters:
+        - $ref: '#/components/parameters/UserIdQuery'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskInfo'
+              example:
+                - taskId: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+                  taskName: 部门主管审批
+                  processInstanceId: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+                  assignee: "1002"
+                  createTime: "2026-02-24T10:20:30Z"
+
+  /api/requests/logs:
+    get:
+      tags: [Requests]
+      summary: 查询可见审批日志
+      parameters:
+        - $ref: '#/components/parameters/UserIdQuery'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BizRequestLog'
+              example:
+                - id: 101
+                  businessKey: BR-20260224-0001
+                  processInstanceId: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+                  taskId: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+                  operatorId: 1002
+                  action: APPROVE
+                  comment: 同意
+                  createdAt: "2026-02-24T10:35:00Z"
+
+  /api/requests/processes:
+    get:
+      tags: [Requests]
+      summary: 查询可见流程实例
+      parameters:
+        - $ref: '#/components/parameters/UserIdQuery'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessInfo'
+              example:
+                - processInstanceId: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+                  processDefinitionId: approvalWorkflow:3:7504
+                  businessKey: BR-20260224-0001
+
+  /api/forms/definitions:
+    post:
+      tags: [Forms]
+      summary: 创建表单定义（需 DESIGNER）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFormDefinitionRequest'
+            example:
+              userId: 2001
+              formKey: travel_request
+              formName: 差旅申请表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormDefinition'
+              example:
+                id: 1
+                formName: 差旅申请表
+                formKey: travel_request
+                status: 1
+        '403':
+          description: 权限不足
+
+  /api/forms/versions:
+    post:
+      tags: [Forms]
+      summary: 创建表单版本（需 DESIGNER）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFormVersionRequest'
+            example:
+              userId: 2001
+              formId: 1
+              schemaJson: "{\"title\":\"差旅申请\",\"type\":\"object\"}"
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormVersion'
+              example:
+                id: 3
+                formId: 1
+                version: 3
+                schemaJson: "{\"title\":\"差旅申请\",\"type\":\"object\"}"
+        '403':
+          description: 权限不足
+
+  /api/forms/fields:
+    post:
+      tags: [Forms]
+      summary: 替换表单字段（需 DESIGNER）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceFieldsRequest'
+            example:
+              userId: 2001
+              formVersionId: 3
+              fields:
+                - fieldKey: destination
+                  fieldType: string
+                  label: 出差地点
+                  required: true
+                - fieldKey: budget
+                  fieldType: number
+                  label: 预算金额
+                  required: true
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Fields updated
+        '403':
+          description: 权限不足
+    get:
+      tags: [Forms]
+      summary: 获取表单字段
+      parameters:
+        - name: formVersionId
+          in: query
+          required: true
+          description: 表单版本ID
+          schema:
+            type: integer
+            format: int64
+            example: 3
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FormField'
+              example:
+                - id: 11
+                  formVersionId: 3
+                  fieldKey: destination
+                  fieldType: string
+                  label: 出差地点
+                  required: 1
+                  visibleRule: null
+                  validateRule: null
+                  optionsJson: null
+
+  /api/forms/versions/latest:
+    get:
+      tags: [Forms]
+      summary: 获取指定表单Key最新版本
+      parameters:
+        - name: formKey
+          in: query
+          required: true
+          description: 表单唯一键
+          schema:
+            type: string
+            example: travel_request
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormVersion'
+              example:
+                id: 3
+                formId: 1
+                version: 3
+                schemaJson: "{\"title\":\"差旅申请\",\"type\":\"object\"}"
+
+  /api/forms/instances:
+    post:
+      tags: [Forms]
+      summary: 创建表单实例（需 EMPLOYEE）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFormInstanceRequest'
+            example:
+              userId: 1001
+              formVersionId: 3
+              businessKey: BR-20260224-0001
+              data:
+                destination: 上海
+                budget: 3200
+                days: 3
+                reason: 客户拜访
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormInstance'
+              example:
+                id: 88
+                formVersionId: 3
+                businessKey: BR-20260224-0001
+                dataJson: "{\"destination\":\"上海\",\"budget\":3200,\"days\":3}"
+        '400':
+          description: 参数或校验失败
+        '403':
+          description: 权限不足
+
+  /api/forms/validate:
+    post:
+      tags: [Forms]
+      summary: 校验表单数据（需 EMPLOYEE）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateFormInstanceRequest'
+            example:
+              userId: 1001
+              formVersionId: 3
+              data:
+                destination: 上海
+                budget: 3200
+                days: 3
+      responses:
+        '200':
+          description: 校验通过
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Validation passed
+        '400':
+          description: 校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormValidationErrorResponse'
+              example:
+                error: Form validation failed
+                errors:
+                  - field: budget
+                    code: required
+                    message: budget is required
+        '403':
+          description: 权限不足
+
+  /api/rbac/users:
+    post:
+      tags: [RBAC]
+      summary: 创建用户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              operatorId: 1
+              username: zhangsan
+              password: "P@ssw0rd123"
+              deptId: 2
+              status: 1
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RbacUserResponse'
+              example:
+                id: 10
+                username: zhangsan
+                deptId: 2
+                status: 1
+        '400':
+          description: 参数校验失败
+        '403':
+          description: 权限不足
+        '409':
+          description: 资源冲突（如用户名重复）
+
+  /api/rbac/roles:
+    post:
+      tags: [RBAC]
+      summary: 创建角色
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+            example:
+              operatorId: 1
+              roleCode: EMPLOYEE
+              roleName: 普通员工
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SysRole'
+              example:
+                id: 3
+                roleCode: EMPLOYEE
+                roleName: 普通员工
+                status: 1
+        '400':
+          description: 参数校验失败
+        '403':
+          description: 权限不足
+        '409':
+          description: 资源冲突（如角色编码重复）
+
+  /api/rbac/depts:
+    post:
+      tags: [RBAC]
+      summary: 创建部门
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeptRequest'
+            example:
+              operatorId: 1
+              deptName: 财务部
+              parentId: 1
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SysDept'
+              example:
+                id: 2
+                parentId: 1
+                deptName: 财务部
+        '400':
+          description: 参数校验失败
+        '403':
+          description: 权限不足
+
+  /api/rbac/posts:
+    post:
+      tags: [RBAC]
+      summary: 创建岗位
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+            example:
+              operatorId: 1
+              postCode: FINANCE_MANAGER
+              postName: 财务经理
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SysPost'
+              example:
+                id: 5
+                postCode: FINANCE_MANAGER
+                postName: 财务经理
+        '400':
+          description: 参数校验失败
+        '403':
+          description: 权限不足
+        '409':
+          description: 资源冲突（如岗位编码重复）
+
+  /api/rbac/assign:
+    post:
+      tags: [RBAC]
+      summary: 用户绑定角色
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleRequest'
+            example:
+              operatorId: 1
+              userId: 10
+              roleId: 3
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Role assigned
+        '400':
+          description: 参数错误（如用户或角色不存在）
+        '403':
+          description: 权限不足
+
+  /api/rbac/assign-post:
+    post:
+      tags: [RBAC]
+      summary: 用户绑定岗位
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignPostRequest'
+            example:
+              operatorId: 1
+              userId: 10
+              postId: 5
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Post assigned
+        '400':
+          description: 参数错误（如用户或岗位不存在）
+        '403':
+          description: 权限不足
+
+  /api/rbac/role-data-scope:
+    post:
+      tags: [RBAC]
+      summary: 配置角色数据权限
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddRoleDataScopeRequest'
+            example:
+              operatorId: 1
+              roleId: 3
+              scopeType: DEPT_AND_CHILD
+              deptId: 2
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+              example:
+                success: true
+                message: Role data scope added
+        '400':
+          description: 参数错误（如角色不存在或scopeType非法）
+        '403':
+          description: 权限不足
+
+components:
+  parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: Flowable任务ID
+      schema:
+        type: string
+        example: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+    UserIdQuery:
+      name: userId
+      in: query
+      required: true
+      description: 当前登录用户ID
+      schema:
+        type: integer
+        format: int64
+        example: 1001
+
+  schemas:
+    ActionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: 操作是否成功
+          example: true
+        message:
+          type: string
+          description: 操作结果说明
+          example: Task completed
+
+    StartProcessRequest:
+      type: object
+      required: [title, applicantId]
+      properties:
+        businessKey:
+          type: string
+          description: 业务主键，不传则后端自动生成
+          example: BR-20260224-0001
+        title:
+          type: string
+          description: 申请标题
+          example: 差旅申请-上海
+        applicantId:
+          type: integer
+          format: int64
+          description: 申请人用户ID
+          example: 1001
+        applicantDeptId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 申请人部门ID
+          example: 10
+        applicantPostId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 申请人岗位ID
+          example: 101
+        formInstanceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 已存在的表单实例ID
+          example: 888
+        formKey:
+          type: string
+          nullable: true
+          description: 表单Key；与 formData 配合时自动创建实例
+          example: travel_request
+        formData:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: 表单数据（键值对）
+          example:
+            destination: 上海
+            budget: 3200
+        processKey:
+          type: string
+          description: approvalWorkflow/approvalCountersign/approvalOrSign/approvalSequential
+          example: approvalWorkflow
+        variables:
+          type: object
+          additionalProperties: true
+          description: 流程变量
+          example:
+            amount: 3200
+            reason: 客户拜访
+        countersignUsers:
+          type: array
+          description: 会签用户ID列表（字符串）
+          example: ["1002", "1003"]
+          items:
+            type: string
+        countersignMode:
+          type: string
+          description: ALL/MAJORITY/OR
+          example: ALL
+        passRatio:
+          type: number
+          format: double
+          description: 多数通过阈值（0~1）
+          example: 1
+
+    StartProcessResponse:
+      type: object
+      properties:
+        processInstanceId:
+          type: string
+          description: 启动后的流程实例ID
+          example: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+        message:
+          type: string
+          description: 返回消息
+          example: Process started successfully
+
+    ClaimTaskRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          description: 认领人用户ID（字符串）
+          example: "1002"
+
+    CompleteTaskRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          description: 办理人用户ID（字符串）
+          example: "1002"
+        approvalResult:
+          type: string
+          description: APPROVE/REJECT
+          example: APPROVE
+        comments:
+          type: string
+          description: 审批意见
+          example: 同意，预算合理
+
+    DelegateTaskRequest:
+      type: object
+      required: [userId, delegateUserId]
+      properties:
+        userId:
+          type: string
+          description: 当前处理人用户ID（字符串）
+          example: "1002"
+        delegateUserId:
+          type: string
+          description: 被委派人用户ID（字符串）
+          example: "1005"
+        comment:
+          type: string
+          description: 委派说明
+          example: 我出差中，委派处理
+
+    ResolveTaskRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          description: 被委派处理人用户ID（字符串）
+          example: "1005"
+        approvalResult:
+          type: string
+          description: 处理结果（APPROVE/REJECT）
+          example: APPROVE
+        comment:
+          type: string
+          description: 处理意见
+          example: 已核实，同意
+
+    ReassignTaskRequest:
+      type: object
+      required: [userId, newAssigneeId]
+      properties:
+        userId:
+          type: string
+          description: 发起转办用户ID（字符串）
+          example: "1"
+        newAssigneeId:
+          type: string
+          description: 新负责人用户ID（字符串）
+          example: "1006"
+        comment:
+          type: string
+          description: 转办说明
+          example: 按组织调整转办
+
+    ReturnTaskRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          description: 发起回退用户ID（字符串）
+          example: "1002"
+        comment:
+          type: string
+          description: 回退原因
+          example: 信息不完整，退回补充
+
+    ReturnToTargetRequest:
+      type: object
+      required: [userId, targetActivityId]
+      properties:
+        userId:
+          type: string
+          description: 发起回退用户ID（字符串）
+          example: "1002"
+        targetActivityId:
+          type: string
+          description: 目标节点 activityId
+          example: managerApproveTask
+        comment:
+          type: string
+          description: 回退说明
+          example: 回退到部门主管节点
+
+    CancelProcessRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          description: 发起撤销用户ID（字符串）
+          example: "1001"
+        comment:
+          type: string
+          description: 撤销原因
+          example: 申请内容有误，撤销后重提
+
+    TaskInfo:
+      type: object
+      properties:
+        taskId:
+          type: string
+          description: 任务ID
+          example: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+        taskName:
+          type: string
+          description: 任务名称
+          example: 部门主管审批
+        processInstanceId:
+          type: string
+          description: 流程实例ID
+          example: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+        assignee:
+          type: string
+          nullable: true
+          description: 当前处理人
+          example: "1002"
+        createTime:
+          type: string
+          format: date-time
+          description: 任务创建时间
+          example: "2026-02-24T10:20:30Z"
+
+    ProcessInfo:
+      type: object
+      properties:
+        processInstanceId:
+          type: string
+          description: 流程实例ID
+          example: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+        processDefinitionId:
+          type: string
+          description: 流程定义ID
+          example: approvalWorkflow:3:7504
+        businessKey:
+          type: string
+          description: 业务主键
+          example: BR-20260224-0001
+
+    BizRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 主键ID
+          example: 1
+        businessKey:
+          type: string
+          description: 业务主键
+          example: BR-20260224-0001
+        processInstanceId:
+          type: string
+          description: 流程实例ID
+          example: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+        processDefinitionId:
+          type: string
+          description: 流程定义ID
+          example: approvalWorkflow:3:7504
+        formInstanceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 表单实例ID
+          example: 88
+        applicantId:
+          type: integer
+          format: int64
+          description: 申请人ID
+          example: 1001
+        applicantDeptId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 申请人部门ID
+          example: 10
+        applicantPostId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 申请人岗位ID
+          example: 101
+        title:
+          type: string
+          description: 申请标题
+          example: 差旅申请-上海
+        status:
+          type: integer
+          description: 0草稿/1已提交/2审批中/3通过/4拒绝/5退回/6撤销
+          example: 2
+        currentTaskId:
+          type: string
+          nullable: true
+          description: 当前任务ID
+          example: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+        currentAssigneeId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 当前处理人ID
+          example: 1002
+        submitTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: 提交时间
+          example: "2026-02-24T10:20:30Z"
+        finishTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: 完成时间
+          example: "2026-02-24T11:20:30Z"
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2026-02-24T10:20:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2026-02-24T10:30:00Z"
+        isDeleted:
+          type: integer
+          description: 逻辑删除标记（0否/1是）
+          example: 0
+
+    BizRequestLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 主键ID
+          example: 100
+        businessKey:
+          type: string
+          description: 业务主键
+          example: BR-20260224-0001
+        processInstanceId:
+          type: string
+          description: 流程实例ID
+          example: "4b8d6c88-f1ab-11ee-9f9a-0242ac120002"
+        taskId:
+          type: string
+          nullable: true
+          description: 任务ID
+          example: "c9a4c8b2-f1ab-11ee-9f9a-0242ac120002"
+        operatorId:
+          type: integer
+          format: int64
+          description: 操作人ID
+          example: 1002
+        action:
+          type: string
+          description: 操作类型
+          example: APPROVE
+        comment:
+          type: string
+          nullable: true
+          description: 操作说明
+          example: 同意
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2026-02-24T10:35:00Z"
+
+    FormDefinition:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 表单定义ID
+          example: 1
+        formName:
+          type: string
+          description: 表单名称
+          example: 差旅申请表
+        formKey:
+          type: string
+          description: 表单唯一键
+          example: travel_request
+        status:
+          type: integer
+          description: 状态（0禁用/1启用）
+          example: 1
+
+    FormVersion:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 表单版本ID
+          example: 3
+        formId:
+          type: integer
+          format: int64
+          description: 表单定义ID
+          example: 1
+        version:
+          type: integer
+          description: 版本号
+          example: 3
+        schemaJson:
+          type: string
+          description: 表单Schema JSON
+          example: "{\"title\":\"差旅申请\",\"type\":\"object\"}"
+
+    FormField:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 字段ID
+          example: 11
+        formVersionId:
+          type: integer
+          format: int64
+          description: 表单版本ID
+          example: 3
+        fieldKey:
+          type: string
+          description: 字段标识
+          example: destination
+        fieldType:
+          type: string
+          description: 字段类型
+          example: string
+        label:
+          type: string
+          description: 字段名称
+          example: 出差地点
+        required:
+          type: integer
+          description: 是否必填（0否/1是）
+          example: 1
+        visibleRule:
+          type: string
+          nullable: true
+          description: 可见性规则
+          example: budget > 0
+        validateRule:
+          type: string
+          nullable: true
+          description: 校验规则
+          example: max:10000
+        optionsJson:
+          type: string
+          nullable: true
+          description: 选项配置JSON
+          example: "[\"上海\",\"北京\"]"
+
+    FormInstance:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 表单实例ID
+          example: 88
+        formVersionId:
+          type: integer
+          format: int64
+          description: 表单版本ID
+          example: 3
+        businessKey:
+          type: string
+          description: 业务主键
+          example: BR-20260224-0001
+        dataJson:
+          type: string
+          description: 表单数据JSON
+          example: "{\"destination\":\"上海\",\"budget\":3200}"
+
+    CreateFormDefinitionRequest:
+      type: object
+      required: [userId, formKey, formName]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 操作人用户ID（需 DESIGNER）
+          example: 2001
+        formKey:
+          type: string
+          description: 表单唯一键
+          example: travel_request
+        formName:
+          type: string
+          description: 表单名称
+          example: 差旅申请表
+
+    CreateFormVersionRequest:
+      type: object
+      required: [userId, formId, schemaJson]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 操作人用户ID（需 DESIGNER）
+          example: 2001
+        formId:
+          type: integer
+          format: int64
+          description: 表单定义ID
+          example: 1
+        schemaJson:
+          type: string
+          description: 表单Schema定义
+          example: "{\"title\":\"差旅申请\",\"type\":\"object\"}"
+
+    ReplaceFieldsRequest:
+      type: object
+      required: [userId, formVersionId, fields]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 操作人用户ID（需 DESIGNER）
+          example: 2001
+        formVersionId:
+          type: integer
+          format: int64
+          description: 表单版本ID
+          example: 3
+        fields:
+          type: array
+          description: 字段定义列表
+          example:
+            - fieldKey: destination
+              fieldType: string
+              label: 出差地点
+              required: true
+          items:
+            $ref: '#/components/schemas/FormFieldRequest'
+
+    FormFieldRequest:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+          description: 字段标识
+          example: destination
+        fieldType:
+          type: string
+          description: 字段类型（string/number/date/select/table）
+          example: string
+        label:
+          type: string
+          description: 字段标题
+          example: 出差地点
+        required:
+          type: boolean
+          description: 是否必填
+          example: true
+        visibleRule:
+          type: string
+          nullable: true
+          description: 可见性规则表达式
+          example: budget > 0
+        validateRule:
+          type: string
+          nullable: true
+          description: 校验规则表达式
+          example: max:10000
+        optionsJson:
+          type: string
+          nullable: true
+          description: 选项JSON（select/table等字段使用）
+          example: "[\"上海\",\"北京\"]"
+
+    CreateFormInstanceRequest:
+      type: object
+      required: [userId, formVersionId, businessKey, data]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 操作人用户ID（需 EMPLOYEE）
+          example: 1001
+        formVersionId:
+          type: integer
+          format: int64
+          description: 表单版本ID
+          example: 3
+        businessKey:
+          type: string
+          description: 业务主键
+          example: BR-20260224-0001
+        data:
+          type: object
+          additionalProperties: true
+          description: 表单数据键值对
+          example:
+            destination: 上海
+            budget: 3200
+            days: 3
+
+    ValidateFormInstanceRequest:
+      type: object
+      required: [userId, formVersionId, data]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 操作人用户ID（需 EMPLOYEE）
+          example: 1001
+        formVersionId:
+          type: integer
+          format: int64
+          description: 表单版本ID
+          example: 3
+        data:
+          type: object
+          additionalProperties: true
+          description: 待校验的表单数据
+          example:
+            destination: 上海
+            budget: 3200
+
+    FormValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+          description: 错误字段
+          example: budget
+        code:
+          type: string
+          description: 错误码
+          example: required
+        message:
+          type: string
+          description: 错误信息
+          example: budget is required
+
+    FormValidationErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: 总体错误描述
+          example: Form validation failed
+        errors:
+          type: array
+          description: 具体字段错误列表
+          items:
+            $ref: '#/components/schemas/FormValidationError'
+
+    CreateUserRequest:
+      type: object
+      required: [username]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        username:
+          type: string
+          description: 用户名（唯一）
+          example: zhangsan
+        password:
+          type: string
+          nullable: true
+          description: 登录密码（明文传输后由后端哈希）
+          example: "P@ssw0rd123"
+        deptId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 部门ID
+          example: 2
+        status:
+          type: integer
+          description: 0禁用/1启用
+          example: 1
+
+    CreateRoleRequest:
+      type: object
+      required: [roleCode, roleName]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        roleCode:
+          type: string
+          description: 角色编码（唯一）
+          example: EMPLOYEE
+        roleName:
+          type: string
+          description: 角色名称
+          example: 普通员工
+
+    CreateDeptRequest:
+      type: object
+      required: [deptName]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        deptName:
+          type: string
+          description: 部门名称
+          example: 财务部
+        parentId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 上级部门ID
+          example: 1
+
+    CreatePostRequest:
+      type: object
+      required: [postCode, postName]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        postCode:
+          type: string
+          description: 岗位编码（唯一）
+          example: FINANCE_MANAGER
+        postName:
+          type: string
+          description: 岗位名称
+          example: 财务经理
+
+    AssignRoleRequest:
+      type: object
+      required: [userId, roleId]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 10
+        roleId:
+          type: integer
+          format: int64
+          description: 角色ID
+          example: 3
+
+    AssignPostRequest:
+      type: object
+      required: [userId, postId]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 10
+        postId:
+          type: integer
+          format: int64
+          description: 岗位ID
+          example: 5
+
+    AddRoleDataScopeRequest:
+      type: object
+      required: [roleId, scopeType]
+      properties:
+        operatorId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 操作人用户ID（初始化阶段可为空）
+          example: 1
+        roleId:
+          type: integer
+          format: int64
+          description: 角色ID
+          example: 3
+        scopeType:
+          type: string
+          description: ALL/SELF/DEPT/DEPT_AND_CHILD/CUSTOM
+          example: DEPT_AND_CHILD
+        deptId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 部门ID（scopeType=CUSTOM时必填）
+          example: 2
+
+    SysUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 10
+        username:
+          type: string
+          description: 用户名
+          example: zhangsan
+        password:
+          type: string
+          nullable: true
+          description: 密码哈希（接口通常不应返回）
+          example: "$2a$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        deptId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 部门ID
+          example: 2
+        status:
+          type: integer
+          description: 状态（0禁用/1启用）
+          example: 1
+
+    RbacUserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 10
+        username:
+          type: string
+          description: 用户名
+          example: zhangsan
+        deptId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 部门ID
+          example: 2
+        status:
+          type: integer
+          description: 状态（0禁用/1启用）
+          example: 1
+
+    SysRole:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 角色ID
+          example: 3
+        roleCode:
+          type: string
+          description: 角色编码
+          example: EMPLOYEE
+        roleName:
+          type: string
+          description: 角色名称
+          example: 普通员工
+        status:
+          type: integer
+          description: 状态（0禁用/1启用）
+          example: 1
+
+    SysDept:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 部门ID
+          example: 2
+        parentId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 上级部门ID
+          example: 1
+        deptName:
+          type: string
+          description: 部门名称
+          example: 财务部
+
+    SysPost:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 岗位ID
+          example: 5
+        postCode:
+          type: string
+          description: 岗位编码
+          example: FINANCE_MANAGER
+        postName:
+          type: string
+          description: 岗位名称
+          example: 财务经理
