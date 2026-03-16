@@ -51,6 +51,7 @@ public class RbacService {
         user.setDeptId(deptId);
         user.setStatus(status == null ? 1 : status);
         user.setTwoFactorEnabled(0);
+        user.setLoginFailures(0);
         return sysUserRepository.save(user);
     }
 

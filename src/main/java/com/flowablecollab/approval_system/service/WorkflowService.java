@@ -3,9 +3,11 @@ package com.flowablecollab.approval_system.service;
 import com.flowablecollab.approval_system.entity.BizRequest;
 import com.flowablecollab.approval_system.entity.BizRequestLog;
 import com.flowablecollab.approval_system.entity.BizRequestTask;
+import com.flowablecollab.approval_system.entity.rbac.SysUser;
 import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.repository.BizRequestTaskRepository;
+import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +49,7 @@ public class WorkflowService {
     private final BizRequestRepository bizRequestRepository;
     private final BizRequestTaskRepository bizRequestTaskRepository;
     private final BizRequestLogRepository bizRequestLogRepository;
+    private final SysUserRepository sysUserRepository;
 
     @Transactional
     public String startApprovalProcess(StartRequest request) {
@@ -448,7 +451,8 @@ public class WorkflowService {
         try {
             return Long.parseLong(value);
         } catch (NumberFormatException ex) {
-            return null;
+            // Try to resolve as username
+            return sysUserRepository.findByUsername(value).map(SysUser::getId).orElse(null);
         }
     }
 

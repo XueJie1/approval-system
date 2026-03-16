@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             targetNamespace="http://flowable.org/examples">
+
+  <process id="approvalSingle" name="Approval Single" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <sequenceFlow id="flow1" sourceRef="start" targetRef="singleApprovalTask"/>
+
+    <userTask id="singleApprovalTask" name="Single Approval Task" flowable:assignee="${approverId}">
+      <extensionElements>
+        <flowable:taskListener event="complete" delegateExpression="${countersignTaskListener}"/>
+      </extensionElements>
+    </userTask>
+
+    <userTask id="applicantRework" name="Applicant Rework" flowable:assignee="${applicantId}"/>
+    <sequenceFlow id="flowReworkToApproval" sourceRef="applicantRework" targetRef="singleApprovalTask"/>
+
+    <sequenceFlow id="flow2" sourceRef="singleApprovalTask" targetRef="decision"/>
+
+    <exclusiveGateway id="decision" name="Decision"/>
+    <sequenceFlow id="flow3" sourceRef="decision" targetRef="approveEnd" name="Approve">
+      <conditionExpression xsi:type="tFormalExpression">${approvalResult == 'APPROVE'}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow4" sourceRef="decision" targetRef="rejectEnd" name="Reject">
+      <conditionExpression xsi:type="tFormalExpression">${approvalResult == 'REJECT'}</conditionExpression>
+    </sequenceFlow>
+
+    <endEvent id="approveEnd" name="Approved"/>
+    <endEvent id="rejectEnd" name="Rejected"/>
+  </process>
+</definitions>
