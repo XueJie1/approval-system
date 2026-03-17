@@ -165,12 +165,10 @@ public class WorkflowController {
         if (requestedApplicantId == null) {
             return currentUserId;
         }
-        boolean idMatch = requestedApplicantId.equals(currentUserId);
-        boolean hasAdminRole = SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN");
-        if (idMatch || hasAdminRole) {
+        if (requestedApplicantId.equals(currentUserId) || SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN")) {
             return requestedApplicantId;
         }
-        throw new ForbiddenOperationException("applicantId must match current login user (requested: " + requestedApplicantId + ", current: " + currentUserId + ", idMatch: " + idMatch + ", hasAdminRole: " + hasAdminRole + ")");
+        throw new ForbiddenOperationException("applicantId must match current login user");
     }
 
     private String resolveActionUserId(String requestedUserId) {
