@@ -986,7 +986,7 @@ components:
             budget: 3200
         processKey:
           type: string
-          description: approvalWorkflow/approvalCountersign/approvalOrSign/approvalSequential
+          description: approvalWorkflow/approvalCountersign/approvalOrSign/approvalSequential/approvalSingle
           example: approvalWorkflow
         variables:
           type: object
@@ -1005,6 +1005,10 @@ components:
           type: string
           description: ALL/MAJORITY/OR
           example: ALL
+        approverId:
+          type: string
+          description: 单人审批时的审批人 ID（仅 approvalSingle 流程需要）
+          example: "1002"
         passRatio:
           type: number
           format: double

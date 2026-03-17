@@ -10,7 +10,7 @@
 
     <userTask id="singleApprovalTask" name="Single Approval Task" flowable:assignee="${approverId}">
       <extensionElements>
-        <flowable:taskListener event="complete" delegateExpression="${countersignTaskListener}"/>
+        <flowable:taskListener event="complete" delegateExpression="${singleApprovalTaskListener}"/>
       </extensionElements>
     </userTask>
 

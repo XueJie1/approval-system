@@ -231,9 +231,12 @@ public class WorkflowService {
         runtimeService.setVariable(task.getProcessInstanceId(), "rejectCount", 0);
         runtimeService.setVariable(task.getProcessInstanceId(), "countersignResult", "PENDING");
 
+        // Determine the correct approval task based on the process definition key
+        String targetActivityId = getCurrentApprovalTaskId(task.getProcessInstanceId());
+
         runtimeService.createChangeActivityStateBuilder()
                 .processInstanceId(task.getProcessInstanceId())
-                .moveExecutionToActivityId(task.getExecutionId(), "countersignTask")
+                .moveExecutionToActivityId(task.getExecutionId(), targetActivityId)
                 .changeState();
 
         BizRequestTask record = upsertTaskRecord(task, TASK_STATUS_RETURNED, "RETURN", comment);
@@ -258,7 +261,8 @@ public class WorkflowService {
         String previousActivityId = findPreviousUserTaskActivity(task.getProcessInstanceId(),
                 task.getTaskDefinitionKey());
         if (previousActivityId == null) {
-            previousActivityId = "countersignTask";
+            // Fall back to the current approval task for this process type
+            previousActivityId = getCurrentApprovalTaskId(task.getProcessInstanceId());
         }
         returnToActivity(task, previousActivityId, userId, comment);
     }
@@ -337,6 +341,38 @@ public class WorkflowService {
                 .map(activity -> activity.getActivityId())
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Returns the approval task activity ID based on the process definition key.
+     * Different process types use different task IDs:
+     * - approvalCountersign: countersignTask
+     * - approvalSingle: singleApprovalTask
+     * - approvalOrSign: orSignTask
+     * - approvalSequential: sequentialTask
+     */
+    private String getCurrentApprovalTaskId(String processInstanceId) {
+        ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (instance == null) {
+            return "countersignTask"; // Default fallback
+        }
+        String processDefinitionKey = instance.getProcessDefinitionKey();
+        if (processDefinitionKey == null) {
+            return "countersignTask";
+        }
+        switch (processDefinitionKey) {
+            case "approvalSingle":
+                return "singleApprovalTask";
+            case "approvalOrSign":
+                return "orSignTask";
+            case "approvalSequential":
+                return "sequentialTask";
+            case "approvalCountersign":
+            default:
+                return "countersignTask";
+        }
     }
 
     private void refreshCurrentTask(String processInstanceId) {
