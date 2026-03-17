@@ -2,6 +2,7 @@ package com.flowablecollab.approval_system.controller;
 
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.AuthService;
+import com.flowablecollab.approval_system.service.RbacService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -10,12 +11,21 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
+    private final RbacService rbacService;
+
+    @GetMapping("/bootstrap-status")
+    public ResponseEntity<Map<String, Boolean>> getBootstrapStatus() {
+        boolean isBootstrapMode = rbacService.isBootstrapModeActive();
+        return ResponseEntity.ok(Map.of("isBootstrapMode", isBootstrapMode));
+    }
 
     @PostMapping("/bootstrap")
     public ResponseEntity<AuthService.LoginResult> bootstrap(@Valid @RequestBody LoginRequest request) {

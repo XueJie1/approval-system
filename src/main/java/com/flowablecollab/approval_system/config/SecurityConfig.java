@@ -47,9 +47,12 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/",
                                 "/index.html",
+                                "/login.html",
+                                "/admin-register.html",
+                                "/login",
                                 "/error"
                         ).permitAll()
-                        .requestMatchers("/api/auth/bootstrap", "/api/auth/login", "/api/auth/login/2fa",
+                        .requestMatchers("/api/auth/bootstrap-status", "/api/auth/bootstrap", "/api/auth/login", "/api/auth/login/2fa",
                                 "/api/auth/2fa/recovery/validate").permitAll()
                         .requestMatchers("/api/rbac/**").hasAnyRole("ADMIN", "SYS_ADMIN")
                         .requestMatchers(HttpMethod.POST,
