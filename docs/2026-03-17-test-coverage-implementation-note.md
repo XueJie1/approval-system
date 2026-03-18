@@ -201,3 +201,24 @@ Surefire 报告见：
 
 - 提交号：`7895e30`
 - 提交信息：`Add integration coverage for implemented APIs`
+
+## 7. 增量更新（2026-03-18）
+
+在上述基线基础上，新增了工作流闭环与草稿/挂起生命周期相关测试，重点覆盖：
+
+- 审批意见必填校验
+- 委派任务的 owner/RESOLVED 完成约束
+- 或签提前结束后的 `AUTO_COMPLETE` 留痕
+- Draft 保存与提交流程
+- 流程挂起/激活状态切换
+- 显式 `formVersionId` 发起流程
+- 草稿表单版本锁定与快照回放提交
+- 请求聚合接口 `status` 过滤
+
+本次也执行了全量回归：
+
+```bash
+./mvnw -q test
+```
+
+结果：`0 failures`, `0 errors`。
