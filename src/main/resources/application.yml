@@ -37,3 +37,15 @@ security:
     lock-duration-minutes: 30
   audit:
     login-logs-retention-days: 90
+
+ai:
+  llm:
+    provider: mock
+    mock-model: mock-approval-advisor-v1
+    openai:
+      base-url: https://api.openai.com/v1
+      api-key: ${OPENAI_API_KEY:}
+      model: gpt-5.4-mini
+      temperature: 0.2
+      connect-timeout-seconds: 10
+      read-timeout-seconds: 30

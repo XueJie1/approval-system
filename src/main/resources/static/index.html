@@ -138,6 +138,26 @@
       <el-button type="primary" plain @click="returnToTarget">回退到指定节点</el-button>
       <el-button type="primary" plain @click="returnToApplicant">回退到发起人</el-button>
       <el-button type="danger" plain @click="cancelProcess">撤销流程</el-button>
+      <el-button type="primary" plain @click="fetchAiSuggestion">获取AI建议</el-button>
+    </div>
+    <div v-if="aiSuggestion.summary" style="margin-top: 14px; border: 1px solid #dfe6f3; border-radius: 8px; padding: 12px;">
+      <div><strong>AI建议：</strong>{{ aiSuggestion.decision }}</div>
+      <div style="margin-top: 6px;">{{ aiSuggestion.summary }}</div>
+      <div v-if="aiSuggestion.riskFlags.length" style="margin-top: 8px;">
+        <strong>风险提示：</strong>
+        <ul style="margin: 6px 0 0 18px;">
+          <li v-for="flag in aiSuggestion.riskFlags" :key="flag">{{ flag }}</li>
+        </ul>
+      </div>
+      <div v-if="aiSuggestion.followUpChecks.length" style="margin-top: 8px;">
+        <strong>复核建议：</strong>
+        <ul style="margin: 6px 0 0 18px;">
+          <li v-for="item in aiSuggestion.followUpChecks" :key="item">{{ item }}</li>
+        </ul>
+      </div>
+      <div class="muted" style="margin-top: 8px;">
+        model={{ aiSuggestion.model }} | generatedAt={{ aiSuggestion.generatedAt }}
+      </div>
     </div>
   </el-card>
 </div>
@@ -176,6 +196,14 @@
         newAssigneeId: "",
         processInstanceId: "",
         targetActivityId: ""
+      });
+      const aiSuggestion = reactive({
+        decision: "",
+        summary: "",
+        riskFlags: [],
+        followUpChecks: [],
+        model: "",
+        generatedAt: ""
       });
 
       const startProcess = async () => {
@@ -380,11 +408,32 @@
         ElMessage.success("流程已撤销");
       };
 
+      const fetchAiSuggestion = async () => {
+        if (!taskAction.taskId) {
+          ElMessage.warning("请先输入任务ID");
+          return;
+        }
+        const res = await fetch(`/api/workflow/tasks/${taskAction.taskId}/ai-suggestion`);
+        const data = await res.json();
+        if (!res.ok) {
+          ElMessage.error(data.error || "获取AI建议失败");
+          return;
+        }
+        aiSuggestion.decision = data.decision || "";
+        aiSuggestion.summary = data.summary || "";
+        aiSuggestion.model = data.model || "";
+        aiSuggestion.generatedAt = data.generatedAt || "";
+        aiSuggestion.riskFlags.splice(0, aiSuggestion.riskFlags.length, ...(data.riskFlags || []));
+        aiSuggestion.followUpChecks.splice(0, aiSuggestion.followUpChecks.length, ...(data.followUpChecks || []));
+        ElMessage.success("已生成AI建议");
+      };
+
       return {
         startForm,
         taskQuery,
         tasks,
         taskAction,
+        aiSuggestion,
         formKey,
         dynamicFields,
         dynamicForm,
@@ -400,7 +449,8 @@
         returnToPrevious,
         returnToTarget,
         returnToApplicant,
-        cancelProcess
+        cancelProcess,
+        fetchAiSuggestion
       };
     }
   }).use(ElementPlus).mount("#app");

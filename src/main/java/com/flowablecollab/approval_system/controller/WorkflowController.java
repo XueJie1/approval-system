@@ -280,6 +280,26 @@ public class WorkflowController {
         return ResponseEntity.ok(ActionResponse.ok("Process activated"));
     }
 
+    @GetMapping("/tasks/{taskId}/ai-suggestion")
+    public ResponseEntity<AiSuggestionResponse> getAiSuggestion(@PathVariable String taskId) {
+        Long currentUserId = requireCurrentUserId();
+        WorkflowService.ApprovalSuggestion suggestion = workflowService.suggestForTask(
+                taskId,
+                currentUserId,
+                SecurityUtils.currentUsername(),
+                SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN"));
+
+        AiSuggestionResponse response = new AiSuggestionResponse();
+        response.setTaskId(suggestion.getTaskId());
+        response.setDecision(suggestion.getDecision());
+        response.setSummary(suggestion.getSummary());
+        response.setRiskFlags(suggestion.getRiskFlags());
+        response.setFollowUpChecks(suggestion.getFollowUpChecks());
+        response.setModel(suggestion.getModel());
+        response.setGeneratedAt(suggestion.getGeneratedAt());
+        return ResponseEntity.ok(response);
+    }
+
     private Long resolveApplicantId(Long requestedApplicantId) {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
@@ -473,5 +493,16 @@ public class WorkflowController {
             response.setMessage(message);
             return response;
         }
+    }
+
+    @Data
+    public static class AiSuggestionResponse {
+        private String taskId;
+        private String decision;
+        private String summary;
+        private List<String> riskFlags;
+        private List<String> followUpChecks;
+        private String model;
+        private java.time.LocalDateTime generatedAt;
     }
 }

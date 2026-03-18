@@ -280,6 +280,47 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
+    void aiSuggestion_returnsReadOnlyAdviceForAssigneeTask() throws Exception {
+        SysUser applicant = createUser("ai-applicant", "Password@123", null, "EMPLOYEE");
+        SysUser approver = createUser("ai-approver", "Password@123", null, "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String approverToken = accessToken(approver, "EMPLOYEE");
+        String businessKey = unique("wf-ai");
+
+        startSingleApproval(applicantToken, applicant.getId(), businessKey, approver.getUsername());
+        Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+
+        mockMvc.perform(get("/api/workflow/tasks/{taskId}/ai-suggestion", task.getId())
+                        .header("Authorization", authorization(approverToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskId").value(task.getId()))
+                .andExpect(jsonPath("$.decision").isString())
+                .andExpect(jsonPath("$.summary").isString())
+                .andExpect(jsonPath("$.model").isString());
+    }
+
+    @Test
+    void aiSuggestion_forbiddenForUnrelatedUser() throws Exception {
+        SysUser applicant = createUser("ai-owner", "Password@123", null, "EMPLOYEE");
+        SysUser approver = createUser("ai-approver", "Password@123", null, "EMPLOYEE");
+        SysUser other = createUser("ai-other", "Password@123", null, "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String otherToken = accessToken(other, "EMPLOYEE");
+
+        String processInstanceId = startSingleApproval(
+                applicantToken,
+                applicant.getId(),
+                unique("wf-ai-forbid"),
+                approver.getUsername());
+        Task task = taskService.createTaskQuery().processInstanceId(processInstanceId).singleResult();
+
+        mockMvc.perform(get("/api/workflow/tasks/{taskId}/ai-suggestion", task.getId())
+                        .header("Authorization", authorization(otherToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("only assignee/candidate/admin can access ai suggestion"));
+    }
+
+    @Test
     void delegate_resolve_andReassign_endpoints_workOnActiveTask() throws Exception {
         SysUser applicant = createUser("applicant", "Password@123", null, "EMPLOYEE");
         SysUser approver = createUser("approver", "Password@123", null, "EMPLOYEE");

@@ -4,10 +4,12 @@ import com.flowablecollab.approval_system.entity.BizRequest;
 import com.flowablecollab.approval_system.entity.BizRequestLog;
 import com.flowablecollab.approval_system.entity.BizRequestTask;
 import com.flowablecollab.approval_system.entity.rbac.SysUser;
+import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.repository.BizRequestTaskRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
+import com.flowablecollab.approval_system.service.ai.ApprovalSuggestionService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +55,7 @@ public class WorkflowService {
     private final BizRequestTaskRepository bizRequestTaskRepository;
     private final BizRequestLogRepository bizRequestLogRepository;
     private final SysUserRepository sysUserRepository;
+    private final ApprovalSuggestionService approvalSuggestionService;
 
     @Transactional
     public String startApprovalProcess(StartRequest request) {
@@ -281,6 +284,34 @@ public class WorkflowService {
                 .processInstanceIds(new HashSet<>(processInstanceIds))
                 .list();
         return instances.stream().map(this::convertToProcessInfo).collect(Collectors.toList());
+    }
+
+    public ApprovalSuggestion suggestForTask(String taskId, Long requesterId, String requesterUsername, boolean isAdmin) {
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task == null) {
+            throw new IllegalArgumentException("task not found");
+        }
+        ensureTaskSuggestionAccess(task, requesterId, requesterUsername, isAdmin);
+
+        BizRequest request = bizRequestRepository.findByProcessInstanceId(task.getProcessInstanceId()).orElse(null);
+        ApprovalSuggestionService.SuggestionContext context = new ApprovalSuggestionService.SuggestionContext();
+        context.setTaskId(task.getId());
+        context.setTaskName(task.getName());
+        context.setProcessInstanceId(task.getProcessInstanceId());
+        context.setBusinessKey(request != null ? request.getBusinessKey() : null);
+        context.setTitle(request != null ? request.getTitle() : null);
+        context.setVariables(taskService.getVariables(taskId));
+
+        ApprovalSuggestionService.SuggestionResult result = approvalSuggestionService.suggest(context);
+        ApprovalSuggestion suggestion = new ApprovalSuggestion();
+        suggestion.setTaskId(result.getTaskId());
+        suggestion.setDecision(result.getDecision());
+        suggestion.setSummary(result.getSummary());
+        suggestion.setRiskFlags(result.getRiskFlags());
+        suggestion.setFollowUpChecks(result.getFollowUpChecks());
+        suggestion.setModel(result.getModel());
+        suggestion.setGeneratedAt(result.getGeneratedAt());
+        return suggestion;
     }
 
     @Transactional
@@ -618,6 +649,34 @@ public class WorkflowService {
         return leftId != null && leftId.equals(rightId);
     }
 
+    private void ensureTaskSuggestionAccess(Task task, Long requesterId, String requesterUsername, boolean isAdmin) {
+        if (isAdmin) {
+            return;
+        }
+        String requesterIdText = requesterId == null ? null : String.valueOf(requesterId);
+        boolean isAssignee = isSameIdentity(task.getAssignee(), requesterUsername)
+                || isSameIdentity(task.getAssignee(), requesterIdText);
+        if (isAssignee) {
+            return;
+        }
+        boolean isCandidate = false;
+        if (requesterUsername != null && !requesterUsername.isBlank()) {
+            isCandidate = taskService.createTaskQuery()
+                    .taskId(task.getId())
+                    .taskCandidateUser(requesterUsername)
+                    .count() > 0;
+        }
+        if (!isCandidate && requesterIdText != null) {
+            isCandidate = taskService.createTaskQuery()
+                    .taskId(task.getId())
+                    .taskCandidateUser(requesterIdText)
+                    .count() > 0;
+        }
+        if (!isCandidate) {
+            throw new ForbiddenOperationException("only assignee/candidate/admin can access ai suggestion");
+        }
+    }
+
     private void updateRequestCurrentTask(BizRequest request, List<Task> tasks) {
         request.setStatus(REQUEST_STATUS_IN_APPROVAL);
         if (!tasks.isEmpty()) {
@@ -735,6 +794,17 @@ public class WorkflowService {
         private String processInstanceId;
         private String processDefinitionId;
         private String businessKey;
+    }
+
+    @Data
+    public static class ApprovalSuggestion {
+        private String taskId;
+        private String decision;
+        private String summary;
+        private List<String> riskFlags;
+        private List<String> followUpChecks;
+        private String model;
+        private LocalDateTime generatedAt;
     }
 
     @Data
