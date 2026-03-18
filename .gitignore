@@ -34,3 +34,8 @@ build/
 
 ### log files
 run.log
+
+### frontend (vite/vue)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

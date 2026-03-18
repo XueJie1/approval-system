@@ -154,12 +154,15 @@ public class AuthService {
     public TwoFactorSetup setupTwoFactor(Long userId) {
         SysUser user = sysUserRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("user not found"));
-        String secret = totpService.generateSecret();
-        user.setTwoFactorSecret(secret);
-        if (user.getTwoFactorEnabled() == null) {
-            user.setTwoFactorEnabled(0);
+        String secret = user.getTwoFactorSecret();
+        if (secret == null || secret.isBlank()) {
+            secret = totpService.generateSecret();
+            user.setTwoFactorSecret(secret);
+            if (user.getTwoFactorEnabled() == null) {
+                user.setTwoFactorEnabled(0);
+            }
+            sysUserRepository.save(user);
         }
-        sysUserRepository.save(user);
 
         TwoFactorSetup setup = new TwoFactorSetup();
         setup.setSecret(secret);
@@ -199,9 +202,12 @@ public class AuthService {
     public TwoFactorSetup enableTwoFactorWithRecovery(Long userId) {
         SysUser user = sysUserRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("user not found"));
-        String secret = totpService.generateSecret();
+        String secret = user.getTwoFactorSecret();
+        if (secret == null || secret.isBlank()) {
+            secret = totpService.generateSecret();
+            user.setTwoFactorSecret(secret);
+        }
         String recoveryCodes = totpService.generateRecoveryCodes();
-        user.setTwoFactorSecret(secret);
         user.setRecoveryCodes(recoveryCodes);
         if (user.getTwoFactorEnabled() == null) {
             user.setTwoFactorEnabled(0);

@@ -66,7 +66,6 @@ public class TotpService {
         StringBuilder code = new StringBuilder();
         for (int i = 0; i < RECOVERY_CODE_LENGTH; i++) {
             if (i > 0 && i % 2 == 0) code.append("-");
-            if (i > 0 && i % 2 == 0) code.append("-");
             code.append(secureRandom.nextInt(10));
         }
         return code.toString();

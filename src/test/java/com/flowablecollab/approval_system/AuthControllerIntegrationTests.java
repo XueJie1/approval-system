@@ -115,7 +115,8 @@ class AuthControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
         JsonNode recoveryBody = json(recoveryResponse);
         String recoveryCode = recoveryBody.get("recoveryCodes").asText().split(",")[0];
-        String rotatedSecret = recoveryBody.get("secret").asText();
+        String persistedSecret = recoveryBody.get("secret").asText();
+        assertThat(persistedSecret).isEqualTo(secret);
 
         mockMvc.perform(post("/api/auth/2fa/recovery/validate")
                         .header("Authorization", authorization(token))
@@ -135,7 +136,7 @@ class AuthControllerIntegrationTests extends AbstractIntegrationTestSupport {
                                 {
                                   "code": "%s"
                                 }
-                                """.formatted(currentTotpCode(rotatedSecret))))
+                                """.formatted(currentTotpCode(secret))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("2FA disabled"));
     }
