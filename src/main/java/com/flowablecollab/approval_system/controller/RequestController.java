@@ -27,31 +27,39 @@ public class RequestController {
     private final RbacService rbacService;
 
     @GetMapping
-    public ResponseEntity<List<BizRequest>> listRequests(@RequestParam(required = false) Long userId) {
+    public ResponseEntity<List<BizRequest>> listRequests(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Integer status) {
         Long actualUserId = resolveRequestedUserId(userId);
         Set<Long> deptIds = rbacService.getAccessibleDeptIds(actualUserId);
         Set<Long> postIds = rbacService.getUserPostIds(actualUserId);
         if (deptIds == null) {
-            return ResponseEntity.ok(bizRequestRepository.findAll());
+            return ResponseEntity.ok(filterByStatus(bizRequestRepository.findAll(), status));
         }
         if (deptIds.size() == 1 && deptIds.contains(-1L)) {
-            return ResponseEntity.ok(bizRequestRepository.findByApplicantId(actualUserId));
+            return ResponseEntity.ok(filterByStatus(bizRequestRepository.findByApplicantId(actualUserId), status));
         }
         if (deptIds.isEmpty()) {
             if (postIds.isEmpty()) {
                 return ResponseEntity.ok(Collections.emptyList());
             }
-            return ResponseEntity.ok(bizRequestRepository.findByApplicantDeptIdInOrApplicantPostIdIn(List.of(-1L), postIds.stream().toList()));
+            return ResponseEntity.ok(filterByStatus(
+                    bizRequestRepository.findByApplicantDeptIdInOrApplicantPostIdIn(List.of(-1L), postIds.stream().toList()),
+                    status));
         }
         if (postIds.isEmpty()) {
-            return ResponseEntity.ok(bizRequestRepository.findByApplicantDeptIdIn(deptIds.stream().toList()));
+            return ResponseEntity.ok(filterByStatus(bizRequestRepository.findByApplicantDeptIdIn(deptIds.stream().toList()), status));
         }
-        return ResponseEntity.ok(bizRequestRepository.findByApplicantDeptIdInOrApplicantPostIdIn(deptIds.stream().toList(), postIds.stream().toList()));
+        return ResponseEntity.ok(filterByStatus(
+                bizRequestRepository.findByApplicantDeptIdInOrApplicantPostIdIn(deptIds.stream().toList(), postIds.stream().toList()),
+                status));
     }
 
     @GetMapping("/tasks")
-    public ResponseEntity<List<WorkflowService.TaskInfo>> listTasks(@RequestParam(required = false) Long userId) {
-        List<BizRequest> requests = listRequests(userId).getBody();
+    public ResponseEntity<List<WorkflowService.TaskInfo>> listTasks(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Integer status) {
+        List<BizRequest> requests = listRequests(userId, status).getBody();
         if (requests == null || requests.isEmpty()) {
             return ResponseEntity.ok(Collections.emptyList());
         }
@@ -63,8 +71,10 @@ public class RequestController {
     }
 
     @GetMapping("/logs")
-    public ResponseEntity<List<BizRequestLog>> listLogs(@RequestParam(required = false) Long userId) {
-        List<BizRequest> requests = listRequests(userId).getBody();
+    public ResponseEntity<List<BizRequestLog>> listLogs(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Integer status) {
+        List<BizRequest> requests = listRequests(userId, status).getBody();
         if (requests == null || requests.isEmpty()) {
             return ResponseEntity.ok(Collections.emptyList());
         }
@@ -76,8 +86,10 @@ public class RequestController {
     }
 
     @GetMapping("/processes")
-    public ResponseEntity<List<WorkflowService.ProcessInfo>> listProcesses(@RequestParam(required = false) Long userId) {
-        List<BizRequest> requests = listRequests(userId).getBody();
+    public ResponseEntity<List<WorkflowService.ProcessInfo>> listProcesses(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Integer status) {
+        List<BizRequest> requests = listRequests(userId, status).getBody();
         if (requests == null || requests.isEmpty()) {
             return ResponseEntity.ok(Collections.emptyList());
         }
@@ -97,5 +109,14 @@ public class RequestController {
             return requestedUserId == null ? currentUserId : requestedUserId;
         }
         throw new ForbiddenOperationException("userId must match current login user");
+    }
+
+    private List<BizRequest> filterByStatus(List<BizRequest> requests, Integer status) {
+        if (status == null) {
+            return requests;
+        }
+        return requests.stream()
+                .filter(request -> status.equals(request.getStatus()))
+                .toList();
     }
 }

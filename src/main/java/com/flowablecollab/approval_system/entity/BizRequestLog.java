@@ -17,7 +17,7 @@ public class BizRequestLog {
     @Column(name = "business_key", length = 64, nullable = false)
     private String businessKey;
 
-    @Column(name = "process_instance_id", length = 64, nullable = false)
+    @Column(name = "process_instance_id", length = 64)
     private String processInstanceId;
 
     @Column(name = "task_id", length = 64)

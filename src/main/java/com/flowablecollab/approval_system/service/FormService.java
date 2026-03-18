@@ -73,6 +73,11 @@ public class FormService {
                 .orElseThrow();
     }
 
+    public FormVersion getVersion(Long formVersionId) {
+        return formVersionRepository.findById(formVersionId)
+                .orElseThrow(() -> new IllegalArgumentException("Form version not found"));
+    }
+
     public FormInstance createFormInstance(Long formVersionId, String businessKey, Map<String, Object> data) {
         FormVersion version = formVersionRepository.findById(formVersionId)
                 .orElseThrow(() -> new IllegalArgumentException("Form version not found"));
@@ -86,6 +91,21 @@ public class FormService {
             throw new IllegalArgumentException("Invalid form data");
         }
         return formInstanceRepository.save(instance);
+    }
+
+    public FormInstance getFormInstance(Long formInstanceId) {
+        return formInstanceRepository.findById(formInstanceId)
+                .orElseThrow(() -> new IllegalArgumentException("Form instance not found"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> readFormInstanceData(Long formInstanceId) {
+        FormInstance instance = getFormInstance(formInstanceId);
+        try {
+            return objectMapper.readValue(instance.getDataJson(), Map.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid form instance data");
+        }
     }
 
     public void validateFormInstance(Long formVersionId, Map<String, Object> data) {

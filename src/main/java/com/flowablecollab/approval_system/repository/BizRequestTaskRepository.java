@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface BizRequestTaskRepository extends JpaRepository<BizRequestTask, Long> {
     Optional<BizRequestTask> findByTaskId(String taskId);
     List<BizRequestTask> findByBusinessKey(String businessKey);
+    List<BizRequestTask> findByProcessInstanceId(String processInstanceId);
 }

@@ -17,10 +17,10 @@ public class BizRequest {
     @Column(name = "business_key", length = 64, nullable = false, unique = true)
     private String businessKey;
 
-    @Column(name = "process_instance_id", length = 64, nullable = false)
+    @Column(name = "process_instance_id", length = 64)
     private String processInstanceId;
 
-    @Column(name = "process_definition_id", length = 64, nullable = false)
+    @Column(name = "process_definition_id", length = 64)
     private String processDefinitionId;
 
     @Column(name = "form_instance_id")

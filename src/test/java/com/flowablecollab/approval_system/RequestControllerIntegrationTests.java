@@ -67,8 +67,44 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
                 .andExpect(jsonPath("$[0].businessKey").value(businessKey));
     }
 
-    private void startSingleApproval(String applicantToken, Long applicantId, String businessKey, String approverId) throws Exception {
-        mockMvc.perform(post("/api/workflow/requests")
+    @Test
+    void listRequests_canFilterBySuspendedStatus() throws Exception {
+        SysUser applicant = createUser("status-applicant", "Password@123", null, "EMPLOYEE");
+        SysRole selfRole = ensureRole(unique("STATUS_SELF").toUpperCase().replace('-', '_'));
+        rbacService.assignRole(applicant.getId(), selfRole.getId());
+        rbacService.addRoleDataScope(selfRole.getId(), "SELF", null);
+        String token = accessToken(applicant, "EMPLOYEE");
+
+        String suspendedProcessId = startSingleApproval(token, applicant.getId(), unique("req-suspended"), applicant.getUsername());
+        startSingleApproval(token, applicant.getId(), unique("req-running"), applicant.getUsername());
+
+        mockMvc.perform(post("/api/workflow/process/{processInstanceId}/suspend", suspendedProcessId)
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "pause for review"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/requests")
+                        .header("Authorization", authorization(token))
+                        .param("status", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value(7));
+
+        mockMvc.perform(get("/api/requests/processes")
+                        .header("Authorization", authorization(token))
+                        .param("status", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].processInstanceId").value(suspendedProcessId));
+    }
+
+    private String startSingleApproval(String applicantToken, Long applicantId, String businessKey, String approverId) throws Exception {
+        return json(mockMvc.perform(post("/api/workflow/requests")
                         .header("Authorization", authorization(applicantToken))
                         .contentType(APPLICATION_JSON)
                         .content("""
@@ -82,6 +118,9 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
                                   }
                                 }
                                 """.formatted(businessKey, applicantId, approverId)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get("processInstanceId").asText();
     }
 }

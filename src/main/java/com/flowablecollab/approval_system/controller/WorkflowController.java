@@ -1,10 +1,14 @@
 package com.flowablecollab.approval_system.controller;
 
+import com.flowablecollab.approval_system.entity.BizRequest;
 import com.flowablecollab.approval_system.entity.form.FormInstance;
 import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.WorkflowService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,8 +16,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -25,7 +31,7 @@ public class WorkflowController {
     private final com.flowablecollab.approval_system.service.FormService formService;
 
     @PostMapping("/requests")
-    public ResponseEntity<StartProcessResponse> startProcess(@RequestBody StartProcessRequest request) {
+    public ResponseEntity<StartProcessResponse> startProcess(@Valid @RequestBody StartProcessRequest request) {
         log.info("Starting approval process for businessKey: {}", request.getBusinessKey());
         Long applicantId = resolveApplicantId(request.getApplicantId());
 
@@ -43,8 +49,19 @@ public class WorkflowController {
         startRequest.setPassRatio(request.getPassRatio());
 
         if (request.getFormKey() != null && request.getFormData() != null) {
-            FormVersion latest = formService.getLatestVersion(request.getFormKey());
-            FormInstance instance = formService.createFormInstance(latest.getId(), request.getBusinessKey(), request.getFormData());
+            Long formVersionId = request.getFormVersionId();
+            if (formVersionId == null) {
+                formVersionId = formService.getLatestVersion(request.getFormKey()).getId();
+            } else {
+                formService.getVersion(formVersionId);
+            }
+            String businessKey = request.getBusinessKey();
+            if (businessKey == null || businessKey.isBlank()) {
+                businessKey = UUID.randomUUID().toString();
+                request.setBusinessKey(businessKey);
+                startRequest.setBusinessKey(businessKey);
+            }
+            FormInstance instance = formService.createFormInstance(formVersionId, businessKey, request.getFormData());
             startRequest.setFormInstanceId(instance.getId());
             if (startRequest.getVariables() == null) {
                 startRequest.setVariables(new java.util.HashMap<>());
@@ -60,17 +77,103 @@ public class WorkflowController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/drafts")
+    public ResponseEntity<SaveDraftResponse> saveDraft(@Valid @RequestBody SaveDraftRequest request) {
+        Long applicantId = resolveApplicantId(request.getApplicantId());
+        String businessKey = request.getBusinessKey();
+        if (businessKey == null || businessKey.isBlank()) {
+            businessKey = UUID.randomUUID().toString();
+            request.setBusinessKey(businessKey);
+        }
+        Long formInstanceId = request.getFormInstanceId();
+        if (request.getFormKey() != null && request.getFormData() != null) {
+            Long formVersionId = request.getFormVersionId();
+            if (formVersionId == null) {
+                FormVersion latest = formService.getLatestVersion(request.getFormKey());
+                formVersionId = latest.getId();
+            } else {
+                formService.getVersion(formVersionId);
+            }
+            FormInstance instance = formService.createFormInstance(formVersionId, businessKey, request.getFormData());
+            formInstanceId = instance.getId();
+        }
+
+        WorkflowService.DraftRequest draftRequest = new WorkflowService.DraftRequest();
+        draftRequest.setBusinessKey(businessKey);
+        draftRequest.setTitle(request.getTitle());
+        draftRequest.setApplicantId(applicantId);
+        draftRequest.setApplicantDeptId(request.getApplicantDeptId());
+        draftRequest.setApplicantPostId(request.getApplicantPostId());
+        draftRequest.setFormInstanceId(formInstanceId);
+
+        businessKey = workflowService.saveDraft(draftRequest);
+        SaveDraftResponse response = new SaveDraftResponse();
+        response.setBusinessKey(businessKey);
+        response.setMessage("Draft saved");
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/drafts/{businessKey}/submit")
+    public ResponseEntity<StartProcessResponse> submitDraft(
+            @PathVariable String businessKey,
+            @Valid @RequestBody SubmitDraftRequest request) {
+        BizRequest draft = workflowService.getRequestByBusinessKey(businessKey);
+        ensureRequestOperatorAllowed(draft);
+
+        WorkflowService.StartRequest startRequest = new WorkflowService.StartRequest();
+        startRequest.setTitle(request.getTitle());
+        startRequest.setApplicantId(request.getApplicantId());
+        startRequest.setApplicantDeptId(request.getApplicantDeptId());
+        startRequest.setApplicantPostId(request.getApplicantPostId());
+        startRequest.setFormInstanceId(request.getFormInstanceId());
+        startRequest.setProcessKey(request.getProcessKey());
+        Map<String, Object> variables = request.getVariables();
+        if ((variables == null || variables.isEmpty()) && draft.getFormInstanceId() != null) {
+            variables = formService.readFormInstanceData(draft.getFormInstanceId());
+            startRequest.setFormInstanceId(draft.getFormInstanceId());
+        }
+        startRequest.setVariables(variables);
+        startRequest.setCountersignUsers(request.getCountersignUsers());
+        startRequest.setCountersignMode(request.getCountersignMode());
+        startRequest.setPassRatio(request.getPassRatio());
+
+        String processInstanceId = workflowService.submitDraft(businessKey, startRequest);
+        StartProcessResponse response = new StartProcessResponse();
+        response.setProcessInstanceId(processInstanceId);
+        response.setMessage("Draft submitted successfully");
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/tasks")
     public ResponseEntity<List<WorkflowService.TaskInfo>> getTasks(
-            @RequestParam String assignee,
+            @RequestParam(required = false) String assignee,
             @RequestParam(defaultValue = "false") boolean includeCandidate) {
-        log.info("Fetching tasks for assignee: {}", assignee);
-        List<WorkflowService.TaskInfo> tasks = workflowService.getTasksForAssignee(assignee, includeCandidate);
+        Long currentUserId = requireCurrentUserId();
+        String currentUsername = SecurityUtils.currentUsername();
+
+        List<WorkflowService.TaskInfo> tasks;
+        if (assignee == null || assignee.isBlank()) {
+            LinkedHashSet<String> identities = new LinkedHashSet<>();
+            if (currentUsername != null && !currentUsername.isBlank()) {
+                identities.add(currentUsername);
+            }
+            identities.add(String.valueOf(currentUserId));
+            tasks = workflowService.getTasksForAssignees(List.copyOf(identities), includeCandidate);
+        } else {
+            boolean sameIdentity = assignee.equals(String.valueOf(currentUserId))
+                    || (currentUsername != null && assignee.equals(currentUsername));
+            if (!sameIdentity && !SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN")) {
+                throw new ForbiddenOperationException("assignee must match current login user");
+            }
+            tasks = workflowService.getTasksForAssignee(assignee, includeCandidate);
+        }
+
+        log.info("Fetched {} tasks for requester {}", tasks.size(), currentUserId);
         return ResponseEntity.ok(tasks);
     }
 
     @PostMapping("/tasks/{taskId}/claim")
-    public ResponseEntity<ActionResponse> claimTask(@PathVariable String taskId, @RequestBody ClaimTaskRequest request) {
+    public ResponseEntity<ActionResponse> claimTask(@PathVariable String taskId, @Valid @RequestBody ClaimTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.claimTask(taskId, userId);
         return ResponseEntity.ok(ActionResponse.ok("Task claimed"));
@@ -79,7 +182,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/complete")
     public ResponseEntity<ActionResponse> completeTask(
             @PathVariable String taskId,
-            @RequestBody CompleteTaskRequest request) {
+            @Valid @RequestBody CompleteTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.completeTask(taskId, userId, request.getApprovalResult(), request.getComments());
         return ResponseEntity.ok(ActionResponse.ok("Task completed"));
@@ -88,7 +191,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/delegate")
     public ResponseEntity<ActionResponse> delegateTask(
             @PathVariable String taskId,
-            @RequestBody DelegateTaskRequest request) {
+            @Valid @RequestBody DelegateTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.delegateTask(taskId, userId, request.getDelegateUserId(), request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task delegated"));
@@ -97,7 +200,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/resolve")
     public ResponseEntity<ActionResponse> resolveTask(
             @PathVariable String taskId,
-            @RequestBody ResolveTaskRequest request) {
+            @Valid @RequestBody ResolveTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.resolveTask(taskId, userId, request.getApprovalResult(), request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task resolved"));
@@ -106,7 +209,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/reassign")
     public ResponseEntity<ActionResponse> reassignTask(
             @PathVariable String taskId,
-            @RequestBody ReassignTaskRequest request) {
+            @Valid @RequestBody ReassignTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.reassignTask(taskId, userId, request.getNewAssigneeId(), request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task reassigned"));
@@ -115,7 +218,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/return")
     public ResponseEntity<ActionResponse> returnTask(
             @PathVariable String taskId,
-            @RequestBody ReturnTaskRequest request) {
+            @Valid @RequestBody ReturnTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.returnToCountersign(taskId, userId, request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task returned"));
@@ -124,7 +227,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/return/previous")
     public ResponseEntity<ActionResponse> returnToPrevious(
             @PathVariable String taskId,
-            @RequestBody ReturnTaskRequest request) {
+            @Valid @RequestBody ReturnTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.returnToPrevious(taskId, userId, request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task returned to previous"));
@@ -133,7 +236,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/return/target")
     public ResponseEntity<ActionResponse> returnToTarget(
             @PathVariable String taskId,
-            @RequestBody ReturnToTargetRequest request) {
+            @Valid @RequestBody ReturnToTargetRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.returnToActivityId(taskId, userId, request.getTargetActivityId(), request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task returned to target"));
@@ -142,7 +245,7 @@ public class WorkflowController {
     @PostMapping("/tasks/{taskId}/return/applicant")
     public ResponseEntity<ActionResponse> returnToApplicant(
             @PathVariable String taskId,
-            @RequestBody ReturnTaskRequest request) {
+            @Valid @RequestBody ReturnTaskRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.returnToApplicant(taskId, userId, request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Task returned to applicant"));
@@ -151,10 +254,30 @@ public class WorkflowController {
     @PostMapping("/process/{processInstanceId}/cancel")
     public ResponseEntity<ActionResponse> cancelProcess(
             @PathVariable String processInstanceId,
-            @RequestBody CancelProcessRequest request) {
+            @Valid @RequestBody CancelProcessRequest request) {
         String userId = resolveActionUserId(request.getUserId());
         workflowService.cancelProcess(processInstanceId, userId, request.getComment());
         return ResponseEntity.ok(ActionResponse.ok("Process cancelled"));
+    }
+
+    @PostMapping("/process/{processInstanceId}/suspend")
+    public ResponseEntity<ActionResponse> suspendProcess(
+            @PathVariable String processInstanceId,
+            @Valid @RequestBody SuspendProcessRequest request) {
+        BizRequest bizRequest = workflowService.getRequestByProcessInstanceId(processInstanceId);
+        ensureRequestOperatorAllowed(bizRequest);
+        workflowService.suspendProcess(processInstanceId, requireCurrentUserId(), request.getComment());
+        return ResponseEntity.ok(ActionResponse.ok("Process suspended"));
+    }
+
+    @PostMapping("/process/{processInstanceId}/activate")
+    public ResponseEntity<ActionResponse> activateProcess(
+            @PathVariable String processInstanceId,
+            @Valid @RequestBody ActivateProcessRequest request) {
+        BizRequest bizRequest = workflowService.getRequestByProcessInstanceId(processInstanceId);
+        ensureRequestOperatorAllowed(bizRequest);
+        workflowService.activateProcess(processInstanceId, requireCurrentUserId(), request.getComment());
+        return ResponseEntity.ok(ActionResponse.ok("Process activated"));
     }
 
     private Long resolveApplicantId(Long requestedApplicantId) {
@@ -185,6 +308,24 @@ public class WorkflowController {
         throw new ForbiddenOperationException("userId must match current login user");
     }
 
+    private Long requireCurrentUserId() {
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (currentUserId == null) {
+            throw new ForbiddenOperationException("Unauthorized");
+        }
+        return currentUserId;
+    }
+
+    private void ensureRequestOperatorAllowed(BizRequest request) {
+        Long currentUserId = requireCurrentUserId();
+        if (SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN")) {
+            return;
+        }
+        if (!currentUserId.equals(request.getApplicantId())) {
+            throw new ForbiddenOperationException("only applicant or admin can operate this request");
+        }
+    }
+
     @Data
     public static class StartProcessRequest {
         private String businessKey;
@@ -194,6 +335,7 @@ public class WorkflowController {
         private Long applicantPostId;
         private Long formInstanceId;
         private String formKey;
+        private Long formVersionId;
         private Map<String, Object> formData;
         private String processKey;
         private Map<String, Object> variables;
@@ -209,6 +351,40 @@ public class WorkflowController {
     }
 
     @Data
+    public static class SaveDraftRequest {
+        private String businessKey;
+        @NotBlank(message = "title is required")
+        private String title;
+        private Long applicantId;
+        private Long applicantDeptId;
+        private Long applicantPostId;
+        private Long formInstanceId;
+        private String formKey;
+        private Long formVersionId;
+        private Map<String, Object> formData;
+    }
+
+    @Data
+    public static class SaveDraftResponse {
+        private String businessKey;
+        private String message;
+    }
+
+    @Data
+    public static class SubmitDraftRequest {
+        private String title;
+        private Long applicantId;
+        private Long applicantDeptId;
+        private Long applicantPostId;
+        private Long formInstanceId;
+        private String processKey;
+        private Map<String, Object> variables;
+        private List<String> countersignUsers;
+        private String countersignMode;
+        private BigDecimal passRatio;
+    }
+
+    @Data
     public static class ClaimTaskRequest {
         private String userId;
     }
@@ -216,47 +392,73 @@ public class WorkflowController {
     @Data
     public static class CompleteTaskRequest {
         private String userId;
+        @NotBlank(message = "approvalResult is required")
+        @Pattern(regexp = "APPROVE|REJECT", message = "approvalResult must be APPROVE or REJECT")
         private String approvalResult;
+        @NotBlank(message = "comments is required")
         private String comments;
     }
 
     @Data
     public static class DelegateTaskRequest {
         private String userId;
+        @NotBlank(message = "delegateUserId is required")
         private String delegateUserId;
+        @NotBlank(message = "comment is required")
         private String comment;
     }
 
     @Data
     public static class ResolveTaskRequest {
         private String userId;
+        @NotBlank(message = "approvalResult is required")
+        @Pattern(regexp = "APPROVE|REJECT", message = "approvalResult must be APPROVE or REJECT")
         private String approvalResult;
+        @NotBlank(message = "comment is required")
         private String comment;
     }
 
     @Data
     public static class ReassignTaskRequest {
         private String userId;
+        @NotBlank(message = "newAssigneeId is required")
         private String newAssigneeId;
+        @NotBlank(message = "comment is required")
         private String comment;
     }
 
     @Data
     public static class ReturnTaskRequest {
         private String userId;
+        @NotBlank(message = "comment is required")
         private String comment;
     }
 
     @Data
     public static class ReturnToTargetRequest {
         private String userId;
+        @NotBlank(message = "targetActivityId is required")
         private String targetActivityId;
+        @NotBlank(message = "comment is required")
         private String comment;
     }
 
     @Data
     public static class CancelProcessRequest {
         private String userId;
+        @NotBlank(message = "comment is required")
+        private String comment;
+    }
+
+    @Data
+    public static class SuspendProcessRequest {
+        @NotBlank(message = "comment is required")
+        private String comment;
+    }
+
+    @Data
+    public static class ActivateProcessRequest {
+        @NotBlank(message = "comment is required")
         private String comment;
     }
 

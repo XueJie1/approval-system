@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
+import org.flowable.task.api.DelegationState;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.springframework.stereotype.Service;
@@ -30,12 +31,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WorkflowService {
 
+    private static final int REQUEST_STATUS_DRAFT = 0;
     private static final int REQUEST_STATUS_SUBMITTED = 1;
     private static final int REQUEST_STATUS_IN_APPROVAL = 2;
     private static final int REQUEST_STATUS_APPROVED = 3;
     private static final int REQUEST_STATUS_REJECTED = 4;
     private static final int REQUEST_STATUS_RETURNED = 5;
     private static final int REQUEST_STATUS_CANCELLED = 6;
+    private static final int REQUEST_STATUS_SUSPENDED = 7;
 
     private static final int TASK_STATUS_READY = 0;
     private static final int TASK_STATUS_CLAIMED = 1;
@@ -53,6 +56,102 @@ public class WorkflowService {
 
     @Transactional
     public String startApprovalProcess(StartRequest request) {
+        return startApprovalProcessInternal(request, null);
+    }
+
+    @Transactional
+    public String saveDraft(DraftRequest request) {
+        if (request.getTitle() == null || request.getTitle().isBlank()) {
+            throw new IllegalArgumentException("title is required");
+        }
+        if (request.getApplicantId() == null) {
+            throw new IllegalArgumentException("applicantId is required");
+        }
+        String businessKey = request.getBusinessKey();
+        if (businessKey == null || businessKey.isBlank()) {
+            businessKey = UUID.randomUUID().toString();
+        }
+
+        BizRequest draft = bizRequestRepository.findByBusinessKey(businessKey).orElseGet(BizRequest::new);
+        if (draft.getId() != null && !Objects.equals(draft.getStatus(), REQUEST_STATUS_DRAFT)) {
+            throw new IllegalArgumentException("only draft request can be updated");
+        }
+
+        draft.setBusinessKey(businessKey);
+        draft.setTitle(request.getTitle());
+        draft.setApplicantId(request.getApplicantId());
+        draft.setApplicantDeptId(request.getApplicantDeptId());
+        draft.setApplicantPostId(request.getApplicantPostId());
+        draft.setFormInstanceId(request.getFormInstanceId());
+        draft.setStatus(REQUEST_STATUS_DRAFT);
+        draft.setCurrentTaskId(null);
+        draft.setCurrentAssigneeId(null);
+        draft.setSubmitTime(null);
+        draft.setFinishTime(null);
+        bizRequestRepository.save(draft);
+        appendLogByBusinessKey(businessKey, null, null, request.getApplicantId(), "SAVE_DRAFT", "保存草稿");
+        return businessKey;
+    }
+
+    @Transactional
+    public String submitDraft(String businessKey, StartRequest request) {
+        BizRequest draft = bizRequestRepository.findByBusinessKey(businessKey)
+                .orElseThrow(() -> new IllegalArgumentException("draft request not found"));
+        if (!Objects.equals(draft.getStatus(), REQUEST_STATUS_DRAFT)) {
+            throw new IllegalArgumentException("request is not in draft status");
+        }
+        if (request.getApplicantId() == null) {
+            request.setApplicantId(draft.getApplicantId());
+        }
+        if (request.getApplicantDeptId() == null) {
+            request.setApplicantDeptId(draft.getApplicantDeptId());
+        }
+        if (request.getApplicantPostId() == null) {
+            request.setApplicantPostId(draft.getApplicantPostId());
+        }
+        if (request.getTitle() == null || request.getTitle().isBlank()) {
+            request.setTitle(draft.getTitle());
+        }
+        if (request.getFormInstanceId() == null) {
+            request.setFormInstanceId(draft.getFormInstanceId());
+        }
+        request.setBusinessKey(draft.getBusinessKey());
+        String processInstanceId = startApprovalProcessInternal(request, draft);
+        appendLog(processInstanceId, null, request.getApplicantId(), "SUBMIT_DRAFT", "提交草稿");
+        return processInstanceId;
+    }
+
+    @Transactional
+    public void suspendProcess(String processInstanceId, Long operatorId, String comment) {
+        BizRequest request = bizRequestRepository.findByProcessInstanceId(processInstanceId)
+                .orElseThrow(() -> new IllegalArgumentException("request not found for process instance"));
+        runtimeService.suspendProcessInstanceById(processInstanceId);
+        request.setStatus(REQUEST_STATUS_SUSPENDED);
+        bizRequestRepository.save(request);
+        appendLog(processInstanceId, null, operatorId, "SUSPEND", comment);
+    }
+
+    @Transactional
+    public void activateProcess(String processInstanceId, Long operatorId, String comment) {
+        BizRequest request = bizRequestRepository.findByProcessInstanceId(processInstanceId)
+                .orElseThrow(() -> new IllegalArgumentException("request not found for process instance"));
+        runtimeService.activateProcessInstanceById(processInstanceId);
+        request.setStatus(REQUEST_STATUS_IN_APPROVAL);
+        bizRequestRepository.save(request);
+        appendLog(processInstanceId, null, operatorId, "ACTIVATE", comment);
+    }
+
+    public BizRequest getRequestByBusinessKey(String businessKey) {
+        return bizRequestRepository.findByBusinessKey(businessKey)
+                .orElseThrow(() -> new IllegalArgumentException("request not found"));
+    }
+
+    public BizRequest getRequestByProcessInstanceId(String processInstanceId) {
+        return bizRequestRepository.findByProcessInstanceId(processInstanceId)
+                .orElseThrow(() -> new IllegalArgumentException("request not found"));
+    }
+
+    private String startApprovalProcessInternal(StartRequest request, BizRequest existingRequest) {
         String processKey = request.getProcessKey() == null || request.getProcessKey().isBlank()
                 ? "approvalWorkflow"
                 : request.getProcessKey();
@@ -101,7 +200,7 @@ public class WorkflowService {
         ProcessInstance processInstance = runtimeService
                 .startProcessInstanceByKey(processKey, businessKey, variables);
 
-        BizRequest bizRequest = new BizRequest();
+        BizRequest bizRequest = existingRequest == null ? new BizRequest() : existingRequest;
         bizRequest.setBusinessKey(businessKey);
         bizRequest.setProcessInstanceId(processInstance.getId());
         bizRequest.setProcessDefinitionId(processInstance.getProcessDefinitionId());
@@ -128,6 +227,29 @@ public class WorkflowService {
     }
 
     public List<TaskInfo> getTasksForAssignee(String assignee, boolean includeCandidate) {
+        if (assignee == null || assignee.isBlank()) {
+            return List.of();
+        }
+        return queryTasksForIdentity(assignee, includeCandidate);
+    }
+
+    public List<TaskInfo> getTasksForAssignees(List<String> assignees, boolean includeCandidate) {
+        if (assignees == null || assignees.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashMap<String, TaskInfo> dedup = new LinkedHashMap<>();
+        for (String assignee : assignees) {
+            if (assignee == null || assignee.isBlank()) {
+                continue;
+            }
+            for (TaskInfo task : queryTasksForIdentity(assignee, includeCandidate)) {
+                dedup.put(task.getTaskId(), task);
+            }
+        }
+        return new ArrayList<>(dedup.values());
+    }
+
+    private List<TaskInfo> queryTasksForIdentity(String assignee, boolean includeCandidate) {
         List<Task> tasks = taskService.createTaskQuery()
                 .taskAssignee(assignee)
                 .list();
@@ -172,6 +294,11 @@ public class WorkflowService {
     @Transactional
     public void completeTask(String taskId, String userId, String approvalResult, String comments) {
         Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task == null) {
+            throw new IllegalArgumentException("task not found");
+        }
+        validateApprovalComment(comments);
+        validateDelegationCompletion(task, userId);
         Map<String, Object> variables = new HashMap<>();
         variables.put("approvalResult", approvalResult);
         variables.put("comments", comments);
@@ -195,15 +322,26 @@ public class WorkflowService {
 
     @Transactional
     public void resolveTask(String taskId, String userId, String approvalResult, String comment) {
+        validateApprovalComment(comment);
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task == null) {
+            throw new IllegalArgumentException("task not found");
+        }
+        if (task.getDelegationState() != DelegationState.PENDING) {
+            throw new IllegalArgumentException("task is not pending delegation");
+        }
+        if (!isSameIdentity(task.getAssignee(), userId)) {
+            throw new IllegalArgumentException("only delegated assignee can resolve task");
+        }
         Map<String, Object> variables = new HashMap<>();
         variables.put("approvalResult", approvalResult);
         variables.put("comments", comment);
         taskService.resolveTask(taskId, variables);
-        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
-        BizRequestTask record = upsertTaskRecord(task, TASK_STATUS_CLAIMED, "RESOLVE", comment);
-        record.setAssigneeId(parseLongSafe(task.getAssignee()));
+        Task resolvedTask = taskService.createTaskQuery().taskId(taskId).singleResult();
+        BizRequestTask record = upsertTaskRecord(resolvedTask, TASK_STATUS_CLAIMED, "RESOLVE", comment);
+        record.setAssigneeId(parseLongSafe(resolvedTask.getAssignee()));
         bizRequestTaskRepository.save(record);
-        appendLog(task.getProcessInstanceId(), taskId, parseLongSafe(userId), "RESOLVE", comment);
+        appendLog(resolvedTask.getProcessInstanceId(), taskId, parseLongSafe(userId), "RESOLVE", comment);
     }
 
     @Transactional
@@ -404,8 +542,10 @@ public class WorkflowService {
 
             if ("APPROVE".equalsIgnoreCase(countersignResult)) {
                 bizRequest.setStatus(REQUEST_STATUS_APPROVED);
+                markAutoCompletedTaskRecords(processInstanceId);
             } else if ("REJECT".equalsIgnoreCase(countersignResult)) {
                 bizRequest.setStatus(REQUEST_STATUS_REJECTED);
+                markAutoCompletedTaskRecords(processInstanceId);
             } else {
                 bizRequest.setStatus(REQUEST_STATUS_IN_APPROVAL);
             }
@@ -413,12 +553,69 @@ public class WorkflowService {
             bizRequest.setCurrentAssigneeId(null);
             bizRequest.setFinishTime(LocalDateTime.now());
         } else {
-            bizRequest.setStatus(REQUEST_STATUS_IN_APPROVAL);
+            if (!Objects.equals(bizRequest.getStatus(), REQUEST_STATUS_SUSPENDED)) {
+                bizRequest.setStatus(REQUEST_STATUS_IN_APPROVAL);
+            }
             Task task = tasks.get(0);
             bizRequest.setCurrentTaskId(task.getId());
             bizRequest.setCurrentAssigneeId(parseLongSafe(task.getAssignee()));
         }
         bizRequestRepository.save(bizRequest);
+    }
+
+    private void markAutoCompletedTaskRecords(String processInstanceId) {
+        List<BizRequestTask> records = bizRequestTaskRepository.findByProcessInstanceId(processInstanceId);
+        if (records.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (BizRequestTask record : records) {
+            if (!isAutoCompletableStatus(record.getStatus())) {
+                continue;
+            }
+            record.setStatus(TASK_STATUS_COMPLETED);
+            record.setAction("AUTO_COMPLETE");
+            if (record.getComment() == null || record.getComment().isBlank()) {
+                record.setComment("Auto completed after multi-instance completion condition");
+            }
+            if (record.getEndTime() == null) {
+                record.setEndTime(now);
+            }
+        }
+        bizRequestTaskRepository.saveAll(records);
+    }
+
+    private boolean isAutoCompletableStatus(Integer status) {
+        return Objects.equals(status, TASK_STATUS_READY)
+                || Objects.equals(status, TASK_STATUS_CLAIMED)
+                || Objects.equals(status, TASK_STATUS_DELEGATED);
+    }
+
+    private void validateApprovalComment(String comment) {
+        if (comment == null || comment.isBlank()) {
+            throw new IllegalArgumentException("approval comment is required");
+        }
+    }
+
+    private void validateDelegationCompletion(Task task, String userId) {
+        if (task.getDelegationState() == null) {
+            return;
+        }
+        if (!isSameIdentity(task.getOwner(), userId)) {
+            throw new IllegalArgumentException("delegated task can only be completed by owner");
+        }
+        if (task.getDelegationState() != DelegationState.RESOLVED) {
+            throw new IllegalArgumentException("delegated task must be resolved before completion");
+        }
+    }
+
+    private boolean isSameIdentity(String left, String right) {
+        if (Objects.equals(left, right)) {
+            return true;
+        }
+        Long leftId = parseLongSafe(left);
+        Long rightId = parseLongSafe(right);
+        return leftId != null && leftId.equals(rightId);
     }
 
     private void updateRequestCurrentTask(BizRequest request, List<Task> tasks) {
@@ -458,8 +655,12 @@ public class WorkflowService {
     }
 
     private void appendLog(String processInstanceId, String taskId, Long operatorId, String action, String comment) {
+        appendLogByBusinessKey(getBusinessKey(processInstanceId), processInstanceId, taskId, operatorId, action, comment);
+    }
+
+    private void appendLogByBusinessKey(String businessKey, String processInstanceId, String taskId, Long operatorId, String action, String comment) {
         BizRequestLog logEntry = new BizRequestLog();
-        logEntry.setBusinessKey(getBusinessKey(processInstanceId));
+        logEntry.setBusinessKey(businessKey);
         logEntry.setProcessInstanceId(processInstanceId);
         logEntry.setTaskId(taskId);
         logEntry.setOperatorId(operatorId);
@@ -508,6 +709,16 @@ public class WorkflowService {
         info.setProcessDefinitionId(instance.getProcessDefinitionId());
         info.setBusinessKey(instance.getBusinessKey());
         return info;
+    }
+
+    @Data
+    public static class DraftRequest {
+        private String businessKey;
+        private String title;
+        private Long applicantId;
+        private Long applicantDeptId;
+        private Long applicantPostId;
+        private Long formInstanceId;
     }
 
     @Data
