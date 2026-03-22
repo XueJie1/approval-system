@@ -4,10 +4,10 @@ server:
 
 spring:
   datasource:
-    url: jdbc:mariadb://localhost:3306/approval_system?useSSL=false&serverTimezone=UTC
-    driver-class-name: org.mariadb.jdbc.Driver
-    username: root
-    password: "000001"
+    url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3306/approval_system?useSSL=false&serverTimezone=UTC}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.mariadb.jdbc.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:000001}
   jpa:
     hibernate:
       ddl-auto: update

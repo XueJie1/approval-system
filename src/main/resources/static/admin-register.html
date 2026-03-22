@@ -269,6 +269,9 @@
     const confirmPasswordInput = document.getElementById('confirmPassword');
     const passwordStrength = document.getElementById('passwordStrength');
     const passwordStrengthBar = document.getElementById('passwordStrengthBar');
+    const usernameError = document.getElementById('usernameError');
+    const passwordErrorElement = document.getElementById('passwordError');
+    const confirmPasswordErrorElement = document.getElementById('confirmPasswordError');
     const errorMessage = document.getElementById('errorMessage');
     const successMessage = document.getElementById('successMessage');
     const registerBtn = document.getElementById('registerBtn');
@@ -341,8 +344,8 @@
       // 清除所有错误信息
       errorMessage.style.display = 'none';
       usernameError.style.display = 'none';
-      passwordError.style.display = 'none';
-      confirmPasswordError.style.display = 'none';
+      passwordErrorElement.style.display = 'none';
+      confirmPasswordErrorElement.style.display = 'none';
       
       const username = usernameInput.value.trim();
       const password = passwordInput.value;
@@ -357,9 +360,9 @@
       }
       
       // 验证密码
-      const passwordError = validatePassword(password);
-      if (passwordError) {
-        setError('password', passwordError);
+      const passwordValidationError = validatePassword(password);
+      if (passwordValidationError) {
+        setError('password', passwordValidationError);
         hasError = true;
       }
       

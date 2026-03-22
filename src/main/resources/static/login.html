@@ -154,6 +154,23 @@
       margin-top: 5px;
       text-align: left;
     }
+
+    .remember-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #444;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .remember-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: #667eea;
+      cursor: pointer;
+    }
     
     @media (max-width: 480px) {
       .login-container {
@@ -202,12 +219,9 @@
       </div>
       
       <div class="el-form-item">
-        <label class="el-checkbox">
-          <input type="checkbox" id="rememberMe" class="el-checkbox__original">
-          <span class="el-checkbox__input">
-            <span class="el-checkbox__inner"></span>
-          </span>
-          <span class="el-checkbox__label">记住我</span>
+        <label class="remember-row" for="rememberMe">
+          <input type="checkbox" id="rememberMe">
+          <span>记住我</span>
         </label>
       </div>
       
@@ -285,31 +299,49 @@
         // 隐藏错误信息
         errorMessage.style.display = 'none';
         
-        // 直接提交表单到 Spring Security 默认登录端点
-        const formData = new FormData();
-        formData.append('username', username);
-        formData.append('password', password);
-        if (rememberMe) {
-          formData.append('remember-me', 'true');
-        }
-        
-        // 提交到 Spring Security 默认登录端点
-        const response = await fetch('/login', {
+        const response = await fetch('/api/auth/login', {
           method: 'POST',
-          body: formData,
           headers: {
-            'X-Requested-With': 'XMLHttpRequest' // For AJAX detection
-          }
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username,
+            password
+          })
         });
-        
-        if (response.ok || response.redirected) {
-          // 登录成功，重定向到主页
-          window.location.href = '/';
-        } else if (response.status === 401) {
-          showError('用户名或密码错误');
-        } else {
-          showError('登录失败，请检查用户名和密码');
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const message = data.error || data.message || '登录失败，请检查用户名和密码';
+          showError(message);
+          return;
         }
+
+        if (data.twoFactorRequired) {
+          showError('当前静态登录页暂不支持 2FA 验证，请使用未启用 2FA 的账户或改用前端应用登录。');
+          return;
+        }
+
+        if (!data.accessToken) {
+          showError('登录成功，但未收到访问令牌');
+          return;
+        }
+
+        const storage = rememberMe ? window.localStorage : window.sessionStorage;
+        window.localStorage.removeItem('approval.accessToken');
+        window.localStorage.removeItem('approval.user');
+        window.sessionStorage.removeItem('approval.accessToken');
+        window.sessionStorage.removeItem('approval.user');
+
+        storage.setItem('approval.accessToken', data.accessToken);
+        storage.setItem('approval.user', JSON.stringify({
+          userId: data.userId,
+          username: data.username,
+          roles: data.roles || []
+        }));
+
+        window.location.href = '/index.html';
       } catch (error) {
         console.error('Login error:', error);
         showError('网络错误，请稍后重试');
