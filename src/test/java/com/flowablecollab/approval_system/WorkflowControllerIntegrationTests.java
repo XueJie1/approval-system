@@ -3,6 +3,7 @@ package com.flowablecollab.approval_system;
 import com.flowablecollab.approval_system.entity.BizRequestTask;
 import com.flowablecollab.approval_system.entity.BizRequest;
 import com.flowablecollab.approval_system.entity.rbac.SysUser;
+import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
 import org.flowable.task.api.Task;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -25,6 +26,9 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Autowired
     private RuntimeService runtimeService;
+
+    @Autowired
+    private TaskAiSuggestionService taskAiSuggestionService;
 
     @Test
     void startProcess_andQueryTasks_exposesSingleApprovalInRuntime() throws Exception {
@@ -293,10 +297,76 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
         mockMvc.perform(get("/api/workflow/tasks/{taskId}/ai-suggestion", task.getId())
                         .header("Authorization", authorization(approverToken)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recordId").isNumber())
                 .andExpect(jsonPath("$.taskId").value(task.getId()))
                 .andExpect(jsonPath("$.decision").isString())
+                .andExpect(jsonPath("$.recommendation").isString())
                 .andExpect(jsonPath("$.summary").isString())
+                .andExpect(jsonPath("$.approvalComment").isString())
                 .andExpect(jsonPath("$.model").isString());
+    }
+
+    @Test
+    void aiSuggestion_supportsFollowUpAdoptAndHistoryFinalResult() throws Exception {
+        SysUser applicant = createUser("ai-history-applicant", "Password@123", null, "EMPLOYEE");
+        SysUser approver = createUser("ai-history-approver", "Password@123", null, "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String approverToken = accessToken(approver, "EMPLOYEE");
+        String businessKey = unique("wf-ai-history");
+
+        startSingleApproval(applicantToken, applicant.getId(), businessKey, approver.getUsername());
+        Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+
+        long recordId = json(mockMvc.perform(get("/api/workflow/tasks/{taskId}/ai-suggestion", task.getId())
+                        .header("Authorization", authorization(approverToken)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get("recordId").asLong();
+
+        mockMvc.perform(post("/api/workflow/tasks/{taskId}/ai-suggestion/{recordId}/follow-up", task.getId(), recordId)
+                        .header("Authorization", authorization(approverToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "为什么你认为这个申请有风险？"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversation[0].question").value("为什么你认为这个申请有风险？"))
+                .andExpect(jsonPath("$.conversation[0].answer").isString());
+
+        mockMvc.perform(post("/api/workflow/tasks/{taskId}/ai-suggestion/{recordId}/adopt", task.getId(), recordId)
+                        .header("Authorization", authorization(approverToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.adopted").value(true))
+                .andExpect(jsonPath("$.adoptedAt").isString());
+
+        mockMvc.perform(get("/api/workflow/tasks/{taskId}/ai-suggestion/history", task.getId())
+                        .header("Authorization", authorization(approverToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].recordId").value(recordId))
+                .andExpect(jsonPath("$[0].conversation[0].question").value("为什么你认为这个申请有风险？"))
+                .andExpect(jsonPath("$[0].adopted").value(true));
+
+        mockMvc.perform(post("/api/workflow/tasks/{taskId}/complete", task.getId())
+                        .header("Authorization", authorization(approverToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "approvalResult": "APPROVE",
+                                  "comments": "approved with ai suggestion"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        List<TaskAiSuggestionService.SuggestionRecordView> records =
+                taskAiSuggestionService.getHistoryForBusinessKeys(List.of(businessKey));
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).getRecordId()).isEqualTo(recordId);
+        assertThat(records.get(0).isAdopted()).isTrue();
+        assertThat(records.get(0).getFinalApprovalResult()).isEqualTo("APPROVE");
     }
 
     @Test

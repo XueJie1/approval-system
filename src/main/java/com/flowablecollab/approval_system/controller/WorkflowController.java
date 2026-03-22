@@ -5,6 +5,7 @@ import com.flowablecollab.approval_system.entity.form.FormInstance;
 import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.security.SecurityUtils;
+import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
 import com.flowablecollab.approval_system.service.WorkflowService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -29,6 +30,7 @@ public class WorkflowController {
 
     private final WorkflowService workflowService;
     private final com.flowablecollab.approval_system.service.FormService formService;
+    private final TaskAiSuggestionService taskAiSuggestionService;
 
     @PostMapping("/requests")
     public ResponseEntity<StartProcessResponse> startProcess(@Valid @RequestBody StartProcessRequest request) {
@@ -288,16 +290,97 @@ public class WorkflowController {
                 currentUserId,
                 SecurityUtils.currentUsername(),
                 SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN"));
+        return ResponseEntity.ok(toAiSuggestionResponse(suggestion));
+    }
 
+    @PostMapping("/tasks/{taskId}/ai-suggestion/{recordId}/follow-up")
+    public ResponseEntity<AiSuggestionResponse> followUpAiSuggestion(
+            @PathVariable String taskId,
+            @PathVariable Long recordId,
+            @Valid @RequestBody AiSuggestionFollowUpRequest request) {
+        Long currentUserId = requireCurrentUserId();
+        TaskAiSuggestionService.SuggestionRecordView suggestion = taskAiSuggestionService.followUp(
+                taskId,
+                recordId,
+                request.getQuestion(),
+                currentUserId,
+                SecurityUtils.currentUsername(),
+                SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN"));
+        return ResponseEntity.ok(toAiSuggestionResponse(suggestion));
+    }
+
+    @PostMapping("/tasks/{taskId}/ai-suggestion/{recordId}/adopt")
+    public ResponseEntity<AiSuggestionResponse> adoptAiSuggestion(
+            @PathVariable String taskId,
+            @PathVariable Long recordId) {
+        Long currentUserId = requireCurrentUserId();
+        TaskAiSuggestionService.SuggestionRecordView suggestion = taskAiSuggestionService.markAdopted(
+                taskId,
+                recordId,
+                currentUserId,
+                SecurityUtils.currentUsername(),
+                SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN"));
+        return ResponseEntity.ok(toAiSuggestionResponse(suggestion));
+    }
+
+    @GetMapping("/tasks/{taskId}/ai-suggestion/history")
+    public ResponseEntity<List<AiSuggestionResponse>> getAiSuggestionHistory(@PathVariable String taskId) {
+        Long currentUserId = requireCurrentUserId();
+        List<AiSuggestionResponse> responses = taskAiSuggestionService.getTaskHistory(
+                        taskId,
+                        currentUserId,
+                        SecurityUtils.currentUsername(),
+                        SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN"))
+                .stream()
+                .map(this::toAiSuggestionResponse)
+                .toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    private AiSuggestionResponse toAiSuggestionResponse(WorkflowService.ApprovalSuggestion suggestion) {
         AiSuggestionResponse response = new AiSuggestionResponse();
+        response.setRecordId(suggestion.getRecordId());
+        response.setBusinessKey(suggestion.getBusinessKey());
+        response.setProcessInstanceId(suggestion.getProcessInstanceId());
         response.setTaskId(suggestion.getTaskId());
         response.setDecision(suggestion.getDecision());
+        response.setRecommendation(suggestion.getRecommendation());
         response.setSummary(suggestion.getSummary());
-        response.setRiskFlags(suggestion.getRiskFlags());
-        response.setFollowUpChecks(suggestion.getFollowUpChecks());
+        response.setRiskWarnings(suggestion.getRiskWarnings());
+        response.setAnomalies(suggestion.getAnomalies());
+        response.setSupplementaryInfo(suggestion.getSupplementaryInfo());
+        response.setApprovalComment(suggestion.getApprovalComment());
+        response.setSuggestedFormUpdates(suggestion.getSuggestedFormUpdates());
+        response.setConversation(suggestion.getConversation());
+        response.setAdopted(suggestion.isAdopted());
+        response.setAdoptedAt(suggestion.getAdoptedAt());
+        response.setFinalApprovalResult(suggestion.getFinalApprovalResult());
         response.setModel(suggestion.getModel());
         response.setGeneratedAt(suggestion.getGeneratedAt());
-        return ResponseEntity.ok(response);
+        return response;
+    }
+
+    private AiSuggestionResponse toAiSuggestionResponse(TaskAiSuggestionService.SuggestionRecordView suggestion) {
+        AiSuggestionResponse response = new AiSuggestionResponse();
+        response.setRecordId(suggestion.getRecordId());
+        response.setBusinessKey(suggestion.getBusinessKey());
+        response.setProcessInstanceId(suggestion.getProcessInstanceId());
+        response.setTaskId(suggestion.getTaskId());
+        response.setDecision(suggestion.getDecision());
+        response.setRecommendation(suggestion.getRecommendation());
+        response.setSummary(suggestion.getSummary());
+        response.setRiskWarnings(suggestion.getRiskWarnings());
+        response.setAnomalies(suggestion.getAnomalies());
+        response.setSupplementaryInfo(suggestion.getSupplementaryInfo());
+        response.setApprovalComment(suggestion.getApprovalComment());
+        response.setSuggestedFormUpdates(suggestion.getSuggestedFormUpdates());
+        response.setConversation(suggestion.getConversation());
+        response.setAdopted(suggestion.isAdopted());
+        response.setAdoptedAt(suggestion.getAdoptedAt());
+        response.setFinalApprovalResult(suggestion.getFinalApprovalResult());
+        response.setModel(suggestion.getModel());
+        response.setGeneratedAt(suggestion.getGeneratedAt());
+        return response;
     }
 
     private Long resolveApplicantId(Long requestedApplicantId) {
@@ -497,12 +580,29 @@ public class WorkflowController {
 
     @Data
     public static class AiSuggestionResponse {
+        private Long recordId;
+        private String businessKey;
+        private String processInstanceId;
         private String taskId;
         private String decision;
+        private String recommendation;
         private String summary;
-        private List<String> riskFlags;
-        private List<String> followUpChecks;
+        private List<String> riskWarnings;
+        private List<String> anomalies;
+        private List<String> supplementaryInfo;
+        private String approvalComment;
+        private Map<String, Object> suggestedFormUpdates;
+        private List<TaskAiSuggestionService.ConversationTurnView> conversation;
+        private boolean adopted;
+        private java.time.LocalDateTime adoptedAt;
+        private String finalApprovalResult;
         private String model;
         private java.time.LocalDateTime generatedAt;
+    }
+
+    @Data
+    public static class AiSuggestionFollowUpRequest {
+        @NotBlank(message = "question is required")
+        private String question;
     }
 }

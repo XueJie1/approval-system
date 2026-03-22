@@ -1,5 +1,5 @@
 import { http } from "./http";
-import type { BizRequest, ProcessInfo, RequestLog, TaskInfo } from "../types";
+import type { AiSuggestion, BizRequest, ProcessInfo, RequestLog, TaskInfo } from "../types";
 
 export async function listRequests(params: { userId?: number; status?: number }) {
   const { data } = await http.get<BizRequest[]>("/requests", { params });
@@ -18,5 +18,10 @@ export async function listRequestLogs(params: { userId?: number; status?: number
 
 export async function listProcesses(params: { userId?: number; status?: number }) {
   const { data } = await http.get<ProcessInfo[]>("/requests/processes", { params });
+  return data;
+}
+
+export async function listAiSuggestions(params: { userId?: number; status?: number }) {
+  const { data } = await http.get<AiSuggestion[]>("/requests/ai-suggestions", { params });
   return data;
 }

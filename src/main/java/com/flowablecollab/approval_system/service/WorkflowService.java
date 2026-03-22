@@ -9,7 +9,6 @@ import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.repository.BizRequestTaskRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
-import com.flowablecollab.approval_system.service.ai.ApprovalSuggestionService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,7 +54,7 @@ public class WorkflowService {
     private final BizRequestTaskRepository bizRequestTaskRepository;
     private final BizRequestLogRepository bizRequestLogRepository;
     private final SysUserRepository sysUserRepository;
-    private final ApprovalSuggestionService approvalSuggestionService;
+    private final TaskAiSuggestionService taskAiSuggestionService;
 
     @Transactional
     public String startApprovalProcess(StartRequest request) {
@@ -287,28 +286,28 @@ public class WorkflowService {
     }
 
     public ApprovalSuggestion suggestForTask(String taskId, Long requesterId, String requesterUsername, boolean isAdmin) {
-        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
-        if (task == null) {
-            throw new IllegalArgumentException("task not found");
-        }
-        ensureTaskSuggestionAccess(task, requesterId, requesterUsername, isAdmin);
-
-        BizRequest request = bizRequestRepository.findByProcessInstanceId(task.getProcessInstanceId()).orElse(null);
-        ApprovalSuggestionService.SuggestionContext context = new ApprovalSuggestionService.SuggestionContext();
-        context.setTaskId(task.getId());
-        context.setTaskName(task.getName());
-        context.setProcessInstanceId(task.getProcessInstanceId());
-        context.setBusinessKey(request != null ? request.getBusinessKey() : null);
-        context.setTitle(request != null ? request.getTitle() : null);
-        context.setVariables(taskService.getVariables(taskId));
-
-        ApprovalSuggestionService.SuggestionResult result = approvalSuggestionService.suggest(context);
+        TaskAiSuggestionService.SuggestionRecordView result = taskAiSuggestionService.generateSuggestion(
+                taskId,
+                requesterId,
+                requesterUsername,
+                isAdmin);
         ApprovalSuggestion suggestion = new ApprovalSuggestion();
+        suggestion.setRecordId(result.getRecordId());
+        suggestion.setBusinessKey(result.getBusinessKey());
+        suggestion.setProcessInstanceId(result.getProcessInstanceId());
         suggestion.setTaskId(result.getTaskId());
         suggestion.setDecision(result.getDecision());
+        suggestion.setRecommendation(result.getRecommendation());
         suggestion.setSummary(result.getSummary());
-        suggestion.setRiskFlags(result.getRiskFlags());
-        suggestion.setFollowUpChecks(result.getFollowUpChecks());
+        suggestion.setRiskWarnings(result.getRiskWarnings());
+        suggestion.setAnomalies(result.getAnomalies());
+        suggestion.setSupplementaryInfo(result.getSupplementaryInfo());
+        suggestion.setApprovalComment(result.getApprovalComment());
+        suggestion.setSuggestedFormUpdates(result.getSuggestedFormUpdates());
+        suggestion.setConversation(result.getConversation());
+        suggestion.setAdopted(result.isAdopted());
+        suggestion.setAdoptedAt(result.getAdoptedAt());
+        suggestion.setFinalApprovalResult(result.getFinalApprovalResult());
         suggestion.setModel(result.getModel());
         suggestion.setGeneratedAt(result.getGeneratedAt());
         return suggestion;
@@ -472,6 +471,7 @@ public class WorkflowService {
             bizRequestRepository.save(request);
         }
         appendLog(processInstanceId, null, parseLongSafe(userId), "CANCEL_PROCESS", comment);
+        taskAiSuggestionService.markFinalResultForProcess(processInstanceId, "CANCELLED");
     }
 
     private void returnToActivity(Task task, String targetActivityId, String userId, String comment) {
@@ -574,9 +574,11 @@ public class WorkflowService {
             if ("APPROVE".equalsIgnoreCase(countersignResult)) {
                 bizRequest.setStatus(REQUEST_STATUS_APPROVED);
                 markAutoCompletedTaskRecords(processInstanceId);
+                taskAiSuggestionService.markFinalResultForProcess(processInstanceId, "APPROVE");
             } else if ("REJECT".equalsIgnoreCase(countersignResult)) {
                 bizRequest.setStatus(REQUEST_STATUS_REJECTED);
                 markAutoCompletedTaskRecords(processInstanceId);
+                taskAiSuggestionService.markFinalResultForProcess(processInstanceId, "REJECT");
             } else {
                 bizRequest.setStatus(REQUEST_STATUS_IN_APPROVAL);
             }
@@ -647,34 +649,6 @@ public class WorkflowService {
         Long leftId = parseLongSafe(left);
         Long rightId = parseLongSafe(right);
         return leftId != null && leftId.equals(rightId);
-    }
-
-    private void ensureTaskSuggestionAccess(Task task, Long requesterId, String requesterUsername, boolean isAdmin) {
-        if (isAdmin) {
-            return;
-        }
-        String requesterIdText = requesterId == null ? null : String.valueOf(requesterId);
-        boolean isAssignee = isSameIdentity(task.getAssignee(), requesterUsername)
-                || isSameIdentity(task.getAssignee(), requesterIdText);
-        if (isAssignee) {
-            return;
-        }
-        boolean isCandidate = false;
-        if (requesterUsername != null && !requesterUsername.isBlank()) {
-            isCandidate = taskService.createTaskQuery()
-                    .taskId(task.getId())
-                    .taskCandidateUser(requesterUsername)
-                    .count() > 0;
-        }
-        if (!isCandidate && requesterIdText != null) {
-            isCandidate = taskService.createTaskQuery()
-                    .taskId(task.getId())
-                    .taskCandidateUser(requesterIdText)
-                    .count() > 0;
-        }
-        if (!isCandidate) {
-            throw new ForbiddenOperationException("only assignee/candidate/admin can access ai suggestion");
-        }
     }
 
     private void updateRequestCurrentTask(BizRequest request, List<Task> tasks) {
@@ -798,11 +772,22 @@ public class WorkflowService {
 
     @Data
     public static class ApprovalSuggestion {
+        private Long recordId;
+        private String businessKey;
+        private String processInstanceId;
         private String taskId;
         private String decision;
+        private String recommendation;
         private String summary;
-        private List<String> riskFlags;
-        private List<String> followUpChecks;
+        private List<String> riskWarnings;
+        private List<String> anomalies;
+        private List<String> supplementaryInfo;
+        private String approvalComment;
+        private Map<String, Object> suggestedFormUpdates;
+        private List<TaskAiSuggestionService.ConversationTurnView> conversation;
+        private boolean adopted;
+        private LocalDateTime adoptedAt;
+        private String finalApprovalResult;
         private String model;
         private LocalDateTime generatedAt;
     }

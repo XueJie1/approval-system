@@ -7,6 +7,7 @@ import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.RbacService;
+import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
 import com.flowablecollab.approval_system.service.WorkflowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class RequestController {
     private final BizRequestLogRepository bizRequestLogRepository;
     private final WorkflowService workflowService;
     private final RbacService rbacService;
+    private final TaskAiSuggestionService taskAiSuggestionService;
 
     @GetMapping
     public ResponseEntity<List<BizRequest>> listRequests(
@@ -98,6 +100,21 @@ public class RequestController {
                 .filter(id -> id != null && !id.isBlank())
                 .toList();
         return ResponseEntity.ok(workflowService.getProcessesByIds(processIds));
+    }
+
+    @GetMapping("/ai-suggestions")
+    public ResponseEntity<List<TaskAiSuggestionService.SuggestionRecordView>> listAiSuggestions(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Integer status) {
+        List<BizRequest> requests = listRequests(userId, status).getBody();
+        if (requests == null || requests.isEmpty()) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+        List<String> businessKeys = requests.stream()
+                .map(BizRequest::getBusinessKey)
+                .filter(key -> key != null && !key.isBlank())
+                .toList();
+        return ResponseEntity.ok(taskAiSuggestionService.getHistoryForBusinessKeys(businessKeys));
     }
 
     private Long resolveRequestedUserId(Long requestedUserId) {

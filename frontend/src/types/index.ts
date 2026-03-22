@@ -61,6 +61,14 @@ export interface ProcessInfo {
   businessKey: string;
 }
 
+export interface AiConversationTurn {
+  question: string;
+  answer: string;
+  askedAt?: string;
+  answeredAt?: string;
+  model?: string;
+}
+
 export interface FormField {
   id: number;
   fieldKey: string;
@@ -78,11 +86,22 @@ export interface FormVersion {
 }
 
 export interface AiSuggestion {
+  recordId: number;
+  businessKey: string;
+  processInstanceId: string;
   taskId: string;
   decision: string;
+  recommendation: string;
   summary: string;
-  riskFlags: string[];
-  followUpChecks: string[];
+  riskWarnings: string[];
+  anomalies: string[];
+  supplementaryInfo: string[];
+  approvalComment: string;
+  suggestedFormUpdates: Record<string, unknown>;
+  conversation: AiConversationTurn[];
+  adopted: boolean;
+  adoptedAt?: string;
+  finalApprovalResult?: string;
   model: string;
   generatedAt: string;
 }

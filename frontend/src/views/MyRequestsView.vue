@@ -49,19 +49,34 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card shadow="never" class="panel">
+      <template #header>AI 建议记录</template>
+      <el-empty v-if="aiSuggestions.length === 0" description="暂无 AI 建议记录" />
+      <el-timeline v-else>
+        <el-timeline-item v-for="item in aiSuggestions" :key="item.recordId" :timestamp="item.generatedAt">
+          <strong>{{ item.decision === "APPROVE" ? "建议通过" : "建议拒绝" }}</strong>
+          <div>{{ item.recommendation || item.summary }}</div>
+          <div class="timeline-meta">
+            采纳：{{ item.adopted ? "是" : "否" }} | 最终结果：{{ item.finalApprovalResult || "待定" }}
+          </div>
+        </el-timeline-item>
+      </el-timeline>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import type { BizRequest, ProcessInfo, RequestLog } from "../types";
-import { listProcesses, listRequestLogs, listRequests } from "../api/requests";
+import type { AiSuggestion, BizRequest, ProcessInfo, RequestLog } from "../types";
+import { listAiSuggestions, listProcesses, listRequestLogs, listRequests } from "../api/requests";
 
 const loading = ref(false);
 const statusFilter = ref<number | undefined>(undefined);
 const requests = ref<BizRequest[]>([]);
 const processes = ref<ProcessInfo[]>([]);
 const logs = ref<RequestLog[]>([]);
+const aiSuggestions = ref<AiSuggestion[]>([]);
 
 const statuses = [
   { label: "草稿", value: 0 },
@@ -93,6 +108,7 @@ async function reload() {
     requests.value = await listRequests(params);
     processes.value = await listProcesses(params);
     logs.value = await listRequestLogs(params);
+    aiSuggestions.value = await listAiSuggestions(params);
   } finally {
     loading.value = false;
   }
@@ -115,5 +131,11 @@ async function reload() {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.timeline-meta {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 4px;
 }
 </style>

@@ -5,66 +5,177 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
 @ConditionalOnProperty(name = "ai.llm.provider", havingValue = "mock", matchIfMissing = true)
 public class MockLlmClient implements LlmClient {
 
-    @Value("${ai.llm.mock-model:mock-approval-advisor-v1}")
+    @Value("${ai.llm.mock-model:mock-approval-advisor-v2}")
     private String mockModel;
 
     @Override
     public Suggestion suggestApproval(SuggestionRequest request) {
         Map<String, Object> variables = request.getVariables() == null ? Map.of() : request.getVariables();
-        List<String> riskFlags = new ArrayList<>();
-        List<String> followUpChecks = new ArrayList<>();
+        List<String> riskWarnings = new ArrayList<>(defaultList(request.getHeuristicRiskWarnings()));
+        List<String> anomalies = new ArrayList<>(defaultList(request.getHeuristicAnomalies()));
+        List<String> supplementaryInfo = new ArrayList<>();
+        Map<String, Object> suggestedFormUpdates = new LinkedHashMap<>();
 
-        Double amount = extractNumber(variables, "amount", "totalAmount", "cost");
+        Double amount = extractNumber(variables, "amount", "totalAmount", "cost", "fee", "reimbursementAmount");
+        String description = extractString(variables, "description", "reason", "content", "remark", "comment");
+        Boolean urgent = extractBoolean(variables, "urgent", "isUrgent", "emergency");
+
         if (amount != null && amount < 0) {
-            riskFlags.add("检测到负数金额，建议先校验表单数据合法性。");
-        } else if (amount != null && amount >= 10000) {
-            riskFlags.add("申请金额较高，建议核对预算归属、发票与付款依据。");
-            followUpChecks.add("确认预算科目是否有可用余额。");
-            followUpChecks.add("核验金额与附件中的合同/报价是否一致。");
+            anomalies.add("申请金额为负数，表单数据明显异常。");
+        }
+        if ((description == null || description.isBlank()) && !containsText(anomalies, "说明")) {
+            anomalies.add("缺少申请说明，难以判断业务必要性。");
+            suggestedFormUpdates.put("description", "请补充业务背景、用途与费用构成");
         }
 
-        Boolean urgent = extractBoolean(variables, "urgent", "isUrgent");
-        if (Boolean.TRUE.equals(urgent)) {
-            riskFlags.add("该申请标记为紧急，建议复核紧急性说明和业务影响。");
-            followUpChecks.add("补充紧急处理窗口和责任人。");
+        ApplicantStats applicantStats = request.getApplicantStats();
+        if (applicantStats != null) {
+            supplementaryInfo.add("申请人本月累计申请 " + safeInt(applicantStats.getMonthlyRequestCount()) + " 笔，累计金额 ¥"
+                    + formatMoney(applicantStats.getMonthlyTotalAmount()) + "，平均金额 ¥" + formatMoney(applicantStats.getAverageAmount()) + "。");
+            if (applicantStats.getMonthlySameTypeCount() != null && applicantStats.getMonthlySameTypeCount() >= 3
+                    && !containsText(riskWarnings, "频率")) {
+                riskWarnings.add("频率异常：申请人本月同类型申请已达 " + applicantStats.getMonthlySameTypeCount() + " 笔。");
+            }
+            if (amount != null && applicantStats.getAverageAmount() != null
+                    && applicantStats.getAverageAmount() > 0
+                    && amount >= applicantStats.getAverageAmount() * 2
+                    && !containsText(riskWarnings, "金额")) {
+                riskWarnings.add("金额异常：本次金额 ¥" + formatMoney(amount) + " 明显高于申请人历史均值 ¥"
+                        + formatMoney(applicantStats.getAverageAmount()) + "。");
+            }
         }
 
-        if (!variables.containsKey("approverId")) {
-            followUpChecks.add("建议明确 approverId，避免任务路由到默认审批人。");
+        SimilarCaseStats similarCaseStats = request.getSimilarCaseStats();
+        if (similarCaseStats != null) {
+            supplementaryInfo.add("同类申请样本 " + safeInt(similarCaseStats.getSampleCount()) + " 笔，平均处理时间 "
+                    + safeText(similarCaseStats.getAverageProcessingTime(), "暂无历史数据") + "。");
+            supplementaryInfo.add("同类申请通过 " + safeInt(similarCaseStats.getApprovedCount()) + " 笔，拒绝 "
+                    + safeInt(similarCaseStats.getRejectedCount()) + " 笔。");
         }
 
-        String decision;
-        if (amount != null && amount < 0) {
-            decision = "REJECT";
-        } else if (riskFlags.isEmpty()) {
-            decision = "APPROVE";
-        } else {
-            decision = "REVIEW";
+        for (String policyReference : defaultList(request.getPolicyReferences())) {
+            supplementaryInfo.add(policyReference);
         }
+
+        if (Boolean.TRUE.equals(urgent) && !containsText(riskWarnings, "紧急")) {
+            riskWarnings.add("时间异常：申请标记为紧急，请核实紧急原因与业务影响。");
+        }
+
+        if (amount != null && amount >= 10000 && !containsText(riskWarnings, "预算")) {
+            riskWarnings.add("金额异常：大额申请需要重点核对预算余额、发票与合同依据。");
+            suggestedFormUpdates.put("budgetCheckRequired", true);
+        }
+
+        String decision = decide(amount, anomalies, riskWarnings);
+        String recommendation = buildRecommendation(decision, amount, description, riskWarnings, anomalies);
+        String approvalComment = ("APPROVE".equals(decision) ? "建议通过：" : "建议拒绝：") + recommendation;
 
         Suggestion suggestion = new Suggestion();
         suggestion.setDecision(decision);
-        suggestion.setSummary(buildSummary(request, decision, amount));
-        suggestion.setRiskFlags(riskFlags);
-        suggestion.setFollowUpChecks(followUpChecks);
+        suggestion.setRecommendation(recommendation);
+        suggestion.setSummary(recommendation);
+        suggestion.setRiskWarnings(riskWarnings);
+        suggestion.setAnomalies(anomalies);
+        suggestion.setSupplementaryInfo(supplementaryInfo);
+        suggestion.setApprovalComment(approvalComment);
+        suggestion.setSuggestedFormUpdates(suggestedFormUpdates);
         suggestion.setModel(mockModel);
         return suggestion;
     }
 
-    private String buildSummary(SuggestionRequest request, String decision, Double amount) {
-        String taskName = request.getTaskName() == null ? "审批任务" : request.getTaskName();
-        String title = request.getTitle() == null ? "未命名申请" : request.getTitle();
-        if (amount == null) {
-            return "任务「" + taskName + "」针对申请「" + title + "」建议：" + decision + "。";
+    @Override
+    public FollowUpAnswer answerFollowUp(FollowUpRequest request) {
+        String question = safeText(request.getQuestion(), "").toLowerCase(Locale.ROOT);
+        Suggestion currentSuggestion = request.getCurrentSuggestion();
+
+        String answer;
+        if (question.contains("风险")) {
+            answer = explainList("风险主要来自：", currentSuggestion == null ? List.of() : currentSuggestion.getRiskWarnings(), "当前没有明显风险预警。");
+        } else if (question.contains("异常")) {
+            answer = explainList("识别到的异常点包括：", currentSuggestion == null ? List.of() : currentSuggestion.getAnomalies(), "当前未识别到明确异常。");
+        } else if (question.contains("规定") || question.contains("制度") || question.contains("政策")) {
+            answer = explainList("本次建议参考了以下补充依据：", currentSuggestion == null ? List.of() : currentSuggestion.getSupplementaryInfo(), "当前仅能基于通用审批常识判断，建议人工核对内部制度。");
+        } else if (question.contains("为什么") || question.contains("理由")) {
+            answer = currentSuggestion == null || currentSuggestion.getRecommendation() == null || currentSuggestion.getRecommendation().isBlank()
+                    ? "当前没有足够上下文给出更具体理由。"
+                    : currentSuggestion.getRecommendation();
+        } else {
+            answer = "建议结合当前审批意见、风险预警和异常检测继续人工复核。如需精确判断，请补充更具体的问题。";
         }
-        return "任务「" + taskName + "」针对申请「" + title + "」(金额 " + amount + ") 建议：" + decision + "。";
+
+        FollowUpAnswer followUpAnswer = new FollowUpAnswer();
+        followUpAnswer.setAnswer(answer);
+        followUpAnswer.setModel(mockModel);
+        return followUpAnswer;
+    }
+
+    private String decide(Double amount, List<String> anomalies, List<String> riskWarnings) {
+        if (!anomalies.isEmpty()) {
+            return "REJECT";
+        }
+        if (amount != null && amount < 0) {
+            return "REJECT";
+        }
+        if (riskWarnings.size() >= 3) {
+            return "REJECT";
+        }
+        return "APPROVE";
+    }
+
+    private String buildRecommendation(String decision, Double amount, String description, List<String> riskWarnings, List<String> anomalies) {
+        if ("REJECT".equals(decision)) {
+            if (!anomalies.isEmpty()) {
+                return anomalies.get(0);
+            }
+            if (!riskWarnings.isEmpty()) {
+                return riskWarnings.get(0);
+            }
+            return "当前申请存在无法忽略的异常或风险，建议驳回后补充材料。";
+        }
+        if (amount != null) {
+            return "该申请金额 ¥" + formatMoney(amount) + "，当前未发现足以阻断审批的异常，建议通过。";
+        }
+        if (description != null && !description.isBlank()) {
+            return "申请说明较完整，当前未发现明显异常，建议通过。";
+        }
+        if (!riskWarnings.isEmpty()) {
+            return "当前风险可控，但建议在通过前做必要复核。";
+        }
+        return "申请信息基本完整，符合常规审批预期，建议通过。";
+    }
+
+    private List<String> defaultList(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private boolean containsText(List<String> values, String needle) {
+        return values.stream().anyMatch(item -> item != null && item.contains(needle));
+    }
+
+    private String explainList(String prefix, List<String> values, String fallback) {
+        if (values == null || values.isEmpty()) {
+            return fallback;
+        }
+        return prefix + String.join("；", values);
+    }
+
+    private String extractString(Map<String, Object> variables, String... keys) {
+        for (String key : keys) {
+            Object value = variables.get(key);
+            if (value instanceof String str && !str.isBlank()) {
+                return str.trim();
+            }
+        }
+        return null;
     }
 
     private Double extractNumber(Map<String, Object> variables, String... keys) {
@@ -100,5 +211,17 @@ public class MockLlmClient implements LlmClient {
             }
         }
         return null;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String safeText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String formatMoney(Double value) {
+        return value == null ? "0.00" : String.format(Locale.ROOT, "%.2f", value);
     }
 }

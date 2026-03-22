@@ -46,7 +46,7 @@ class OpenAiLlmClientTests {
                               "index": 0,
                               "message": {
                                 "role": "assistant",
-                                "content": "{\\"decision\\":\\"REVIEW\\",\\"summary\\":\\"Needs additional receipt\\",\\"riskFlags\\":[\\"amount too high\\"],\\"followUpChecks\\":[\\"request invoice\\"]}"
+                                "content": "{\\"decision\\":\\"REJECT\\",\\"recommendation\\":\\"金额明显偏高，建议补充票据后再审批\\",\\"summary\\":\\"金额明显偏高，建议补充票据后再审批\\",\\"riskWarnings\\":[\\"amount too high\\"],\\"anomalies\\":[\\"missing receipt\\"],\\"supplementaryInfo\\":[\\"similar cases avg 2 days\\"],\\"approvalComment\\":\\"建议拒绝：金额明显偏高，建议补充票据后再审批\\",\\"suggestedFormUpdates\\":{\\"receiptRequired\\":true}}"
                               }
                             }
                           ]
@@ -58,10 +58,14 @@ class OpenAiLlmClientTests {
         request.setVariables(Map.of("amount", 12000));
         LlmClient.Suggestion suggestion = client.suggestApproval(request);
 
-        assertThat(suggestion.getDecision()).isEqualTo("REVIEW");
-        assertThat(suggestion.getSummary()).isEqualTo("Needs additional receipt");
-        assertThat(suggestion.getRiskFlags()).containsExactly("amount too high");
-        assertThat(suggestion.getFollowUpChecks()).containsExactly("request invoice");
+        assertThat(suggestion.getDecision()).isEqualTo("REJECT");
+        assertThat(suggestion.getRecommendation()).isEqualTo("金额明显偏高，建议补充票据后再审批");
+        assertThat(suggestion.getSummary()).isEqualTo("金额明显偏高，建议补充票据后再审批");
+        assertThat(suggestion.getRiskWarnings()).containsExactly("amount too high");
+        assertThat(suggestion.getAnomalies()).containsExactly("missing receipt");
+        assertThat(suggestion.getSupplementaryInfo()).containsExactly("similar cases avg 2 days");
+        assertThat(suggestion.getApprovalComment()).contains("建议拒绝");
+        assertThat(suggestion.getSuggestedFormUpdates()).containsEntry("receiptRequired", true);
         assertThat(suggestion.getModel()).isEqualTo("gpt-5.4-mini");
         server.verify();
     }
@@ -89,7 +93,7 @@ class OpenAiLlmClientTests {
                           "choices": [
                             {
                               "message": {
-                                "content": "```json\\n{\\"decision\\":\\"APPROVE\\",\\"summary\\":\\"Looks good\\",\\"riskFlags\\":[],\\"followUpChecks\\":[\\"spot check docs\\"]}\\n```"
+                                "content": "```json\\n{\\"decision\\":\\"APPROVE\\",\\"recommendation\\":\\"材料齐全，建议通过\\",\\"summary\\":\\"材料齐全，建议通过\\",\\"riskWarnings\\":[],\\"anomalies\\":[],\\"supplementaryInfo\\":[\\"spot check docs\\"],\\"approvalComment\\":\\"建议通过：材料齐全，建议通过\\",\\"suggestedFormUpdates\\":{}}\\n```"
                               }
                             }
                           ]
@@ -99,9 +103,50 @@ class OpenAiLlmClientTests {
         LlmClient.Suggestion suggestion = client.suggestApproval(new LlmClient.SuggestionRequest());
 
         assertThat(suggestion.getDecision()).isEqualTo("APPROVE");
-        assertThat(suggestion.getSummary()).isEqualTo("Looks good");
-        assertThat(suggestion.getRiskFlags()).isEmpty();
-        assertThat(suggestion.getFollowUpChecks()).containsExactly("spot check docs");
+        assertThat(suggestion.getRecommendation()).isEqualTo("材料齐全，建议通过");
+        assertThat(suggestion.getSummary()).isEqualTo("材料齐全，建议通过");
+        assertThat(suggestion.getRiskWarnings()).isEmpty();
+        assertThat(suggestion.getAnomalies()).isEmpty();
+        assertThat(suggestion.getSupplementaryInfo()).containsExactly("spot check docs");
+        server.verify();
+    }
+
+    @Test
+    void answerFollowUp_parsesStructuredAnswer() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        OpenAiLlmClient client = new OpenAiLlmClient(
+                restTemplate,
+                objectMapper,
+                "https://api.openai.com/v1",
+                "test-key",
+                "gpt-5.4-mini",
+                0.2
+        );
+
+        server.expect(once(), requestTo("https://api.openai.com/v1/chat/completions"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "model": "gpt-5.4-mini",
+                          "choices": [
+                            {
+                              "message": {
+                                "content": "{\\"answer\\":\\"因为金额高于历史均值且缺少票据。\\"}"
+                              }
+                            }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.FollowUpRequest request = new LlmClient.FollowUpRequest();
+        request.setQuestion("为什么有风险？");
+        LlmClient.FollowUpAnswer answer = client.answerFollowUp(request);
+
+        assertThat(answer.getAnswer()).isEqualTo("因为金额高于历史均值且缺少票据。");
+        assertThat(answer.getModel()).isEqualTo("gpt-5.4-mini");
         server.verify();
     }
 

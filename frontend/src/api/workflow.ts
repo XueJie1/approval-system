@@ -1,6 +1,8 @@
 import { http } from "./http";
 import type { AiSuggestion, TaskInfo } from "../types";
 
+const AI_REQUEST_TIMEOUT = 60000;
+
 export async function startRequest(payload: Record<string, unknown>) {
   const { data } = await http.post<{ processInstanceId: string; message: string }>("/workflow/requests", payload);
   return data;
@@ -50,6 +52,33 @@ export async function cancelProcess(processInstanceId: string, payload: { userId
 }
 
 export async function aiSuggestion(taskId: string) {
-  const { data } = await http.get<AiSuggestion>(`/workflow/tasks/${taskId}/ai-suggestion`);
+  const { data } = await http.get<AiSuggestion>(`/workflow/tasks/${taskId}/ai-suggestion`, {
+    timeout: AI_REQUEST_TIMEOUT
+  });
+  return data;
+}
+
+export async function aiSuggestionFollowUp(taskId: string, recordId: number, question: string) {
+  const { data } = await http.post<AiSuggestion>(
+    `/workflow/tasks/${taskId}/ai-suggestion/${recordId}/follow-up`,
+    { question },
+    { timeout: AI_REQUEST_TIMEOUT }
+  );
+  return data;
+}
+
+export async function adoptAiSuggestion(taskId: string, recordId: number) {
+  const { data } = await http.post<AiSuggestion>(
+    `/workflow/tasks/${taskId}/ai-suggestion/${recordId}/adopt`,
+    {},
+    { timeout: AI_REQUEST_TIMEOUT }
+  );
+  return data;
+}
+
+export async function aiSuggestionHistory(taskId: string) {
+  const { data } = await http.get<AiSuggestion[]>(`/workflow/tasks/${taskId}/ai-suggestion/history`, {
+    timeout: AI_REQUEST_TIMEOUT
+  });
   return data;
 }

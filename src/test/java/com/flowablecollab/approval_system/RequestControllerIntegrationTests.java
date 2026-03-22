@@ -103,6 +103,36 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
                 .andExpect(jsonPath("$[0].processInstanceId").value(suspendedProcessId));
     }
 
+    @Test
+    void listAiSuggestions_returnsGeneratedSuggestionForVisibleRequest() throws Exception {
+        SysUser viewer = createUser("ai-viewer", "Password@123", null, "EMPLOYEE");
+        SysRole selfRole = ensureRole(unique("AI_SELF").toUpperCase().replace('-', '_'));
+        rbacService.assignRole(viewer.getId(), selfRole.getId());
+        rbacService.addRoleDataScope(selfRole.getId(), "SELF", null);
+        String viewerToken = accessToken(viewer, "EMPLOYEE");
+        String businessKey = unique("req-ai");
+
+        startSingleApproval(viewerToken, viewer.getId(), businessKey, viewer.getUsername());
+        String taskId = json(mockMvc.perform(get("/api/workflow/tasks")
+                        .header("Authorization", authorization(viewerToken)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get(0).get("taskId").asText();
+
+        mockMvc.perform(get("/api/workflow/tasks/{taskId}/ai-suggestion", taskId)
+                        .header("Authorization", authorization(viewerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recordId").isNumber());
+
+        mockMvc.perform(get("/api/requests/ai-suggestions")
+                        .header("Authorization", authorization(viewerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].businessKey").value(businessKey))
+                .andExpect(jsonPath("$[0].recordId").isNumber());
+    }
+
     private String startSingleApproval(String applicantToken, Long applicantId, String businessKey, String approverId) throws Exception {
         return json(mockMvc.perform(post("/api/workflow/requests")
                         .header("Authorization", authorization(applicantToken))
