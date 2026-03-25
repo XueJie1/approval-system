@@ -1,5 +1,5 @@
 import { http } from "./http";
-import type { LoginResult, UserProfile } from "../types";
+import type { ActionResult, LoginResult, TwoFactorSetup, UserProfile } from "../types";
 
 export async function fetchBootstrapStatus() {
   const { data } = await http.get<{ isBootstrapMode: boolean }>("/auth/bootstrap-status");
@@ -27,21 +27,26 @@ export async function me() {
 }
 
 export async function setup2fa() {
-  const { data } = await http.post<{ secret: string; otpAuthUri: string }>("/auth/2fa/setup");
+  const { data } = await http.post<TwoFactorSetup>("/auth/2fa/setup");
   return data;
 }
 
 export async function enable2fa(payload: { code: string }) {
-  const { data } = await http.post<{ success: boolean; message: string }>("/auth/2fa/enable", payload);
+  const { data } = await http.post<ActionResult>("/auth/2fa/enable", payload);
   return data;
 }
 
 export async function disable2fa(payload: { code: string }) {
-  const { data } = await http.post<{ success: boolean; message: string }>("/auth/2fa/disable", payload);
+  const { data } = await http.post<ActionResult>("/auth/2fa/disable", payload);
   return data;
 }
 
 export async function generateRecoveryCodes() {
-  const { data } = await http.post<{ recoveryCodes?: string }>("/auth/2fa/recovery/generate");
+  const { data } = await http.post<TwoFactorSetup>("/auth/2fa/recovery/generate");
+  return data;
+}
+
+export async function validateRecoveryCode(payload: { code: string }) {
+  const { data } = await http.post<ActionResult>("/auth/2fa/recovery/validate", payload);
   return data;
 }

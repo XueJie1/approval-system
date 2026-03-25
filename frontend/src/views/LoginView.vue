@@ -15,12 +15,21 @@
       </el-form>
 
       <el-form v-else :model="twoFaForm" label-position="top" @submit.prevent="submit2fa">
-        <el-alert title="检测到该账号已启用 2FA" type="warning" show-icon :closable="false" />
+        <el-alert title="检测到该账号已启用 2FA，请完成第二步验证" type="warning" show-icon :closable="false" />
+        <div class="twofa-copy">
+          <div class="twofa-title">使用验证器中的 6 位动态码完成登录</div>
+          <div class="twofa-meta">恢复码校验请在登录后的个人中心中进行，这里只接受 6 位 TOTP 验证码。</div>
+        </div>
         <el-form-item label="6 位验证码" style="margin-top: 12px">
-          <el-input v-model="twoFaForm.code" maxlength="6" placeholder="请输入 TOTP 验证码" />
+          <el-input
+            v-model="twoFaForm.code"
+            maxlength="6"
+            inputmode="numeric"
+            placeholder="请输入 TOTP 验证码"
+          />
         </el-form-item>
         <div class="split-actions">
-          <el-button @click="step = 'login'">返回</el-button>
+          <el-button @click="backToLogin">返回</el-button>
           <el-button type="primary" :loading="loading" @click="submit2fa">验证并登录</el-button>
         </div>
       </el-form>
@@ -92,10 +101,16 @@ async function submitLogin() {
   }
 }
 
+function backToLogin() {
+  twoFaForm.code = "";
+  challengeToken.value = "";
+  step.value = "login";
+}
+
 async function submit2fa() {
   if (!challengeToken.value) {
     ElMessage.error("挑战令牌丢失，请重新登录");
-    step.value = "login";
+    backToLogin();
     return;
   }
   loading.value = true;
@@ -143,5 +158,20 @@ p {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.twofa-copy {
+  margin-top: 12px;
+}
+
+.twofa-title {
+  font-weight: 600;
+}
+
+.twofa-meta {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
 }
 </style>

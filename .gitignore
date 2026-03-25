@@ -39,6 +39,12 @@ run.log
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/*.d.ts
+frontend/*.js
+
+### local runtime
+.run/
 
 ### opencode
 .sisyphus

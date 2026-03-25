@@ -222,6 +222,22 @@ public class RbacService {
         return mappings.stream().map(SysUserPost::getPostId).collect(Collectors.toSet());
     }
 
+    public List<SysUser> listUsers(String keyword, Integer status) {
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        if (!normalizedKeyword.isEmpty() && status != null) {
+            return sysUserRepository.findByUsernameContainingIgnoreCaseAndStatusOrderByUsernameAsc(normalizedKeyword, status);
+        }
+        if (!normalizedKeyword.isEmpty()) {
+            return sysUserRepository.findByUsernameContainingIgnoreCaseOrderByUsernameAsc(normalizedKeyword);
+        }
+        if (status != null) {
+            return sysUserRepository.findByStatusOrderByUsernameAsc(status);
+        }
+        return sysUserRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(SysUser::getUsername, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
     private void ensureUserAndRoleExist(Long userId, Long roleId) {
         if (!sysUserRepository.existsById(userId)) {
             throw new IllegalArgumentException("userId does not exist: " + userId);

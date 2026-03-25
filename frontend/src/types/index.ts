@@ -9,6 +9,77 @@ export interface LoginResult {
   roles?: string[];
 }
 
+export interface ActionResult {
+  success: boolean;
+  message: string;
+}
+
+export interface TwoFactorSetup {
+  secret: string;
+  otpAuthUri: string;
+  recoveryCodes?: string;
+}
+
+export interface UserDirectoryItem {
+  userId: number;
+  username: string;
+  deptId?: number;
+  status: number;
+  twoFactorEnabled: boolean;
+}
+
+export interface StartRequestPayload {
+  businessKey: string | null;
+  title: string;
+  applicantId: number;
+  applicantDeptId?: number | null;
+  applicantPostId?: number | null;
+  formInstanceId?: number | null;
+  formKey: string | null;
+  formVersionId: number | null;
+  formData: Record<string, unknown> | null;
+  processKey: string;
+  countersignUsers: string[];
+  countersignMode: string;
+  passRatio: number;
+  variables: Record<string, unknown>;
+}
+
+export interface SaveDraftPayload {
+  businessKey: string | null;
+  title: string;
+  applicantId: number;
+  applicantDeptId?: number | null;
+  applicantPostId?: number | null;
+  formInstanceId?: number | null;
+  formKey: string | null;
+  formVersionId: number | null;
+  formData: Record<string, unknown> | null;
+}
+
+export interface SubmitDraftPayload {
+  title: string;
+  applicantId: number;
+  applicantDeptId?: number | null;
+  applicantPostId?: number | null;
+  formInstanceId?: number | null;
+  processKey: string;
+  variables: Record<string, unknown>;
+  countersignUsers: string[];
+  countersignMode: string;
+  passRatio: number;
+}
+
+export interface WorkflowStartResult {
+  processInstanceId: string;
+  message: string;
+}
+
+export interface DraftSaveResult {
+  businessKey: string;
+  message: string;
+}
+
 export interface UserProfile {
   userId: number;
   username: string;

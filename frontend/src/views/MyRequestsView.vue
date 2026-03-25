@@ -27,16 +27,21 @@
     </el-card>
 
     <el-row :gutter="14">
-      <el-col :xs="24" :md="12">
-        <el-card shadow="never" class="panel">
-          <template #header>流程实例</template>
-          <el-table :data="processes" border>
-            <el-table-column prop="processInstanceId" label="流程实例" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="processDefinitionId" label="流程定义" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="businessKey" label="业务单号" min-width="120" />
-          </el-table>
-        </el-card>
+      <el-col :xs="24" :lg="12">
+        <related-tasks-panel :tasks="requestTasks" :loading="loading" />
       </el-col>
+      <el-col :xs="24" :lg="12">
+        <process-operations-panel
+          :requests="requests"
+          :processes="processes"
+          :loading="loading"
+          :status-label="statusLabel"
+          @refresh="reload"
+        />
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="14">
       <el-col :xs="24" :md="12">
         <el-card shadow="never" class="panel">
           <template #header>操作日志</template>
@@ -48,32 +53,36 @@
           </el-timeline>
         </el-card>
       </el-col>
+      <el-col :xs="24" :md="12">
+        <el-card shadow="never" class="panel">
+          <template #header>AI 建议记录</template>
+          <el-empty v-if="aiSuggestions.length === 0" description="暂无 AI 建议记录" />
+          <el-timeline v-else>
+            <el-timeline-item v-for="item in aiSuggestions" :key="item.recordId" :timestamp="item.generatedAt">
+              <strong>{{ item.decision === "APPROVE" ? "建议通过" : "建议拒绝" }}</strong>
+              <div>{{ item.recommendation || item.summary }}</div>
+              <div class="timeline-meta">
+                采纳：{{ item.adopted ? "是" : "否" }} | 最终结果：{{ item.finalApprovalResult || "待定" }}
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+        </el-card>
+      </el-col>
     </el-row>
-
-    <el-card shadow="never" class="panel">
-      <template #header>AI 建议记录</template>
-      <el-empty v-if="aiSuggestions.length === 0" description="暂无 AI 建议记录" />
-      <el-timeline v-else>
-        <el-timeline-item v-for="item in aiSuggestions" :key="item.recordId" :timestamp="item.generatedAt">
-          <strong>{{ item.decision === "APPROVE" ? "建议通过" : "建议拒绝" }}</strong>
-          <div>{{ item.recommendation || item.summary }}</div>
-          <div class="timeline-meta">
-            采纳：{{ item.adopted ? "是" : "否" }} | 最终结果：{{ item.finalApprovalResult || "待定" }}
-          </div>
-        </el-timeline-item>
-      </el-timeline>
-    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import type { AiSuggestion, BizRequest, ProcessInfo, RequestLog } from "../types";
-import { listAiSuggestions, listProcesses, listRequestLogs, listRequests } from "../api/requests";
+import type { AiSuggestion, BizRequest, ProcessInfo, RequestLog, TaskInfo } from "../types";
+import { listAiSuggestions, listProcesses, listRequestTasks, listRequestLogs, listRequests } from "../api/requests";
+import RelatedTasksPanel from "../components/requests/RelatedTasksPanel.vue";
+import ProcessOperationsPanel from "../components/requests/ProcessOperationsPanel.vue";
 
 const loading = ref(false);
 const statusFilter = ref<number | undefined>(undefined);
 const requests = ref<BizRequest[]>([]);
+const requestTasks = ref<TaskInfo[]>([]);
 const processes = ref<ProcessInfo[]>([]);
 const logs = ref<RequestLog[]>([]);
 const aiSuggestions = ref<AiSuggestion[]>([]);
@@ -106,6 +115,7 @@ async function reload() {
   try {
     const params = { status: statusFilter.value };
     requests.value = await listRequests(params);
+    requestTasks.value = await listRequestTasks(params);
     processes.value = await listProcesses(params);
     logs.value = await listRequestLogs(params);
     aiSuggestions.value = await listAiSuggestions(params);
