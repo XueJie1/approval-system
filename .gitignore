@@ -45,3 +45,6 @@ frontend/.vite/
 
 ### local backups
 backups/
+
+### Codex, Claude Code instruct files
+AGENTS.md
