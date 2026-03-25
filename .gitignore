@@ -39,3 +39,9 @@ run.log
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+### opencode
+.sisyphus
+
+### local backups
+backups/
