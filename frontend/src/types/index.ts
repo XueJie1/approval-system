@@ -28,6 +28,150 @@ export interface UserDirectoryItem {
   twoFactorEnabled: boolean;
 }
 
+export interface PageResult<T> {
+  content: T[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface AdminDeptOption {
+  id: number;
+  parentId?: number | null;
+  deptCode?: string | null;
+  deptName: string;
+}
+
+export interface AdminRoleOption {
+  id: number;
+  roleCode: string;
+  roleName: string;
+  status?: number;
+}
+
+export interface AdminPostOption {
+  id: number;
+  postCode: string;
+  postName: string;
+}
+
+export interface AdminUserOptions {
+  depts: AdminDeptOption[];
+  roles: AdminRoleOption[];
+  posts: AdminPostOption[];
+}
+
+export interface AdminUserSummary {
+  userId: number;
+  username: string;
+  deptId?: number | null;
+  deptName?: string | null;
+  status: number;
+  twoFactorEnabled: boolean;
+  locked: boolean;
+  lockedUntil?: string | null;
+  lastLoginAt?: string | null;
+  roleNames: string[];
+  postNames: string[];
+}
+
+export interface AdminUserDetail extends AdminUserSummary {
+  roleIds: number[];
+  postIds: number[];
+  roles: AdminRoleOption[];
+  posts: AdminPostOption[];
+  loginFailures?: number;
+}
+
+export interface AdminUserFormPayload {
+  username: string;
+  password: string;
+  deptId?: number | null;
+  roleIds: number[];
+  postIds: number[];
+  status: number;
+}
+
+export interface AdminUserUpdatePayload {
+  deptId?: number | null;
+  roleIds?: number[];
+  postIds?: number[];
+  status?: number;
+}
+
+export interface AdminUserStatusPayload {
+  status: number;
+}
+
+export interface AdminUserResetPasswordPayload {
+  newPassword: string;
+}
+
+export interface UserImportValidationError {
+  rowNo: number;
+  username?: string;
+  message: string;
+}
+
+export interface UserImportPreviewRow {
+  rowNo: number;
+  username?: string;
+  deptCode?: string;
+  deptName?: string;
+  roleCodes: string[];
+  postCodes: string[];
+  status: number;
+  valid: boolean;
+  message?: string;
+}
+
+export interface UserImportValidateResult {
+  jobId: number;
+  fileName: string;
+  fileType?: string;
+  strategy: string;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+  errors: UserImportValidationError[];
+  preview: UserImportPreviewRow[];
+}
+
+export interface UserImportExecuteResult {
+  jobId: number;
+  status: string;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+}
+
+export interface UserImportJobSummary {
+  jobId: number;
+  fileName: string;
+  fileType: string;
+  strategy: string;
+  status: string;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+  operatorId?: number | null;
+  createdAt: string;
+  finishedAt?: string | null;
+}
+
+export interface UserImportJobItem {
+  id: number;
+  rowNo: number;
+  username?: string;
+  rawPayload?: string;
+  result: string;
+  errorMessage?: string;
+  createdUserId?: number | null;
+  beforeSnapshot?: string;
+  afterSnapshot?: string;
+}
+
 export interface StartRequestPayload {
   businessKey: string | null;
   title: string;

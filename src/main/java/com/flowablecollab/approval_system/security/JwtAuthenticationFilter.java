@@ -48,6 +48,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // Check if user is locked
             SysUser user = sysUserRepository.findById(userId)
                     .orElse(null);
+            if (user != null && !isActive(user)) {
+                SecurityContextHolder.clearContext();
+                response.setStatus(403);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"User disabled\"}");
+                return;
+            }
             if (user != null && isAccountLocked(user)) {
                 SecurityContextHolder.clearContext();
                 response.setStatus(423); // Locked
@@ -80,5 +87,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return false;
         }
         return user.getLockedUntil().isAfter(LocalDateTime.now());
+    }
+
+    private boolean isActive(SysUser user) {
+        return user.getStatus() != null && user.getStatus() == 1;
     }
 }

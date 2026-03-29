@@ -52,7 +52,7 @@ public class RbacController {
         Long operatorId = resolveOperatorId(request.getOperatorId());
         rbacService.ensureRbacManagePermission(operatorId);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(rbacService.createDept(request.getDeptName(), request.getParentId()));
+                .body(rbacService.createDept(request.getDeptCode(), request.getDeptName(), request.getParentId()));
     }
 
     @PostMapping("/posts")
@@ -144,6 +144,9 @@ public class RbacController {
     @Data
     public static class CreateDeptRequest {
         private Long operatorId;
+
+        @Size(max = 64, message = "deptCode length must be <= 64")
+        private String deptCode;
 
         @NotBlank(message = "deptName is required")
         @Size(max = 64, message = "deptName length must be <= 64")

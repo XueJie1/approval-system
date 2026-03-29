@@ -9,6 +9,7 @@
         <el-menu-item index="/start">发起申请</el-menu-item>
         <el-menu-item index="/tasks">我的待办</el-menu-item>
         <el-menu-item index="/requests">我的申请</el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/admin/users">用户管理</el-menu-item>
         <el-menu-item index="/profile">个人中心</el-menu-item>
       </el-menu>
     </aside>
@@ -42,6 +43,7 @@ const route = useRoute();
 const router = useRouter();
 
 const activePath = computed(() => route.path);
+const isAdmin = computed(() => (auth.currentUser?.roles ?? []).some((role) => role === "ADMIN" || role === "SYS_ADMIN"));
 const greeting = computed(() => {
   const hour = new Date().getHours();
   if (hour < 12) {

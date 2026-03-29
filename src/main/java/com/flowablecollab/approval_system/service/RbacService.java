@@ -68,10 +68,19 @@ public class RbacService {
     }
 
     public SysDept createDept(String name, Long parentId) {
+        return createDept(null, name, parentId);
+    }
+
+    public SysDept createDept(String code, String name, Long parentId) {
         if (parentId != null && !sysDeptRepository.existsById(parentId)) {
             throw new IllegalArgumentException("parentId does not exist: " + parentId);
         }
+        String normalizedCode = code == null || code.isBlank() ? null : code.trim();
+        if (normalizedCode != null && sysDeptRepository.findByDeptCode(normalizedCode).isPresent()) {
+            throw new ResourceConflictException("deptCode already exists: " + normalizedCode);
+        }
         SysDept dept = new SysDept();
+        dept.setDeptCode(normalizedCode);
         dept.setDeptName(name.trim());
         dept.setParentId(parentId);
         return sysDeptRepository.save(dept);

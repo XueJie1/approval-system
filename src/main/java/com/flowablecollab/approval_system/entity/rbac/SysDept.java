@@ -15,6 +15,9 @@ public class SysDept {
     @Column(name = "parent_id")
     private Long parentId;
 
+    @Column(name = "dept_code", length = 64, unique = true)
+    private String deptCode;
+
     @Column(name = "dept_name", length = 64, nullable = false)
     private String deptName;
 }

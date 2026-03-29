@@ -54,6 +54,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/api/auth/bootstrap-status", "/api/auth/bootstrap", "/api/auth/login", "/api/auth/login/2fa",
                                 "/api/auth/2fa/recovery/validate").permitAll()
+                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SYS_ADMIN")
                         .requestMatchers("/api/rbac/**").hasAnyRole("ADMIN", "SYS_ADMIN")
                         .requestMatchers(HttpMethod.POST,
                                 "/api/forms/definitions",

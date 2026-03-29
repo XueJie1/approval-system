@@ -9,4 +9,6 @@ public interface SysUserPostRepository extends JpaRepository<SysUserPost, Long> 
     List<SysUserPost> findByUserId(Long userId);
 
     boolean existsByUserIdAndPostId(Long userId, Long postId);
+
+    void deleteByUserId(Long userId);
 }

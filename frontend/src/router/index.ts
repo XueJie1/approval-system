@@ -13,7 +13,13 @@ const routes = [
       { path: "start", name: "start", component: () => import("../views/StartRequestView.vue") },
       { path: "tasks", name: "tasks", component: () => import("../views/MyTasksView.vue") },
       { path: "requests", name: "requests", component: () => import("../views/MyRequestsView.vue") },
-      { path: "profile", name: "profile", component: () => import("../views/ProfileView.vue") }
+      { path: "profile", name: "profile", component: () => import("../views/ProfileView.vue") },
+      {
+        path: "admin/users",
+        name: "admin-users",
+        component: () => import("../views/AdminUsersView.vue"),
+        meta: { roles: ["ADMIN", "SYS_ADMIN"] }
+      }
     ]
   }
 ];

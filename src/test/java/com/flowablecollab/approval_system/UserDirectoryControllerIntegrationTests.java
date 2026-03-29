@@ -19,7 +19,7 @@ class UserDirectoryControllerIntegrationTests extends AbstractIntegrationTestSup
 
         mockMvc.perform(get("/api/users")
                         .header("Authorization", authorization(accessToken(employee, "EMPLOYEE")))
-                        .param("keyword", "reviewer")
+                        .param("keyword", alpha.getUsername())
                         .param("status", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
