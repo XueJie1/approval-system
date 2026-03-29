@@ -77,12 +77,16 @@ function storeAndJump(result: LoginResult) {
     ElMessage.error("登录响应缺少必要字段");
     return;
   }
-  auth.setAuth(result.accessToken, {
+  const user = {
     userId: result.userId,
     username: result.username,
     roles: result.roles ?? []
-  });
-  router.replace("/start");
+  };
+  auth.setAuth(result.accessToken, user);
+  
+  // 根据角色跳转到对应入口
+  const isAdmin = user.roles.some((role) => role === "ADMIN" || role === "SYS_ADMIN");
+  router.replace(isAdmin ? "/admin" : "/user");
 }
 
 async function submitLogin() {

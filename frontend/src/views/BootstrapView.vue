@@ -74,7 +74,7 @@ async function submit() {
         roles: result.roles ?? []
       });
       ElMessage.success("管理员初始化完成");
-      router.replace("/start");
+      router.replace("/admin");
       return;
     }
     ElMessage.success("初始化完成，请登录");
