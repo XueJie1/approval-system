@@ -14,4 +14,6 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long> {
     List<SysUser> findByUsernameContainingIgnoreCaseOrderByUsernameAsc(String username);
 
     List<SysUser> findByUsernameContainingIgnoreCaseAndStatusOrderByUsernameAsc(String username, Integer status);
+
+    Optional<SysUser> findByDeptId(Long deptId);
 }

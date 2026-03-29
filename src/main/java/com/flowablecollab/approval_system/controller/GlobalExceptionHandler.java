@@ -60,4 +60,12 @@ public class GlobalExceptionHandler {
                 "errors", errors
         ));
     }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
+        if (ex.getMessage() != null && ex.getMessage().contains("not found")) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+    }
 }
