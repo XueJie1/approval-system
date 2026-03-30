@@ -12,7 +12,8 @@ const routes = [
     component: () => import("../layouts/UserLayout.vue"),
     meta: { requiresAuth: true },
     children: [
-      { path: "", redirect: "/user/start" },
+      { path: "", redirect: "/user/home" },
+      { path: "home", name: "user-home", component: () => import("../views/UserHomeView.vue") },
       { path: "start", name: "user-start", component: () => import("../views/StartRequestView.vue") },
       { path: "tasks", name: "user-tasks", component: () => import("../views/MyTasksView.vue") },
       { path: "requests", name: "user-requests", component: () => import("../views/MyRequestsView.vue") },

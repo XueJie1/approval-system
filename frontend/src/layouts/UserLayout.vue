@@ -6,10 +6,11 @@
         <p>Smart Approval Console</p>
       </div>
       <el-menu :default-active="activePath" router class="menu">
+        <el-menu-item index="/user/home">工作台</el-menu-item>
         <el-menu-item index="/user/start">发起申请</el-menu-item>
         <el-menu-item index="/user/tasks">我的待办</el-menu-item>
         <el-menu-item index="/user/requests">我的申请</el-menu-item>
-        <el-menu-item index="/user/profile">个人中心</el-menu-item>
+        <el-menu-item index="/user/profile">个人设置</el-menu-item>
       </el-menu>
     </aside>
 

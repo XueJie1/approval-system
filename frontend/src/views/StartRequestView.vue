@@ -1,107 +1,249 @@
 <template>
-  <div class="stack">
-    <div>
-      <h2 class="page-title">发起申请</h2>
-      <p class="page-subtitle">流程参数、动态表单、草稿保存和草稿提交都在这里完成</p>
+  <div class="start-page">
+    <header class="page-header">
+      <div>
+        <h1>发起申请</h1>
+        <p>填写申请信息并提交审批流程</p>
+      </div>
+    </header>
+
+    <div class="form-layout">
+      <div class="main-form">
+        <el-card shadow="never" class="form-section">
+          <template #header>
+            <div class="section-header">
+              <span class="section-title">基本信息</span>
+            </div>
+          </template>
+
+          <el-form label-position="top">
+            <el-row :gutter="16">
+              <el-col :span="24">
+                <el-form-item label="申请标题" required>
+                  <el-input
+                    v-model="form.title"
+                    placeholder="例如：差旅申请、采购申请、请假申请"
+                  />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="24">
+                <el-form-item label="业务单号">
+                  <el-input
+                    v-model="form.businessKey"
+                    placeholder="留空系统自动生成"
+                  />
+                  <div class="field-hint">业务单号用于标识此申请，留空时系统自动生成唯一编号</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </el-card>
+
+        <el-card shadow="never" class="form-section">
+          <template #header>
+            <div class="section-header">
+              <span class="section-title">审批流程</span>
+            </div>
+          </template>
+
+          <el-form label-position="top">
+            <el-row :gutter="16">
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="流程类型" required>
+                  <el-select v-model="form.processKey" style="width: 100%">
+                    <el-option label="并行会签（多人同时审批）" value="approvalCountersign" />
+                    <el-option label="或签（任意一人通过即可）" value="approvalOrSign" />
+                    <el-option label="顺序审批（按顺序依次审批）" value="approvalSequential" />
+                    <el-option label="单人审批" value="approvalSingle" />
+                  </el-select>
+                  <div class="field-hint">选择适合本次申请的审批模式</div>
+                </el-form-item>
+              </el-col>
+
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="会签模式">
+                  <el-select v-model="form.countersignMode" style="width: 100%">
+                    <el-option label="全票通过（所有人同意）" value="ALL" />
+                    <el-option label="多数通过（超过半数同意）" value="MAJORITY" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="审批人">
+                  <CountersignUserPickerDialog v-model="form.countersignUsers" />
+                  <div class="field-hint">选择需要审批的人员</div>
+                </el-form-item>
+              </el-col>
+
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="通过比例">
+                  <el-input
+                    v-model="form.passRatio"
+                    placeholder="例如：0.6 表示60%同意即通过"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </el-card>
+
+        <el-card shadow="never" class="form-section">
+          <template #header>
+            <div class="section-header">
+              <span class="section-title">表单内容</span>
+              <div class="section-actions">
+                <el-input
+                  v-model="form.formKey"
+                  placeholder="输入表单模板Key"
+                  style="width: 200px"
+                  clearable
+                />
+                <el-button :loading="loadingForm" @click="loadDynamicForm">加载模板</el-button>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="!form.formKey" class="empty-form">
+            <el-empty description="输入表单模板Key加载动态表单字段" :image-size="80" />
+          </div>
+
+          <RequestDynamicFields
+            v-else
+            v-model="dynamicData"
+            :fields="dynamicFields"
+            :loaded-version-id="loadedVersionId"
+          />
+
+          <el-divider v-if="form.formKey" />
+
+          <el-form label-position="top">
+            <el-form-item label="补充信息（JSON格式）">
+              <el-input
+                v-model="form.variablesText"
+                type="textarea"
+                :rows="3"
+                placeholder='例如：{"amount": 3000, "reason": "出差"}'
+              />
+              <div class="field-hint">可填写额外的业务数据，以JSON格式输入</div>
+            </el-form-item>
+          </el-form>
+        </el-card>
+
+        <el-card v-if="lastProcessId" shadow="never" class="form-section success-card">
+          <el-result icon="success" title="申请已提交" :sub-title="`流程实例ID: ${lastProcessId}`">
+            <template #extra>
+              <el-button type="primary" @click="goRequests">查看我的申请</el-button>
+              <el-button @click="resetForm">继续发起</el-button>
+            </template>
+          </el-result>
+        </el-card>
+      </div>
+
+      <aside class="side-panel">
+        <el-card shadow="never" class="action-card">
+          <template #header>
+            <span class="section-title">操作</span>
+          </template>
+
+          <div class="action-buttons">
+            <el-button
+              type="primary"
+              size="large"
+              :loading="submitting"
+              :disabled="!form.title.trim()"
+              style="width: 100%"
+              @click="submitRequest"
+            >
+              提交申请
+            </el-button>
+            <el-button
+              size="large"
+              :loading="savingDraft"
+              :disabled="!form.title.trim()"
+              style="width: 100%"
+              @click="saveDraft"
+            >
+              保存草稿
+            </el-button>
+            <el-button
+              v-if="lastDraftBusinessKey"
+              size="large"
+              style="width: 100%"
+              @click="submitDraftRequest"
+            >
+              提交草稿
+            </el-button>
+          </div>
+
+          <div v-if="lastDraftBusinessKey" class="draft-info">
+            <el-icon><InfoFilled /></el-icon>
+            <span>草稿已保存：{{ lastDraftBusinessKey.slice(0, 12) }}...</span>
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="help-card">
+          <template #header>
+            <span class="section-title">流程说明</span>
+          </template>
+          <div class="help-content">
+            <div class="help-item">
+              <strong>并行会签</strong>
+              <p>所有审批人同时收到待办，需全部或多数同意后流转</p>
+            </div>
+            <div class="help-item">
+              <strong>或签</strong>
+              <p>所有审批人同时收到待办，任意一人同意即流转</p>
+            </div>
+            <div class="help-item">
+              <strong>顺序审批</strong>
+              <p>审批人按顺序依次收到待办</p>
+            </div>
+            <div class="help-item">
+              <strong>单人审批</strong>
+              <p>仅一人审批即可完成</p>
+            </div>
+          </div>
+        </el-card>
+      </aside>
     </div>
-
-    <RequestDraftActions
-      v-model:businessKey="form.businessKey"
-      :fallback-business-key="lastDraftBusinessKey"
-      :saving="savingDraft"
-      :submitting="submitting"
-      :last-saved-business-key="lastDraftBusinessKey"
-      @save="saveDraft"
-      @submit="submitDraftRequest"
-    />
-
-    <el-card shadow="never" class="panel">
-      <template #header>流程参数</template>
-      <div class="form-grid">
-        <el-form-item label="标题">
-          <el-input v-model="form.title" placeholder="例如：差旅申请" />
-        </el-form-item>
-        <el-form-item label="流程类型">
-          <el-select v-model="form.processKey">
-            <el-option label="并行会签" value="approvalCountersign" />
-            <el-option label="或签" value="approvalOrSign" />
-            <el-option label="顺序审批" value="approvalSequential" />
-            <el-option label="单人审批" value="approvalSingle" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="会签用户">
-          <CountersignUserPickerDialog v-model="form.countersignUsers" />
-        </el-form-item>
-        <el-form-item label="会签模式">
-          <el-select v-model="form.countersignMode">
-            <el-option label="全票通过" value="ALL" />
-            <el-option label="多数通过" value="MAJORITY" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="通过比例">
-          <el-input v-model="form.passRatio" placeholder="例如 0.6" />
-        </el-form-item>
-      </div>
-
-      <el-divider />
-
-      <div class="inline-tools">
-        <el-input v-model="form.formKey" placeholder="输入表单Key并加载动态字段" />
-        <el-button :loading="loadingForm" @click="loadDynamicForm">加载表单</el-button>
-      </div>
-
-      <RequestDynamicFields v-model="dynamicData" :fields="dynamicFields" :loaded-version-id="loadedVersionId" />
-
-      <el-form-item label="扩展变量(JSON)">
-        <el-input v-model="form.variablesText" type="textarea" :rows="3" placeholder='{"amount": 3000}' />
-      </el-form-item>
-
-      <div class="actions">
-        <el-button type="primary" :loading="submitting" @click="submitRequest">发起流程</el-button>
-      </div>
-
-      <el-alert
-        v-if="lastProcessId"
-        type="success"
-        :closable="false"
-        style="margin-top: 10px"
-        :title="`流程已创建：${lastProcessId}`"
-      />
-    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
-import { ElMessage } from "element-plus";
-import { useAuthStore } from "../stores/auth";
-import type { FormField, SaveDraftPayload, StartRequestPayload, SubmitDraftPayload } from "../types";
-import { fetchFormFields, latestFormVersion, validateForm } from "../api/forms";
-import { saveDraft as saveDraftRequest, startRequest, submitDraft as submitDraftRequestApi } from "../api/workflow";
-import CountersignUserPickerDialog from "../components/requests/CountersignUserPickerDialog.vue";
-import RequestDraftActions from "../components/requests/RequestDraftActions.vue";
-import RequestDynamicFields from "../components/requests/RequestDynamicFields.vue";
+import { onMounted, reactive, ref } from 'vue';
+import { ElMessage } from 'element-plus';
+import { InfoFilled } from '@element-plus/icons-vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../stores/auth';
+import type { FormField, SaveDraftPayload, StartRequestPayload, SubmitDraftPayload } from '../types';
+import { fetchFormFields, latestFormVersion, validateForm } from '../api/forms';
+import { saveDraft as saveDraftApi, startRequest, submitDraft as submitDraftApi } from '../api/workflow';
+import CountersignUserPickerDialog from '../components/requests/CountersignUserPickerDialog.vue';
+import RequestDynamicFields from '../components/requests/RequestDynamicFields.vue';
 
+const router = useRouter();
 const auth = useAuthStore();
 
 const loadingForm = ref(false);
 const savingDraft = ref(false);
 const submitting = ref(false);
-const lastProcessId = ref("");
-const lastDraftBusinessKey = ref("");
+const lastProcessId = ref('');
+const lastDraftBusinessKey = ref('');
 const dynamicFields = ref<FormField[]>([]);
 const dynamicData = ref<Record<string, unknown>>({});
 const loadedVersionId = ref<number | null>(null);
 
 const form = reactive({
-  businessKey: "",
-  title: "",
-  processKey: "approvalCountersign",
+  businessKey: '',
+  title: '',
+  processKey: 'approvalCountersign',
   countersignUsers: [] as string[],
-  countersignMode: "ALL",
-  passRatio: "1.0",
-  formKey: "",
-  variablesText: ""
+  countersignMode: 'ALL',
+  passRatio: '1.0',
+  formKey: '',
+  variablesText: ''
 });
 
 function currentUserId() {
@@ -115,7 +257,7 @@ function parseVariables() {
   try {
     return JSON.parse(form.variablesText) as Record<string, unknown>;
   } catch {
-    ElMessage.error("扩展变量 JSON 格式错误");
+    ElMessage.error('补充信息 JSON 格式错误');
     return null;
   }
 }
@@ -128,13 +270,9 @@ function buildFormData() {
   return Object.keys(dynamicData.value).length > 0 ? { ...dynamicData.value } : null;
 }
 
-function resetDynamicData() {
-  dynamicData.value = {};
-}
-
 async function loadDynamicForm() {
   if (!form.formKey.trim()) {
-    ElMessage.warning("请先输入 formKey");
+    ElMessage.warning('请输入表单模板Key');
     return;
   }
 
@@ -142,11 +280,14 @@ async function loadDynamicForm() {
   try {
     loadedVersionId.value = null;
     dynamicFields.value = [];
-    resetDynamicData();
+    dynamicData.value = {};
     const version = await latestFormVersion(form.formKey.trim());
     loadedVersionId.value = version.id;
     dynamicFields.value = await fetchFormFields(version.id);
-    ElMessage.success("表单已加载");
+    ElMessage.success('表单模板已加载');
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('加载表单模板失败');
   } finally {
     loadingForm.value = false;
   }
@@ -155,11 +296,11 @@ async function loadDynamicForm() {
 async function saveDraft() {
   const userId = currentUserId();
   if (!userId) {
-    ElMessage.error("登录信息已失效，请重新登录");
+    ElMessage.error('登录信息已失效，请重新登录');
     return;
   }
   if (!form.title.trim()) {
-    ElMessage.warning("标题不能为空");
+    ElMessage.warning('请填写申请标题');
     return;
   }
 
@@ -168,7 +309,10 @@ async function saveDraft() {
     const result = await persistDraft(userId);
     form.businessKey = result.businessKey;
     lastDraftBusinessKey.value = result.businessKey;
-    ElMessage.success("草稿已保存");
+    ElMessage.success('草稿已保存');
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('保存草稿失败');
   } finally {
     savingDraft.value = false;
   }
@@ -177,24 +321,22 @@ async function saveDraft() {
 async function submitDraftRequest() {
   const userId = currentUserId();
   if (!userId) {
-    ElMessage.error("登录信息已失效，请重新登录");
+    ElMessage.error('登录信息已失效，请重新登录');
     return;
   }
   if (!form.title.trim()) {
-    ElMessage.warning("标题不能为空");
+    ElMessage.warning('请填写申请标题');
     return;
   }
 
   const businessKey = form.businessKey.trim() || lastDraftBusinessKey.value.trim();
   if (!businessKey) {
-    ElMessage.warning("请先填写并保存业务单号，或使用已保存的草稿编号");
+    ElMessage.warning('请先保存草稿');
     return;
   }
 
   const variables = parseVariables();
-  if (variables === null) {
-    return;
-  }
+  if (variables === null) return;
 
   submitting.value = true;
   try {
@@ -213,10 +355,13 @@ async function submitDraftRequest() {
       countersignMode: form.countersignMode,
       passRatio: Number(form.passRatio)
     };
-    const result = await submitDraftRequestApi(businessKey, payload);
+    const result = await submitDraftApi(businessKey, payload);
     lastProcessId.value = result.processInstanceId;
     form.businessKey = businessKey;
-    ElMessage.success("草稿已提交");
+    ElMessage.success('草稿已提交');
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('提交失败');
   } finally {
     submitting.value = false;
   }
@@ -234,7 +379,7 @@ async function persistDraft(userId: number) {
       });
     } catch {
       persistSnapshot = false;
-      ElMessage.info("当前表单未完整，已先保存业务信息");
+      ElMessage.info('表单未完整，已保存基本信息');
     }
   }
 
@@ -250,24 +395,22 @@ async function persistDraft(userId: number) {
     formData: persistSnapshot ? formData : null
   };
 
-  return saveDraftRequest(payload);
+  return saveDraftApi(payload);
 }
 
 async function submitRequest() {
   const userId = currentUserId();
   if (!userId) {
-    ElMessage.error("登录信息已失效，请重新登录");
+    ElMessage.error('登录信息已失效，请重新登录');
     return;
   }
   if (!form.title.trim()) {
-    ElMessage.warning("标题不能为空");
+    ElMessage.warning('请填写申请标题');
     return;
   }
 
   const variables = parseVariables();
-  if (variables === null) {
-    return;
-  }
+  if (variables === null) return;
 
   submitting.value = true;
   try {
@@ -298,38 +441,160 @@ async function submitRequest() {
     };
     const result = await startRequest(payload);
     lastProcessId.value = result.processInstanceId;
-    ElMessage.success("流程发起成功");
+    ElMessage.success('申请已提交');
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('提交失败');
   } finally {
     submitting.value = false;
   }
 }
+
+function resetForm() {
+  form.businessKey = '';
+  form.title = '';
+  form.processKey = 'approvalCountersign';
+  form.countersignUsers = [];
+  form.countersignMode = 'ALL';
+  form.passRatio = '1.0';
+  form.formKey = '';
+  form.variablesText = '';
+  dynamicFields.value = [];
+  dynamicData.value = {};
+  loadedVersionId.value = null;
+  lastProcessId.value = '';
+  lastDraftBusinessKey.value = '';
+}
+
+function goRequests() {
+  router.push('/user/requests');
+}
+
+onMounted(() => {
+  // 可从 query 读取草稿 businessKey 进行恢复
+});
 </script>
 
 <style scoped>
-.stack {
+.start-page {
   display: grid;
-  gap: 14px;
+  gap: 20px;
 }
 
-.panel {
-  border-radius: 14px;
-  border-color: #d8e4ed;
+.page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
 }
 
-.inline-tools {
+.page-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.form-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+}
+
+.main-form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-section {
+  border-radius: 12px;
+}
+
+.section-header {
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
-.actions {
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.section-actions {
   display: flex;
-  justify-content: flex-end;
+  gap: 8px;
 }
 
-@media (max-width: 768px) {
-  .inline-tools {
-    flex-direction: column;
+.field-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.empty-form {
+  padding: 20px 0;
+}
+
+.success-card {
+  border-color: #22c55e;
+}
+
+.side-panel {
+  display: grid;
+  gap: 16px;
+  align-self: start;
+}
+
+.action-card {
+  border-radius: 12px;
+}
+
+.action-buttons {
+  display: grid;
+  gap: 8px;
+}
+
+.draft-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #0369a1;
+}
+
+.help-card {
+  border-radius: 12px;
+}
+
+.help-content {
+  display: grid;
+  gap: 12px;
+}
+
+.help-item strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.help-item p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+@media (max-width: 1024px) {
+  .form-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    order: -1;
   }
 }
 </style>

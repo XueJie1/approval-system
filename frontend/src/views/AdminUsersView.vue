@@ -471,7 +471,7 @@ const userFormRules: FormRules = {
   roleIds: [
     { required: true, message: "请选择至少一个角色", trigger: "change" },
     {
-      validator: (rule, value, callback) => {
+      validator: (_rule, value, callback) => {
         if (!value || value.length === 0) {
           callback(new Error("请选择至少一个角色"));
         } else {
@@ -487,7 +487,7 @@ const editFormRules: FormRules = {
   roleIds: [
     { required: true, message: "请选择至少一个角色", trigger: "change" },
     {
-      validator: (rule, value, callback) => {
+      validator: (_rule, value, callback) => {
         if (!value || value.length === 0) {
           callback(new Error("请选择至少一个角色"));
         } else {
