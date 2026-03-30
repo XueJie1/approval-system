@@ -28,6 +28,7 @@ const routes = [
     children: [
       { path: "", redirect: "/admin/users" },
       { path: "users", name: "admin-users", component: () => import("../views/AdminUsersView.vue") },
+      { path: "roles", name: "admin-roles", component: () => import("../views/AdminRolesView.vue") },
       { path: "departments", name: "admin-departments", component: () => import("../views/AdminDepartmentsView.vue") },
       { path: "positions", name: "admin-positions", component: () => import("../views/AdminPositionsView.vue") },
       { path: "workflows", name: "admin-workflows", component: () => import("../views/AdminWorkflowsView.vue") },

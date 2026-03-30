@@ -7,6 +7,7 @@
       </div>
       <el-menu :default-active="activePath" router class="menu">
         <el-menu-item index="/admin/users">用户管理</el-menu-item>
+        <el-menu-item index="/admin/roles">角色管理</el-menu-item>
         <el-menu-item index="/admin/departments">部门管理</el-menu-item>
         <el-menu-item index="/admin/positions">岗位管理</el-menu-item>
         <el-menu-item index="/admin/workflows">流程管理</el-menu-item>

@@ -50,7 +50,8 @@ public class SecurityConfig {
                                 "/login.html",
                                 "/admin-register.html",
                                 "/login",
-                                "/error"
+                                "/error",
+                                "/h2-console/**"
                         ).permitAll()
                         .requestMatchers("/api/auth/bootstrap-status", "/api/auth/bootstrap", "/api/auth/login", "/api/auth/login/2fa",
                                 "/api/auth/2fa/recovery/validate").permitAll()

@@ -464,12 +464,39 @@ const editForm = reactive<AdminUserUpdatePayload>({
 
 const userFormRules: FormRules = {
   username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
-  password: [{ required: true, message: "请输入初始密码", trigger: "blur" }],
-  roleIds: [{ required: true, message: "请选择至少一个角色", trigger: "change", type: "array" }]
+  password: [
+    { required: true, message: "请输入初始密码", trigger: "blur" },
+    { min: 8, max: 128, message: "密码长度必须为 8-128 个字符", trigger: "blur" }
+  ],
+  roleIds: [
+    { required: true, message: "请选择至少一个角色", trigger: "change" },
+    {
+      validator: (rule, value, callback) => {
+        if (!value || value.length === 0) {
+          callback(new Error("请选择至少一个角色"));
+        } else {
+          callback();
+        }
+      },
+      trigger: "change"
+    }
+  ]
 };
 
 const editFormRules: FormRules = {
-  roleIds: [{ required: true, message: "请选择至少一个角色", trigger: "change", type: "array" }]
+  roleIds: [
+    { required: true, message: "请选择至少一个角色", trigger: "change" },
+    {
+      validator: (rule, value, callback) => {
+        if (!value || value.length === 0) {
+          callback(new Error("请选择至少一个角色"));
+        } else {
+          callback();
+        }
+      },
+      trigger: "change"
+    }
+  ]
 };
 
 const currentImportJob = computed(() => {

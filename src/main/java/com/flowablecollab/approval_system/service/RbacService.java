@@ -295,4 +295,56 @@ public class RbacService {
     public boolean isBootstrapModeActive() {
         return isBootstrapMode();
     }
+
+    public List<SysRole> listRoles(String keyword, Integer status) {
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        if (!normalizedKeyword.isEmpty() && status != null) {
+            return sysRoleRepository.findAll().stream()
+                    .filter(role -> (role.getRoleCode().toLowerCase().contains(normalizedKeyword.toLowerCase())
+                            || role.getRoleName().toLowerCase().contains(normalizedKeyword.toLowerCase()))
+                            && role.getStatus() == status)
+                    .sorted(java.util.Comparator.comparing(SysRole::getRoleCode))
+                    .toList();
+        }
+        if (!normalizedKeyword.isEmpty()) {
+            return sysRoleRepository.findAll().stream()
+                    .filter(role -> role.getRoleCode().toLowerCase().contains(normalizedKeyword.toLowerCase())
+                            || role.getRoleName().toLowerCase().contains(normalizedKeyword.toLowerCase()))
+                    .sorted(java.util.Comparator.comparing(SysRole::getRoleCode))
+                    .toList();
+        }
+        if (status != null) {
+            return sysRoleRepository.findAll().stream()
+                    .filter(role -> role.getStatus() == status)
+                    .sorted(java.util.Comparator.comparing(SysRole::getRoleCode))
+                    .toList();
+        }
+        return sysRoleRepository.findAllByOrderByRoleCodeAsc();
+    }
+
+    public SysRole updateRole(Long roleId, String code, String name, Integer status) {
+        SysRole role = sysRoleRepository.findById(roleId)
+                .orElseThrow(() -> new IllegalArgumentException("roleId does not exist: " + roleId));
+        String normalizedCode = code.trim();
+        if (!normalizedCode.equals(role.getRoleCode())) {
+            if (sysRoleRepository.findByRoleCode(normalizedCode).isPresent()) {
+                throw new ResourceConflictException("roleCode already exists: " + normalizedCode);
+            }
+            role.setRoleCode(normalizedCode);
+        }
+        role.setRoleName(name.trim());
+        role.setStatus(status);
+        return sysRoleRepository.save(role);
+    }
+
+    public void deleteRole(Long roleId) {
+        if (!sysRoleRepository.existsById(roleId)) {
+            throw new IllegalArgumentException("roleId does not exist: " + roleId);
+        }
+        List<SysUserRole> assignments = sysUserRoleRepository.findByRoleId(roleId);
+        if (!assignments.isEmpty()) {
+            throw new ResourceConflictException("role is assigned to " + assignments.size() + " user(s)");
+        }
+        sysRoleRepository.deleteById(roleId);
+    }
 }

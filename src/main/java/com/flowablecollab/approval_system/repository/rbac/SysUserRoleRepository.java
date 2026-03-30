@@ -8,6 +8,8 @@ import java.util.List;
 public interface SysUserRoleRepository extends JpaRepository<SysUserRole, Long> {
     List<SysUserRole> findByUserId(Long userId);
 
+    List<SysUserRole> findByRoleId(Long roleId);
+
     boolean existsByUserIdAndRoleId(Long userId, Long roleId);
 
     boolean existsByRoleId(Long roleId);

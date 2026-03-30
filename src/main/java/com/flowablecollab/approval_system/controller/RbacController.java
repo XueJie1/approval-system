@@ -19,6 +19,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/rbac")
 @RequiredArgsConstructor
@@ -45,6 +47,32 @@ public class RbacController {
         rbacService.ensureRbacManagePermission(operatorId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(rbacService.createRole(request.getRoleCode(), request.getRoleName()));
+    }
+
+    @GetMapping("/roles")
+    public ResponseEntity<List<SysRole>> listRoles(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer status) {
+        Long operatorId = resolveOperatorId(null);
+        rbacService.ensureRbacManagePermission(operatorId);
+        return ResponseEntity.ok(rbacService.listRoles(keyword, status));
+    }
+
+    @PutMapping("/roles/{roleId}")
+    public ResponseEntity<SysRole> updateRole(
+            @PathVariable Long roleId,
+            @Valid @RequestBody UpdateRoleRequest request) {
+        Long operatorId = resolveOperatorId(request.getOperatorId());
+        rbacService.ensureRbacManagePermission(operatorId);
+        return ResponseEntity.ok(rbacService.updateRole(roleId, request.getRoleCode(), request.getRoleName(), request.getStatus()));
+    }
+
+    @DeleteMapping("/roles/{roleId}")
+    public ResponseEntity<ActionResponse> deleteRole(@PathVariable Long roleId) {
+        Long operatorId = resolveOperatorId(null);
+        rbacService.ensureRbacManagePermission(operatorId);
+        rbacService.deleteRole(roleId);
+        return ResponseEntity.ok(ActionResponse.ok("Role deleted"));
     }
 
     @PostMapping("/depts")
@@ -128,6 +156,24 @@ public class RbacController {
         @NotBlank(message = "roleName is required")
         @Size(max = 64, message = "roleName length must be <= 64")
         private String roleName;
+    }
+
+    @Data
+    public static class UpdateRoleRequest {
+        private Long operatorId;
+
+        @NotBlank(message = "roleCode is required")
+        @Size(max = 64, message = "roleCode length must be <= 64")
+        private String roleCode;
+
+        @NotBlank(message = "roleName is required")
+        @Size(max = 64, message = "roleName length must be <= 64")
+        private String roleName;
+
+        @NotNull(message = "status is required")
+        @Min(value = 0, message = "status must be 0 or 1")
+        @Max(value = 1, message = "status must be 0 or 1")
+        private Integer status;
     }
 
     @Data
