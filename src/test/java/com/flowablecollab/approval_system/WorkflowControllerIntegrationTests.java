@@ -79,6 +79,51 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
+    void startProcess_rejectsAdminAsSingleApprover() throws Exception {
+        SysUser applicant = createUser("applicant-no-admin-approver", "Password@123", null, "EMPLOYEE");
+        SysUser admin = createUser("admin-approver", "Password@123", null, "ADMIN");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Single approval request",
+                                  "applicantId": %d,
+                                  "processKey": "approvalSingle",
+                                  "variables": {
+                                    "approverId": "%s"
+                                  }
+                                }
+                                """.formatted(applicant.getId(), admin.getUsername())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("ADMIN accounts cannot be approvers"));
+    }
+
+    @Test
+    void startProcess_rejectsAdminAsCountersignApprover() throws Exception {
+        SysUser applicant = createUser("applicant-no-admin-countersign", "Password@123", null, "EMPLOYEE");
+        SysUser reviewer = createUser("valid-reviewer", "Password@123", null, "EMPLOYEE");
+        SysUser admin = createUser("admin-countersign", "Password@123", null, "ADMIN");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Countersign request",
+                                  "applicantId": %d,
+                                  "processKey": "approvalCountersign",
+                                  "countersignUsers": ["%d", "%d"]
+                                }
+                                """.formatted(applicant.getId(), reviewer.getId(), admin.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("ADMIN accounts cannot be approvers"));
+    }
+
+    @Test
     void saveDraft_andSubmitDraft_startsProcessFromDraft() throws Exception {
         SysUser applicant = createUser("draft-applicant", "Password@123", null, "EMPLOYEE");
         SysUser approver = createUser("draft-approver", "Password@123", null, "EMPLOYEE");
@@ -117,6 +162,47 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
         BizRequest request = bizRequestRepository.findByBusinessKey(businessKey).orElseThrow();
         assertThat(request.getStatus()).isEqualTo(2);
         assertThat(request.getProcessInstanceId()).isNotBlank();
+    }
+
+    @Test
+    void submitDraft_withFrontendDefaultCountersignPayload_startsProcess() throws Exception {
+        SysUser applicant = createUser("draft-default-countersign", "Password@123", null, "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        String businessKey = json(mockMvc.perform(post("/api/workflow/drafts")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Draft default countersign",
+                                  "applicantId": %d
+                                }
+                                """.formatted(applicant.getId())))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get("businessKey").asText();
+
+        mockMvc.perform(post("/api/workflow/drafts/{businessKey}/submit", businessKey)
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Draft default countersign",
+                                  "applicantId": %d,
+                                  "applicantDeptId": null,
+                                  "applicantPostId": null,
+                                  "formInstanceId": null,
+                                  "processKey": "approvalCountersign",
+                                  "variables": {},
+                                  "countersignUsers": [],
+                                  "countersignMode": "ALL",
+                                  "passRatio": 1.0
+                                }
+                                """.formatted(applicant.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Draft submitted successfully"))
+                .andExpect(jsonPath("$.processInstanceId").isString());
     }
 
     @Test
@@ -166,6 +252,61 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
         Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
         assertThat(task).isNotNull();
         assertThat(task.getAssignee()).isEqualTo(approverFromSnapshot);
+    }
+
+    @Test
+    void submitDraft_withBlankRuntimeVariables_keepsDraftSnapshotValues() throws Exception {
+        SysUser designer = createUser("draft-merge-designer", "Password@123", null, "DESIGNER");
+        String designerToken = accessToken(designer, "DESIGNER");
+        SysUser applicant = createUser("draft-merge-applicant", "Password@123", null, "EMPLOYEE");
+        SysUser approver = createUser("draft-merge-approver", "Password@123", null, "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String formKey = unique("draft-merge-form");
+        Long formVersionId = createFormVersionForDraft(
+                designer,
+                designerToken,
+                formKey,
+                "{\"fields\":[{\"key\":\"approverId\",\"type\":\"string\",\"required\":true}]}"
+        );
+
+        String businessKey = json(mockMvc.perform(post("/api/workflow/drafts")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Draft merge values",
+                                  "applicantId": %d,
+                                  "formKey": "%s",
+                                  "formVersionId": %d,
+                                  "formData": {
+                                    "approverId": "%s"
+                                  }
+                                }
+                                """.formatted(applicant.getId(), formKey, formVersionId, approver.getUsername())))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get("businessKey").asText();
+
+        mockMvc.perform(post("/api/workflow/drafts/{businessKey}/submit", businessKey)
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Draft merge values",
+                                  "applicantId": %d,
+                                  "processKey": "approvalSingle",
+                                  "variables": {
+                                    "approverId": ""
+                                  }
+                                }
+                                """.formatted(applicant.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+
+        Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+        assertThat(task).isNotNull();
+        assertThat(task.getAssignee()).isEqualTo(approver.getUsername());
     }
 
     @Test

@@ -33,6 +33,11 @@
       <el-table-column type="selection" width="52" />
       <el-table-column prop="userId" label="UID" min-width="100" />
       <el-table-column prop="username" label="用户名" min-width="180" />
+      <el-table-column label="角色" min-width="180">
+        <template #default="{ row }">
+          <span>{{ (row.roleCodes ?? []).join(", ") || "-" }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" min-width="100">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ row.status === 1 ? "启用" : "停用" }}</el-tag>
@@ -136,11 +141,11 @@ function handleSelectionChange(selection: UserDirectoryItem[]) {
 
 function confirmSelection() {
   const picked = draftSelection.value
-    .filter((user) => user.status === 1)
+    .filter((user) => user.status === 1 && !user.roleCodes.includes("ADMIN") && !user.roleCodes.includes("SYS_ADMIN"))
     .map((user) => String(user.userId));
 
   if (picked.length !== draftSelection.value.length) {
-    ElMessage.warning("仅可选择启用状态的用户");
+    ElMessage.warning("仅可选择启用且非管理员角色的用户");
     return;
   }
 

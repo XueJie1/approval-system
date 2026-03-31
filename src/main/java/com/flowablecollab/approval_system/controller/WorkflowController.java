@@ -5,6 +5,7 @@ import com.flowablecollab.approval_system.entity.form.FormInstance;
 import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.security.SecurityUtils;
+import com.flowablecollab.approval_system.service.RbacService;
 import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
 import com.flowablecollab.approval_system.service.WorkflowService;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +33,7 @@ public class WorkflowController {
     private final WorkflowService workflowService;
     private final com.flowablecollab.approval_system.service.FormService formService;
     private final TaskAiSuggestionService taskAiSuggestionService;
+    private final RbacService rbacService;
 
     @PostMapping("/requests")
     public ResponseEntity<StartProcessResponse> startProcess(@Valid @RequestBody StartProcessRequest request) {
@@ -49,6 +52,7 @@ public class WorkflowController {
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
+        validateApproverEligibility(request.getVariables(), request.getCountersignUsers());
 
         if (request.getFormKey() != null && request.getFormData() != null) {
             Long formVersionId = request.getFormVersionId();
@@ -130,14 +134,17 @@ public class WorkflowController {
         startRequest.setFormInstanceId(request.getFormInstanceId());
         startRequest.setProcessKey(request.getProcessKey());
         Map<String, Object> variables = request.getVariables();
-        if ((variables == null || variables.isEmpty()) && draft.getFormInstanceId() != null) {
-            variables = formService.readFormInstanceData(draft.getFormInstanceId());
+        if (draft.getFormInstanceId() != null) {
+            variables = mergeDraftVariables(
+                    formService.readFormInstanceData(draft.getFormInstanceId()),
+                    variables);
             startRequest.setFormInstanceId(draft.getFormInstanceId());
         }
         startRequest.setVariables(variables);
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
+        validateApproverEligibility(variables, request.getCountersignUsers());
 
         String processInstanceId = workflowService.submitDraft(businessKey, startRequest);
         StartProcessResponse response = new StartProcessResponse();
@@ -426,6 +433,46 @@ public class WorkflowController {
         }
         if (!currentUserId.equals(request.getApplicantId())) {
             throw new ForbiddenOperationException("only applicant or admin can operate this request");
+        }
+    }
+
+    private Map<String, Object> mergeDraftVariables(Map<String, Object> draftVariables, Map<String, Object> requestVariables) {
+        if ((draftVariables == null || draftVariables.isEmpty()) && (requestVariables == null || requestVariables.isEmpty())) {
+            return requestVariables;
+        }
+
+        Map<String, Object> merged = new HashMap<>();
+        if (draftVariables != null && !draftVariables.isEmpty()) {
+            merged.putAll(draftVariables);
+        }
+        if (requestVariables != null && !requestVariables.isEmpty()) {
+            requestVariables.forEach((key, value) -> {
+                if (value == null) {
+                    return;
+                }
+                if (value instanceof String stringValue && stringValue.isBlank()) {
+                    return;
+                }
+                merged.put(key, value);
+            });
+        }
+        return merged;
+    }
+
+    private void validateApproverEligibility(Map<String, Object> variables, List<String> countersignUsers) {
+        if (variables != null) {
+            Object approverId = variables.get("approverId");
+            if (approverId instanceof String approver && !rbacService.isApproverEligible(approver)) {
+                throw new IllegalArgumentException("ADMIN accounts cannot be approvers");
+            }
+        }
+        if (countersignUsers == null || countersignUsers.isEmpty()) {
+            return;
+        }
+        boolean containsAdminApprover = countersignUsers.stream()
+                .anyMatch(userIdentity -> !rbacService.isApproverEligible(userIdentity));
+        if (containsAdminApprover) {
+            throw new IllegalArgumentException("ADMIN accounts cannot be approvers");
         }
     }
 

@@ -93,10 +93,10 @@
             <el-form label-position="top">
               <el-form-item label="审批决定" required>
                 <el-radio-group v-model="action.approvalResult" size="large">
-                  <el-radio-button value="APPROVE">
+                  <el-radio-button label="APPROVE">
                     <el-icon><Select /></el-icon> 同意
                   </el-radio-button>
-                  <el-radio-button value="REJECT">
+                  <el-radio-button label="REJECT">
                     <el-icon><CloseBold /></el-icon> 拒绝
                   </el-radio-button>
                 </el-radio-group>

@@ -227,6 +227,10 @@ FRONTEND_PORT="$(cat "$FRONTEND_PORT_FILE")"
 echo
 echo "Frontend: http://localhost:$FRONTEND_PORT"
 echo "Backend:  http://localhost:$BACKEND_PORT"
-echo "Logs:"
+echo "Logs (实时持续记录):"
 echo "  $BACKEND_LOG"
 echo "  $FRONTEND_LOG"
+echo
+echo "查看实时日志:"
+echo "  tail -f $BACKEND_LOG"
+echo "  tail -f $FRONTEND_LOG"

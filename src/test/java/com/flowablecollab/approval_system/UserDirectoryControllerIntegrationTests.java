@@ -28,6 +28,20 @@ class UserDirectoryControllerIntegrationTests extends AbstractIntegrationTestSup
     }
 
     @Test
+    void authenticatedUser_cannotSeeAdminAccountsInUserDirectory() throws Exception {
+        SysUser employee = createUser("picker-viewer-2", "Password@123", null, "EMPLOYEE");
+        createUser("directory-admin", "Password@123", null, "ADMIN");
+        SysUser reviewer = createUser("directory-reviewer", "Password@123", null, "EMPLOYEE");
+
+        mockMvc.perform(get("/api/users")
+                        .header("Authorization", authorization(accessToken(employee, "EMPLOYEE"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].username").isArray())
+                .andExpect(jsonPath("$[*].username").value(org.hamcrest.Matchers.hasItem(reviewer.getUsername())))
+                .andExpect(jsonPath("$[*].username").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("directory-admin"))));
+    }
+
+    @Test
     void anonymousUser_cannotListUsers() throws Exception {
         mockMvc.perform(get("/api/users"))
                 .andExpect(status().isUnauthorized());

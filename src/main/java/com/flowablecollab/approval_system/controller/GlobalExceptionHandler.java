@@ -3,6 +3,8 @@ package com.flowablecollab.approval_system.controller;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.exception.ResourceConflictException;
 import io.jsonwebtoken.JwtException;
+import lombok.extern.slf4j.Slf4j;
+import org.flowable.common.engine.api.FlowableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -13,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -61,8 +64,18 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(FlowableException.class)
+    public ResponseEntity<Map<String, String>> handleFlowable(FlowableException ex) {
+        log.error("Workflow engine error", ex);
+        if (ex.getMessage() != null && ex.getMessage().contains("Unknown property used in expression")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Workflow variables are incomplete"));
+        }
+        return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
+        log.error("Unhandled runtime exception", ex);
         if (ex.getMessage() != null && ex.getMessage().contains("not found")) {
             return ResponseEntity.notFound().build();
         }

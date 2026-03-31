@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -198,6 +199,11 @@ public class RbacService {
         if (!deptIds.isEmpty()) {
             return deptIds;
         }
+        // If no data scope is configured, default to SELF (user can only see their own data)
+        // This ensures users can always see their own requests even without explicit scope configuration
+        if (scopes.isEmpty()) {
+            return Set.of(-1L);
+        }
         return sysUserRepository.findById(userId)
                 .map(SysUser::getDeptId)
                 .map(this::expandDeptWithChildren)
@@ -245,6 +251,48 @@ public class RbacService {
         return sysUserRepository.findAll().stream()
                 .sorted(java.util.Comparator.comparing(SysUser::getUsername, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+    }
+
+    public Map<Long, List<String>> getUserRoleCodes(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> roleCodeById = sysRoleRepository.findAllById(
+                        sysUserRoleRepository.findAll().stream()
+                                .map(SysUserRole::getRoleId)
+                                .collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(SysRole::getId, SysRole::getRoleCode));
+
+        return sysUserRoleRepository.findAll().stream()
+                .filter(mapping -> userIds.contains(mapping.getUserId()))
+                .collect(Collectors.groupingBy(
+                        SysUserRole::getUserId,
+                        Collectors.mapping(mapping -> roleCodeById.get(mapping.getRoleId()), Collectors.toList())
+                ));
+    }
+
+    public boolean isApproverEligible(Long userId) {
+        return userId != null && !hasRole(userId, "ADMIN") && !hasRole(userId, "SYS_ADMIN");
+    }
+
+    public boolean isApproverEligible(String userIdentity) {
+        if (userIdentity == null || userIdentity.isBlank()) {
+            return false;
+        }
+        Long userId = resolveUserId(userIdentity);
+        return isApproverEligible(userId);
+    }
+
+    public Long resolveUserId(String userIdentity) {
+        if (userIdentity == null || userIdentity.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(userIdentity);
+        } catch (NumberFormatException ex) {
+            return sysUserRepository.findByUsername(userIdentity).map(SysUser::getId).orElse(null);
+        }
     }
 
     private void ensureUserAndRoleExist(Long userId, Long roleId) {

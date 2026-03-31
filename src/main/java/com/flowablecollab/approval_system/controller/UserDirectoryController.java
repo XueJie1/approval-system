@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -23,8 +24,12 @@ public class UserDirectoryController {
     public ResponseEntity<List<UserListItem>> listUsers(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer status) {
-        List<UserListItem> users = rbacService.listUsers(keyword, status).stream()
-                .map(UserListItem::from)
+        List<SysUser> matchedUsers = rbacService.listUsers(keyword, status);
+        Map<Long, List<String>> roleCodesByUserId = rbacService.getUserRoleCodes(
+                matchedUsers.stream().map(SysUser::getId).toList());
+        List<UserListItem> users = matchedUsers.stream()
+                .map(user -> UserListItem.from(user, roleCodesByUserId.getOrDefault(user.getId(), List.of())))
+                .filter(UserListItem::isApproverEligible)
                 .toList();
         return ResponseEntity.ok(users);
     }
@@ -36,14 +41,20 @@ public class UserDirectoryController {
         private Long deptId;
         private Integer status;
         private boolean twoFactorEnabled;
+        private List<String> roleCodes;
 
-        public static UserListItem from(SysUser user) {
+        public boolean isApproverEligible() {
+            return roleCodes == null || roleCodes.stream().noneMatch(role -> "ADMIN".equals(role) || "SYS_ADMIN".equals(role));
+        }
+
+        public static UserListItem from(SysUser user, List<String> roleCodes) {
             UserListItem item = new UserListItem();
             item.setUserId(user.getId());
             item.setUsername(user.getUsername());
             item.setDeptId(user.getDeptId());
             item.setStatus(user.getStatus());
             item.setTwoFactorEnabled(user.getTwoFactorEnabled() != null && user.getTwoFactorEnabled() == 1);
+            item.setRoleCodes(roleCodes);
             return item;
         }
     }

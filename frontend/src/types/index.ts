@@ -26,6 +26,7 @@ export interface UserDirectoryItem {
   deptId?: number;
   status: number;
   twoFactorEnabled: boolean;
+  roleCodes: string[];
 }
 
 export interface PageResult<T> {

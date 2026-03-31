@@ -266,6 +266,38 @@ function parseCountersignUsers() {
   return form.countersignUsers.filter(Boolean);
 }
 
+function buildSubmissionContext() {
+  const countersignUsers = parseCountersignUsers();
+  const variables = parseVariables();
+  if (variables === null) {
+    return null;
+  }
+
+  const mergedVariables: Record<string, unknown> = {
+    ...variables,
+    ...(buildFormData() ?? {})
+  };
+
+  if (form.processKey === 'approvalSingle') {
+    const approverId = typeof mergedVariables.approverId === 'string'
+      ? mergedVariables.approverId.trim()
+      : '';
+    if (approverId) {
+      mergedVariables.approverId = approverId;
+    } else if (countersignUsers.length === 1) {
+      mergedVariables.approverId = countersignUsers[0];
+    } else {
+      ElMessage.warning('单人审批必须选择 1 位审批人');
+      return null;
+    }
+  }
+
+  return {
+    countersignUsers,
+    variables: mergedVariables
+  };
+}
+
 function buildFormData() {
   return Object.keys(dynamicData.value).length > 0 ? { ...dynamicData.value } : null;
 }
@@ -335,8 +367,8 @@ async function submitDraftRequest() {
     return;
   }
 
-  const variables = parseVariables();
-  if (variables === null) return;
+  const submissionContext = buildSubmissionContext();
+  if (!submissionContext) return;
 
   submitting.value = true;
   try {
@@ -347,11 +379,8 @@ async function submitDraftRequest() {
       applicantPostId: null,
       formInstanceId: null,
       processKey: form.processKey,
-      variables: {
-        ...variables,
-        ...(buildFormData() ?? {})
-      },
-      countersignUsers: parseCountersignUsers(),
+      variables: submissionContext.variables,
+      countersignUsers: submissionContext.countersignUsers,
       countersignMode: form.countersignMode,
       passRatio: Number(form.passRatio)
     };
@@ -409,8 +438,8 @@ async function submitRequest() {
     return;
   }
 
-  const variables = parseVariables();
-  if (variables === null) return;
+  const submissionContext = buildSubmissionContext();
+  if (!submissionContext) return;
 
   submitting.value = true;
   try {
@@ -434,10 +463,10 @@ async function submitRequest() {
       formVersionId: loadedVersionId.value,
       formData,
       processKey: form.processKey,
-      countersignUsers: parseCountersignUsers(),
+      countersignUsers: submissionContext.countersignUsers,
       countersignMode: form.countersignMode,
       passRatio: Number(form.passRatio),
-      variables
+      variables: submissionContext.variables
     };
     const result = await startRequest(payload);
     lastProcessId.value = result.processInstanceId;
