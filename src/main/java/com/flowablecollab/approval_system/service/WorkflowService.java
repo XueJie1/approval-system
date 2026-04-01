@@ -199,14 +199,18 @@ public class WorkflowService {
         variables.put("rejectCount", 0);
         variables.put("countersignResult", "PENDING");
 
-        ProcessInstance processInstance = runtimeService
-                .startProcessInstanceByKey(processKey, businessKey, variables);
+        ProcessInstance processInstance = request.getFlowableProcessDefinitionId() == null
+                ? runtimeService.startProcessInstanceByKey(processKey, businessKey, variables)
+                : runtimeService.startProcessInstanceById(request.getFlowableProcessDefinitionId(), businessKey, variables);
 
         BizRequest bizRequest = existingRequest == null ? new BizRequest() : existingRequest;
         bizRequest.setBusinessKey(businessKey);
         bizRequest.setProcessInstanceId(processInstance.getId());
         bizRequest.setProcessDefinitionId(processInstance.getProcessDefinitionId());
         bizRequest.setFormInstanceId(request.getFormInstanceId());
+        bizRequest.setWorkflowDefinitionId(request.getWorkflowDefinitionId());
+        bizRequest.setWorkflowDefinitionVersionId(request.getWorkflowDefinitionVersionId());
+        bizRequest.setFormVersionId(request.getFormVersionId());
         bizRequest.setApplicantId(request.getApplicantId());
         bizRequest.setApplicantDeptId(request.getApplicantDeptId());
         bizRequest.setApplicantPostId(request.getApplicantPostId());
@@ -800,7 +804,11 @@ public class WorkflowService {
         private Long applicantDeptId;
         private Long applicantPostId;
         private Long formInstanceId;
+        private Long formVersionId;
         private String processKey;
+        private Long workflowDefinitionId;
+        private Long workflowDefinitionVersionId;
+        private String flowableProcessDefinitionId;
         private Map<String, Object> variables;
         private List<String> countersignUsers;
         private String countersignMode;

@@ -129,7 +129,13 @@ abstract class AbstractIntegrationTestSupport {
     }
 
     protected String unique(String prefix) {
-        return prefix + "-" + UUID.randomUUID();
+        String suffix = UUID.randomUUID().toString();
+        int maxPrefixLength = Math.max(1, 64 - 1 - suffix.length());
+        String normalizedPrefix = prefix == null ? "t" : prefix;
+        if (normalizedPrefix.length() > maxPrefixLength) {
+            normalizedPrefix = normalizedPrefix.substring(0, maxPrefixLength);
+        }
+        return normalizedPrefix + "-" + suffix;
     }
 
     protected JsonNode json(String content) throws JsonProcessingException {

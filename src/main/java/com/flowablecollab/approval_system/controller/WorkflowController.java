@@ -8,6 +8,8 @@ import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.RbacService;
 import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
 import com.flowablecollab.approval_system.service.WorkflowService;
+import com.flowablecollab.approval_system.service.workflow.manage.WorkflowLaunchResolverService;
+import com.flowablecollab.approval_system.service.workflow.manage.WorkflowManageDtos;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -34,6 +36,7 @@ public class WorkflowController {
     private final com.flowablecollab.approval_system.service.FormService formService;
     private final TaskAiSuggestionService taskAiSuggestionService;
     private final RbacService rbacService;
+    private final WorkflowLaunchResolverService workflowLaunchResolverService;
 
     @PostMapping("/requests")
     public ResponseEntity<StartProcessResponse> startProcess(@Valid @RequestBody StartProcessRequest request) {
@@ -52,11 +55,19 @@ public class WorkflowController {
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
+        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
+        if (launchDefinition != null) {
+            startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
+            startRequest.setWorkflowDefinitionVersionId(launchDefinition.getVersionId());
+            startRequest.setFlowableProcessDefinitionId(launchDefinition.getFlowableProcessDefinitionId());
+        }
         validateApproverEligibility(request.getVariables(), request.getCountersignUsers());
 
         if (request.getFormKey() != null && request.getFormData() != null) {
             Long formVersionId = request.getFormVersionId();
-            if (formVersionId == null) {
+            if (formVersionId == null && launchDefinition != null && launchDefinition.getFormVersionId() != null) {
+                formVersionId = launchDefinition.getFormVersionId();
+            } else if (formVersionId == null) {
                 formVersionId = formService.getLatestVersion(request.getFormKey()).getId();
             } else {
                 formService.getVersion(formVersionId);
@@ -69,10 +80,13 @@ public class WorkflowController {
             }
             FormInstance instance = formService.createFormInstance(formVersionId, businessKey, request.getFormData());
             startRequest.setFormInstanceId(instance.getId());
+            startRequest.setFormVersionId(formVersionId);
             if (startRequest.getVariables() == null) {
                 startRequest.setVariables(new java.util.HashMap<>());
             }
             startRequest.getVariables().putAll(request.getFormData());
+        } else if (launchDefinition != null) {
+            startRequest.setFormVersionId(launchDefinition.getFormVersionId());
         }
 
         String processInstanceId = workflowService.startApprovalProcess(startRequest);
@@ -144,6 +158,13 @@ public class WorkflowController {
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
+        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
+        if (launchDefinition != null) {
+            startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
+            startRequest.setWorkflowDefinitionVersionId(launchDefinition.getVersionId());
+            startRequest.setFlowableProcessDefinitionId(launchDefinition.getFlowableProcessDefinitionId());
+            startRequest.setFormVersionId(launchDefinition.getFormVersionId());
+        }
         validateApproverEligibility(variables, request.getCountersignUsers());
 
         String processInstanceId = workflowService.submitDraft(businessKey, startRequest);
@@ -474,6 +495,11 @@ public class WorkflowController {
         if (containsAdminApprover) {
             throw new IllegalArgumentException("ADMIN accounts cannot be approvers");
         }
+    }
+
+    private WorkflowManageDtos.WorkflowLaunchDefinition resolveLaunchDefinition(String processKey) {
+        String normalizedProcessKey = (processKey == null || processKey.isBlank()) ? "approvalWorkflow" : processKey;
+        return workflowLaunchResolverService.resolveCurrentLaunchDefinition(normalizedProcessKey);
     }
 
     @Data

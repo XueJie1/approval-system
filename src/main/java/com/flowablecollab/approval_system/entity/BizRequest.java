@@ -26,6 +26,15 @@ public class BizRequest {
     @Column(name = "form_instance_id")
     private Long formInstanceId;
 
+    @Column(name = "workflow_definition_id")
+    private Long workflowDefinitionId;
+
+    @Column(name = "workflow_definition_version_id")
+    private Long workflowDefinitionVersionId;
+
+    @Column(name = "form_version_id")
+    private Long formVersionId;
+
     @Column(name = "applicant_id", nullable = false)
     private Long applicantId;
 

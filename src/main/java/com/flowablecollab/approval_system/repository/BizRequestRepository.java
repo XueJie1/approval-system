@@ -16,4 +16,10 @@ public interface BizRequestRepository extends JpaRepository<BizRequest, Long> {
     List<BizRequest> findByApplicantId(Long applicantId);
 
     List<BizRequest> findByApplicantDeptIdInOrApplicantPostIdIn(List<Long> deptIds, List<Long> postIds);
+
+    long countByWorkflowDefinitionVersionId(Long workflowDefinitionVersionId);
+
+    long countByWorkflowDefinitionVersionIdAndFinishTimeIsNull(Long workflowDefinitionVersionId);
+
+    List<BizRequest> findTop10ByWorkflowDefinitionVersionIdOrderBySubmitTimeDescIdDesc(Long workflowDefinitionVersionId);
 }
