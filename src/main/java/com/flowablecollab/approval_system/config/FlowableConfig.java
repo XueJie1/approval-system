@@ -1,24 +1,28 @@
 package com.flowablecollab.approval_system.config;
 
-import lombok.extern.slf4j.Slf4j;
+import com.flowablecollab.approval_system.service.workflow.manage.WorkflowCatalogBootstrapService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-@Slf4j
 @Configuration
 public class FlowableConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(FlowableConfig.class);
 
     @Bean
     public CommandLineRunner verifyFlowableDeployment(
             ProcessEngine processEngine,
             RepositoryService repositoryService,
             RuntimeService runtimeService,
-            TaskService taskService) {
+            TaskService taskService,
+            WorkflowCatalogBootstrapService workflowCatalogBootstrapService) {
         return args -> {
             log.info("✓ Flowable ProcessEngine initialized: {}", processEngine.getName());
             log.info("✓ RepositoryService available");
@@ -27,6 +31,8 @@ public class FlowableConfig {
 
             long processCount = repositoryService.createProcessDefinitionQuery().count();
             log.info("✓ Deployed process definitions: {}", processCount);
+
+            workflowCatalogBootstrapService.bootstrapCatalog();
         };
     }
 }

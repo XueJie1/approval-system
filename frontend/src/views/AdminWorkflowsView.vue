@@ -3,20 +3,1049 @@
     <div class="heading">
       <div>
         <h2 class="page-title">流程管理</h2>
-        <p class="page-subtitle">工作流定义、版本管理和部署</p>
+        <p class="page-subtitle">管理流程定义、版本发布、节点元数据与使用追溯</p>
+      </div>
+      <div class="heading-actions">
+        <el-button :loading="globalLoading" @click="refreshAll">刷新数据</el-button>
       </div>
     </div>
 
-    <div class="placeholder-content">
-      <el-empty description="功能开发中" />
+    <el-row :gutter="14" class="summary-grid">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric page-card">
+          <div class="metric-label">流程总数</div>
+          <div class="metric-value">{{ definitionPage.total }}</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric page-card">
+          <div class="metric-label">当前选中</div>
+          <div class="metric-value">{{ selectedDefinition ? 1 : 0 }}</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric page-card">
+          <div class="metric-label">已发布版本</div>
+          <div class="metric-value">{{ publishedCount }}</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric page-card">
+          <div class="metric-label">草稿版本</div>
+          <div class="metric-value">{{ draftCount }}</div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <div class="workflow-shell">
+      <section class="left-column stack">
+        <div class="panel page-card">
+          <div class="toolbar wrap">
+            <el-input v-model="query.keyword" clearable placeholder="按流程标识或名称搜索" @keyup.enter="searchDefinitions" />
+            <el-input v-model="query.category" clearable placeholder="分类" @keyup.enter="searchDefinitions" />
+            <el-select v-model="query.status" clearable placeholder="状态" style="width: 150px">
+              <el-option v-for="item in definitionStatuses" :key="item" :label="item" :value="item" />
+            </el-select>
+            <el-button type="primary" @click="searchDefinitions">查询</el-button>
+            <el-button @click="resetQuery">重置</el-button>
+          </div>
+
+          <el-table
+            v-loading="definitionLoading"
+            :data="definitionPage.content"
+            border
+            stripe
+            highlight-current-row
+            row-key="id"
+            @current-change="handleDefinitionSelect"
+            @row-click="handleDefinitionSelect"
+          >
+            <el-table-column prop="processName" label="流程名称" min-width="180" />
+            <el-table-column prop="processKey" label="标识" min-width="160" />
+            <el-table-column label="状态" width="120">
+              <template #default="{ row }">
+                <el-tag :type="definitionStatusType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="当前版本" width="110">
+              <template #default="{ row }">
+                {{ row.currentVersionNo ? `v${row.currentVersionNo}` : "-" }}
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="pager">
+            <el-pagination
+              background
+              layout="total, sizes, prev, pager, next"
+              :current-page="query.page + 1"
+              :page-size="query.size"
+              :page-sizes="[10, 20, 50]"
+              :total="definitionPage.total"
+              @current-change="changeDefinitionPage"
+              @size-change="changeDefinitionPageSize"
+            />
+          </div>
+        </div>
+
+        <div class="panel page-card">
+          <div class="panel-title">新建流程定义</div>
+          <el-form ref="createDefinitionFormRef" :model="createDefinitionForm" :rules="definitionRules" label-position="top" class="form-grid">
+            <el-form-item label="流程标识" prop="processKey">
+              <el-input v-model="createDefinitionForm.processKey" maxlength="64" show-word-limit placeholder="例如 approvalTravel" />
+            </el-form-item>
+            <el-form-item label="流程名称" prop="processName">
+              <el-input v-model="createDefinitionForm.processName" maxlength="128" show-word-limit placeholder="例如 差旅申请流程" />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-input v-model="createDefinitionForm.category" maxlength="64" show-word-limit placeholder="例如 OA / 财务" />
+            </el-form-item>
+            <el-form-item label="描述">
+              <el-input v-model="createDefinitionForm.description" type="textarea" :rows="3" maxlength="512" show-word-limit />
+            </el-form-item>
+          </el-form>
+          <div class="action-row">
+            <el-button type="primary" :loading="createDefinitionLoading" @click="submitCreateDefinition">创建流程</el-button>
+            <el-button @click="resetCreateDefinitionForm">清空</el-button>
+          </div>
+        </div>
+      </section>
+
+      <section class="right-column stack">
+        <div class="panel page-card" v-if="selectedDefinition">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">{{ selectedDefinition.processName }}</div>
+              <div class="panel-subtitle">{{ selectedDefinition.processKey }} · 当前状态 {{ selectedDefinition.status }}</div>
+            </div>
+            <div class="toolbar wrap compact">
+              <el-button @click="openEditDefinition">编辑基础信息</el-button>
+              <el-button type="warning" plain @click="changeDefinitionState('inactivate')">停用定义</el-button>
+              <el-button type="danger" plain @click="changeDefinitionState('archive')">归档定义</el-button>
+            </div>
+          </div>
+
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="流程标识">{{ selectedDefinition.processKey }}</el-descriptions-item>
+            <el-descriptions-item label="流程名称">{{ selectedDefinition.processName }}</el-descriptions-item>
+            <el-descriptions-item label="分类">{{ selectedDefinition.category || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="当前版本">
+              {{ selectedDefinition.currentVersionNo ? `v${selectedDefinition.currentVersionNo}` : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="描述" :span="2">{{ selectedDefinition.description || '暂无描述' }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <el-empty v-else description="请选择左侧流程定义" class="page-card empty-state" />
+
+        <template v-if="selectedDefinition">
+          <el-tabs v-model="activeTab" class="tabs">
+            <el-tab-pane label="版本管理" name="versions">
+              <div class="stack">
+                <div class="panel page-card">
+                  <div class="toolbar wrap">
+                    <el-button type="primary" @click="openCreateVersion">新建草稿版本</el-button>
+                    <el-button :disabled="!selectedVersion" @click="loadVersionRelatedData">刷新版本数据</el-button>
+                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'DRAFT'" type="success" plain @click="saveVersionDraft">保存草稿</el-button>
+                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'DRAFT'" type="success" @click="changeVersionState('publish')">发布</el-button>
+                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'PUBLISHED'" type="warning" plain @click="changeVersionState('inactivate')">停用</el-button>
+                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'INACTIVE'" type="warning" @click="changeVersionState('activate')">启用</el-button>
+                    <el-button :disabled="!selectedVersion || !['PUBLISHED', 'INACTIVE'].includes(selectedVersion.status)" type="danger" plain @click="changeVersionState('retire')">退休</el-button>
+                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'DRAFT'" type="danger" plain @click="deleteSelectedVersion">删除草稿</el-button>
+                  </div>
+
+                  <el-table
+                    v-loading="versionLoading"
+                    :data="versionList"
+                    border
+                    stripe
+                    highlight-current-row
+                    row-key="id"
+                    @row-click="handleVersionSelect"
+                  >
+                    <el-table-column label="版本号" width="100">
+                      <template #default="{ row }">v{{ row.versionNo }}</template>
+                    </el-table-column>
+                    <el-table-column prop="versionLabel" label="版本标签" min-width="130" />
+                    <el-table-column label="状态" width="120">
+                      <template #default="{ row }">
+                        <el-tag :type="versionStatusType(row.status)">{{ row.status }}</el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="formKey" label="表单 Key" min-width="140" />
+                    <el-table-column prop="formVersionId" label="表单版本" width="120" />
+                    <el-table-column label="发布时间" min-width="170">
+                      <template #default="{ row }">{{ formatDateTime(row.publishedAt) }}</template>
+                    </el-table-column>
+                    <el-table-column label="说明" min-width="200">
+                      <template #default="{ row }">{{ row.changeSummary || '-' }}</template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+
+                <div v-if="selectedVersion" class="panel page-card stack">
+                  <div class="panel-title">版本详情 · v{{ selectedVersion.versionNo }}</div>
+                  <el-form ref="versionFormRef" :model="versionForm" :rules="versionRules" label-position="top" class="form-grid two-columns">
+                    <el-form-item label="版本标签">
+                      <el-input v-model="versionForm.versionLabel" :disabled="!isDraftVersion" maxlength="64" show-word-limit />
+                    </el-form-item>
+                    <el-form-item label="表单定义">
+                      <el-select
+                        v-model="selectedFormDefinitionId"
+                        :disabled="!isDraftVersion"
+                        clearable
+                        filterable
+                        placeholder="请选择表单定义"
+                        @change="handleFormDefinitionChange"
+                      >
+                        <el-option
+                          v-for="form in formDefinitions"
+                          :key="form.id"
+                          :label="`${form.formName} · ${form.formKey}`"
+                          :value="form.id"
+                        />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="表单版本" prop="formVersionId">
+                      <el-select
+                        v-model="versionForm.formVersionId"
+                        :disabled="!isDraftVersion || !selectedFormDefinitionId"
+                        clearable
+                        filterable
+                        placeholder="请选择表单版本"
+                        @change="handleFormVersionChange"
+                      >
+                        <el-option
+                          v-for="item in currentFormVersions"
+                          :key="item.id"
+                          :label="`v${item.version} · ID ${item.id}${latestFormVersionId === item.id ? ' · 最新' : ''}`"
+                          :value="item.id"
+                        />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="表单 Key">
+                      <el-input v-model="versionForm.formKey" :disabled="!isDraftVersion" maxlength="64" show-word-limit placeholder="随表单定义自动回填，也可手工调整" />
+                    </el-form-item>
+                    <el-form-item label="版本说明">
+                      <el-input v-model="versionForm.changeSummary" :disabled="!isDraftVersion" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+                    </el-form-item>
+                    <el-form-item label="表单绑定摘要" class="full-span">
+                      <div class="binding-summary page-card inner-card">
+                        <div><strong>表单定义：</strong>{{ selectedFormDefinition?.formName || '-' }}</div>
+                        <div><strong>表单 Key：</strong>{{ versionForm.formKey || '-' }}</div>
+                        <div><strong>绑定版本：</strong>{{ selectedFormVersion ? `v${selectedFormVersion.version} / ID ${selectedFormVersion.id}` : '-' }}</div>
+                        <div><strong>字段数：</strong>{{ formFields.length }}</div>
+                      </div>
+                    </el-form-item>
+                    <el-form-item label="BPMN XML" prop="bpmnXml" class="full-span">
+                      <el-input v-model="versionForm.bpmnXml" :disabled="!isDraftVersion" type="textarea" :rows="16" class="mono-input" />
+                    </el-form-item>
+                  </el-form>
+
+                  <div class="sub-panel page-card inner-card stack">
+                    <div class="panel-title small">表单字段预览</div>
+                    <el-empty v-if="!versionForm.formVersionId" description="请选择表单版本" />
+                    <el-table v-else :data="formFields" border stripe>
+                      <el-table-column prop="fieldKey" label="字段 Key" min-width="140" />
+                      <el-table-column prop="label" label="字段名称" min-width="160" />
+                      <el-table-column prop="fieldType" label="类型" width="110" />
+                      <el-table-column label="必填" width="90">
+                        <template #default="{ row }">
+                          <el-tag :type="row.required === 1 ? 'danger' : 'info'">{{ row.required === 1 ? '是' : '否' }}</el-tag>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="节点配置" name="nodes">
+              <div class="panel page-card stack">
+                <div class="toolbar wrap">
+                  <el-button :disabled="!selectedVersion" @click="loadNodes">刷新节点</el-button>
+                  <el-button :disabled="!selectedVersion || !isDraftVersion" type="primary" @click="saveNodes">保存节点配置</el-button>
+                </div>
+
+                <el-table v-loading="nodeLoading" :data="nodeConfigs" border stripe row-key="nodeId">
+                  <el-table-column prop="nodeId" label="节点 ID" min-width="150" />
+                  <el-table-column prop="nodeName" label="节点名称" min-width="160">
+                    <template #default="{ row }">
+                      <el-input v-model="row.nodeName" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="nodeType" label="类型" width="120" />
+                  <el-table-column label="审批类型" min-width="140">
+                    <template #default="{ row }">
+                      <el-select v-model="row.approvalType" :disabled="!isDraftVersion" clearable>
+                        <el-option v-for="item in approvalTypes" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="审批人策略" min-width="150">
+                    <template #default="{ row }">
+                      <el-select v-model="row.assigneeStrategy" :disabled="!isDraftVersion" clearable>
+                        <el-option v-for="item in assigneeStrategies" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="意见必填" width="110">
+                    <template #default="{ row }">
+                      <el-switch v-model="row.commentRequired" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="委派" width="90">
+                    <template #default="{ row }">
+                      <el-switch v-model="row.allowDelegate" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="转办" width="90">
+                    <template #default="{ row }">
+                      <el-switch v-model="row.allowReassign" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="退回上一节点" width="120">
+                    <template #default="{ row }">
+                      <el-switch v-model="row.allowReturnPrevious" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="退回申请人" width="120">
+                    <template #default="{ row }">
+                      <el-switch v-model="row.allowReturnApplicant" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="AI 建议" width="90">
+                    <template #default="{ row }">
+                      <el-switch v-model="row.aiEnabled" :disabled="!isDraftVersion" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="发布日志" name="logs">
+              <div class="panel page-card">
+                <div class="toolbar wrap">
+                  <el-button :disabled="!selectedVersion" @click="loadLogs">刷新日志</el-button>
+                </div>
+                <el-table v-loading="logLoading" :data="publishLogs" border stripe>
+                  <el-table-column prop="action" label="动作" width="120" />
+                  <el-table-column prop="result" label="结果" width="100" />
+                  <el-table-column prop="message" label="说明" min-width="220" />
+                  <el-table-column prop="operatorId" label="操作人" width="100" />
+                  <el-table-column label="时间" min-width="180">
+                    <template #default="{ row }">{{ formatDateTime(row.operatedAt) }}</template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="使用情况" name="usage">
+              <div class="stack">
+                <div class="usage-grid">
+                  <div class="metric page-card">
+                    <div class="metric-label">实例总数</div>
+                    <div class="metric-value">{{ versionUsage?.totalCount ?? 0 }}</div>
+                  </div>
+                  <div class="metric page-card">
+                    <div class="metric-label">运行中</div>
+                    <div class="metric-value">{{ versionUsage?.runningCount ?? 0 }}</div>
+                  </div>
+                  <div class="metric page-card">
+                    <div class="metric-label">已完成</div>
+                    <div class="metric-value">{{ versionUsage?.finishedCount ?? 0 }}</div>
+                  </div>
+                </div>
+
+                <div class="panel page-card">
+                  <div class="toolbar wrap">
+                    <el-button :disabled="!selectedVersion" @click="loadUsage">刷新使用情况</el-button>
+                  </div>
+                  <el-table v-loading="usageLoading" :data="versionUsage?.recentRequests || []" border stripe>
+                    <el-table-column prop="requestId" label="申请 ID" width="100" />
+                    <el-table-column prop="businessKey" label="业务键" min-width="180" />
+                    <el-table-column prop="title" label="标题" min-width="180" />
+                    <el-table-column prop="status" label="状态" width="90" />
+                    <el-table-column label="提交时间" min-width="170">
+                      <template #default="{ row }">{{ formatDateTime(row.submitTime) }}</template>
+                    </el-table-column>
+                    <el-table-column label="结束时间" min-width="170">
+                      <template #default="{ row }">{{ formatDateTime(row.finishTime) }}</template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </template>
+      </section>
     </div>
+
+    <el-dialog v-model="editDefinitionDialogVisible" title="编辑流程定义" width="720px">
+      <el-form ref="editDefinitionFormRef" :model="editDefinitionForm" :rules="{ processName: [{ required: true, message: '请输入流程名称', trigger: 'blur' }] }" label-position="top" class="form-grid">
+        <el-form-item label="流程名称" prop="processName">
+          <el-input v-model="editDefinitionForm.processName" maxlength="128" show-word-limit />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-input v-model="editDefinitionForm.category" maxlength="64" show-word-limit />
+        </el-form-item>
+        <el-form-item label="描述" class="full-span">
+          <el-input v-model="editDefinitionForm.description" type="textarea" :rows="4" maxlength="512" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDefinitionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editDefinitionLoading" @click="submitEditDefinition">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="createVersionDialogVisible" title="创建版本草稿" width="560px">
+      <el-form :model="createVersionForm" label-position="top" class="form-grid">
+        <el-form-item label="复制来源版本">
+          <el-select v-model="createVersionForm.copyFromVersionId" clearable placeholder="可选，复制已有版本">
+            <el-option v-for="item in versionList" :key="item.id" :label="`v${item.versionNo} · ${item.status}`" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="版本标签">
+          <el-input v-model="createVersionForm.versionLabel" maxlength="64" show-word-limit />
+        </el-form-item>
+        <el-form-item label="版本说明" class="full-span">
+          <el-input v-model="createVersionForm.changeSummary" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVersionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createVersionLoading" @click="submitCreateVersion">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus";
+import type {
+  PageResult,
+  WorkflowDefinitionPayload,
+  FormDefinitionSummary,
+  FormField,
+  FormVersionSummary,
+  WorkflowDefinitionSummary,
+  WorkflowNodeConfigItem,
+  WorkflowPublishLogItem,
+  WorkflowVersionSummary,
+  WorkflowVersionUsage
+} from "../types";
+import {
+  activateWorkflowVersion,
+  archiveWorkflowDefinition,
+  createWorkflowDefinition,
+  createWorkflowVersion,
+  deleteWorkflowVersion,
+  getWorkflowVersionUsage,
+  inactivateWorkflowDefinition,
+  inactivateWorkflowVersion,
+  listWorkflowDefinitions,
+  listWorkflowNodeConfigs,
+  listWorkflowPublishLogs,
+  listWorkflowVersions,
+  publishWorkflowVersion,
+  retireWorkflowVersion,
+  saveWorkflowNodeConfigs,
+  updateWorkflowDefinition,
+  updateWorkflowVersion
+} from "../api/admin-workflows";
+import { fetchFormFields, listFormDefinitions, listFormVersions } from "../api/forms";
+
+const definitionStatuses = ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"];
+const approvalTypes = ["APPROVE", "COUNTERSIGN", "ORSIGN", "SEQUENTIAL"];
+const assigneeStrategies = ["USER", "ROLE", "POST", "DEPT_MANAGER", "INITIATOR_SUPERVISOR", "FORM_FIELD"];
+
+const activeTab = ref("versions");
+const globalLoading = ref(false);
+const definitionLoading = ref(false);
+const createDefinitionLoading = ref(false);
+const editDefinitionLoading = ref(false);
+const versionLoading = ref(false);
+const createVersionLoading = ref(false);
+const nodeLoading = ref(false);
+const logLoading = ref(false);
+const usageLoading = ref(false);
+
+const createDefinitionFormRef = ref<FormInstance>();
+const editDefinitionFormRef = ref<FormInstance>();
+const versionFormRef = ref<FormInstance>();
+
+const editDefinitionDialogVisible = ref(false);
+const createVersionDialogVisible = ref(false);
+
+const query = reactive({
+  keyword: "",
+  category: "",
+  status: "",
+  page: 0,
+  size: 10
+});
+
+const definitionPage = ref<PageResult<WorkflowDefinitionSummary>>({
+  content: [],
+  total: 0,
+  page: 0,
+  size: 10,
+  totalPages: 0
+});
+
+const selectedDefinition = ref<WorkflowDefinitionSummary | null>(null);
+const versionList = ref<WorkflowVersionSummary[]>([]);
+const selectedVersion = ref<WorkflowVersionSummary | null>(null);
+const nodeConfigs = ref<WorkflowNodeConfigItem[]>([]);
+const publishLogs = ref<WorkflowPublishLogItem[]>([]);
+const versionUsage = ref<WorkflowVersionUsage | null>(null);
+const formDefinitions = ref<FormDefinitionSummary[]>([]);
+const formVersionsByDefinition = ref<Record<number, FormVersionSummary[]>>({});
+const selectedFormDefinitionId = ref<number | undefined>();
+const formFields = ref<FormField[]>([]);
+
+const createDefinitionForm = reactive<WorkflowDefinitionPayload>({
+  processKey: "",
+  processName: "",
+  category: "",
+  description: ""
+});
+
+const editDefinitionForm = reactive({
+  processName: "",
+  category: "",
+  description: ""
+});
+
+const createVersionForm = reactive({
+  copyFromVersionId: undefined as number | undefined,
+  versionLabel: "",
+  changeSummary: ""
+});
+
+const versionForm = reactive({
+  versionLabel: "",
+  formKey: "",
+  formVersionId: undefined as number | undefined,
+  changeSummary: "",
+  bpmnXml: ""
+});
+
+const definitionRules: FormRules = {
+  processKey: [
+    { required: true, message: "请输入流程标识", trigger: "blur" },
+    { pattern: /^[A-Za-z][A-Za-z0-9_]*$/, message: "流程标识仅支持字母开头的字母数字下划线", trigger: "blur" }
+  ],
+  processName: [{ required: true, message: "请输入流程名称", trigger: "blur" }]
+};
+
+const versionRules: FormRules = {
+  formVersionId: [{ required: true, message: "请输入表单版本 ID", trigger: "blur" }],
+  bpmnXml: [{ required: true, message: "请输入 BPMN XML", trigger: "blur" }]
+};
+
+const publishedCount = computed(() => versionList.value.filter((item) => item.status === "PUBLISHED").length);
+const draftCount = computed(() => versionList.value.filter((item) => item.status === "DRAFT").length);
+const isDraftVersion = computed(() => selectedVersion.value?.status === "DRAFT");
+const currentFormVersions = computed(() => {
+  if (!selectedFormDefinitionId.value) {
+    return [];
+  }
+  return formVersionsByDefinition.value[selectedFormDefinitionId.value] || [];
+});
+const selectedFormDefinition = computed(() => formDefinitions.value.find((item) => item.id === selectedFormDefinitionId.value));
+const selectedFormVersion = computed(() => currentFormVersions.value.find((item) => item.id === versionForm.formVersionId));
+const latestFormVersionId = computed(() => currentFormVersions.value[0]?.id);
+
+watch(activeTab, async (tab) => {
+  if (!selectedVersion.value) {
+    return;
+  }
+  if (tab === "nodes") {
+    await loadNodes();
+  }
+  if (tab === "logs") {
+    await loadLogs();
+  }
+  if (tab === "usage") {
+    await loadUsage();
+  }
+});
+
+onMounted(async () => {
+  await loadFormDefinitions();
+  await refreshAll();
+});
+
+watch(
+  () => versionForm.formVersionId,
+  async (value) => {
+    if (!value || !formDefinitions.value.length) {
+      formFields.value = [];
+      return;
+    }
+    const matchedDefinition = formDefinitions.value.find((definition) =>
+      (formVersionsByDefinition.value[definition.id] || []).some((item) => item.id === value)
+    );
+    if (matchedDefinition) {
+      selectedFormDefinitionId.value = matchedDefinition.id;
+      versionForm.formKey = matchedDefinition.formKey;
+    }
+    await loadFormFields(value);
+  }
+);
+
+async function refreshAll() {
+  globalLoading.value = true;
+  try {
+    await loadDefinitions();
+  } finally {
+    globalLoading.value = false;
+  }
+}
+
+async function loadDefinitions() {
+  definitionLoading.value = true;
+  try {
+    definitionPage.value = await listWorkflowDefinitions({
+      keyword: query.keyword.trim() || undefined,
+      category: query.category.trim() || undefined,
+      status: query.status || undefined,
+      page: query.page,
+      size: query.size
+    });
+
+    if (selectedDefinition.value) {
+      const latest = definitionPage.value.content.find((item) => item.id === selectedDefinition.value?.id) ?? selectedDefinition.value;
+      selectedDefinition.value = latest;
+    }
+
+    if (!selectedDefinition.value && definitionPage.value.content.length > 0) {
+      await handleDefinitionSelect(definitionPage.value.content[0]);
+    }
+  } finally {
+    definitionLoading.value = false;
+  }
+}
+
+async function loadFormDefinitions() {
+  formDefinitions.value = await listFormDefinitions();
+}
+
+async function searchDefinitions() {
+  query.page = 0;
+  await loadDefinitions();
+}
+
+async function resetQuery() {
+  query.keyword = "";
+  query.category = "";
+  query.status = "";
+  query.page = 0;
+  await loadDefinitions();
+}
+
+async function changeDefinitionPage(page: number) {
+  query.page = page - 1;
+  await loadDefinitions();
+}
+
+async function changeDefinitionPageSize(size: number) {
+  query.size = size;
+  query.page = 0;
+  await loadDefinitions();
+}
+
+async function handleDefinitionSelect(row: WorkflowDefinitionSummary | null) {
+  if (!row) {
+    return;
+  }
+  selectedDefinition.value = row;
+  selectedVersion.value = null;
+  nodeConfigs.value = [];
+  publishLogs.value = [];
+  versionUsage.value = null;
+  await loadVersions();
+}
+
+async function loadVersions() {
+  if (!selectedDefinition.value) {
+    return;
+  }
+  versionLoading.value = true;
+  try {
+    versionList.value = await listWorkflowVersions(selectedDefinition.value.id);
+    const target = selectedDefinition.value.currentVersionId
+      ? versionList.value.find((item) => item.id === selectedDefinition.value?.currentVersionId)
+      : versionList.value[0];
+    if (target) {
+      await handleVersionSelect(target);
+    }
+  } finally {
+    versionLoading.value = false;
+  }
+}
+
+async function handleVersionSelect(row: WorkflowVersionSummary) {
+  selectedVersion.value = row;
+  syncVersionForm(row);
+  await loadVersionRelatedData();
+}
+
+function syncVersionForm(row: WorkflowVersionSummary) {
+  versionForm.versionLabel = row.versionLabel || "";
+  versionForm.formKey = row.formKey || "";
+  versionForm.formVersionId = row.formVersionId ?? undefined;
+  versionForm.changeSummary = row.changeSummary || "";
+  versionForm.bpmnXml = row.bpmnXml || "";
+  void syncSelectedForm(row.formKey || undefined, row.formVersionId ?? undefined);
+}
+
+async function loadVersionRelatedData() {
+  if (!selectedVersion.value) {
+    return;
+  }
+  await Promise.all([loadNodes(), loadLogs(), loadUsage()]);
+}
+
+async function syncSelectedForm(formKey?: string, formVersionId?: number) {
+  if (!formDefinitions.value.length) {
+    await loadFormDefinitions();
+  }
+  const matchedDefinition = formDefinitions.value.find((item) => item.formKey === formKey)
+    || formDefinitions.value.find((item) => (formVersionsByDefinition.value[item.id] || []).some((version) => version.id === formVersionId));
+  if (!matchedDefinition) {
+    selectedFormDefinitionId.value = undefined;
+    return;
+  }
+  selectedFormDefinitionId.value = matchedDefinition.id;
+  await ensureFormVersionsLoaded(matchedDefinition.id);
+  if (formVersionId) {
+    await loadFormFields(formVersionId);
+  }
+}
+
+async function ensureFormVersionsLoaded(formId: number) {
+  if (formVersionsByDefinition.value[formId]) {
+    return;
+  }
+  const versions = await listFormVersions(formId);
+  formVersionsByDefinition.value = {
+    ...formVersionsByDefinition.value,
+    [formId]: versions
+  };
+}
+
+async function handleFormDefinitionChange(formId?: number) {
+  if (!formId) {
+    versionForm.formKey = "";
+    versionForm.formVersionId = undefined;
+    formFields.value = [];
+    return;
+  }
+  const definition = formDefinitions.value.find((item) => item.id === formId);
+  versionForm.formKey = definition?.formKey || "";
+  await ensureFormVersionsLoaded(formId);
+  versionForm.formVersionId = currentFormVersions.value[0]?.id;
+  if (versionForm.formVersionId) {
+    await loadFormFields(versionForm.formVersionId);
+  } else {
+    formFields.value = [];
+  }
+}
+
+async function handleFormVersionChange(versionId?: number) {
+  if (!versionId || !selectedFormDefinitionId.value) {
+    formFields.value = [];
+    return;
+  }
+  const definition = formDefinitions.value.find((item) => item.id === selectedFormDefinitionId.value);
+  if (definition) {
+    versionForm.formKey = definition.formKey;
+  }
+  await loadFormFields(versionId);
+}
+
+async function loadFormFields(formVersionId: number) {
+  formFields.value = await fetchFormFields(formVersionId);
+}
+
+async function submitCreateDefinition() {
+  await createDefinitionFormRef.value?.validate();
+  createDefinitionLoading.value = true;
+  try {
+    const definition = await createWorkflowDefinition({
+      processKey: createDefinitionForm.processKey.trim(),
+      processName: createDefinitionForm.processName.trim(),
+      category: createDefinitionForm.category?.trim() || undefined,
+      description: createDefinitionForm.description?.trim() || undefined
+    });
+    ElMessage.success("流程定义已创建");
+    resetCreateDefinitionForm();
+    await loadDefinitions();
+    await handleDefinitionSelect(definition);
+  } finally {
+    createDefinitionLoading.value = false;
+  }
+}
+
+function resetCreateDefinitionForm() {
+  createDefinitionForm.processKey = "";
+  createDefinitionForm.processName = "";
+  createDefinitionForm.category = "";
+  createDefinitionForm.description = "";
+  createDefinitionFormRef.value?.clearValidate();
+}
+
+function openEditDefinition() {
+  if (!selectedDefinition.value) {
+    return;
+  }
+  editDefinitionForm.processName = selectedDefinition.value.processName;
+  editDefinitionForm.category = selectedDefinition.value.category || "";
+  editDefinitionForm.description = selectedDefinition.value.description || "";
+  editDefinitionDialogVisible.value = true;
+}
+
+const submitEditDefinition = async () => {
+  if (!selectedDefinition.value) {
+    return;
+  }
+  await editDefinitionFormRef.value?.validate();
+  editDefinitionLoading.value = true;
+  try {
+    selectedDefinition.value = await updateWorkflowDefinition(selectedDefinition.value.id, {
+      processName: editDefinitionForm.processName.trim(),
+      category: editDefinitionForm.category.trim() || undefined,
+      description: editDefinitionForm.description.trim() || undefined
+    });
+    ElMessage.success("流程定义已更新");
+    editDefinitionDialogVisible.value = false;
+    await loadDefinitions();
+  } finally {
+    editDefinitionLoading.value = false;
+  }
+};
+
+async function changeDefinitionState(action: "inactivate" | "archive") {
+  if (!selectedDefinition.value) {
+    return;
+  }
+  const title = action === "archive" ? "归档流程定义" : "停用流程定义";
+  const comment = await promptComment(title);
+  if (comment === null) {
+    return;
+  }
+  if (action === "archive") {
+    await archiveWorkflowDefinition(selectedDefinition.value.id, comment);
+    ElMessage.success("流程定义已归档");
+  } else {
+    await inactivateWorkflowDefinition(selectedDefinition.value.id, comment);
+    ElMessage.success("流程定义已停用");
+  }
+  await refreshAll();
+}
+
+function openCreateVersion() {
+  createVersionForm.copyFromVersionId = selectedVersion.value?.id;
+  createVersionForm.versionLabel = "";
+  createVersionForm.changeSummary = "";
+  createVersionDialogVisible.value = true;
+}
+
+const submitCreateVersion = async () => {
+  if (!selectedDefinition.value) {
+    return;
+  }
+  createVersionLoading.value = true;
+  try {
+    const version = await createWorkflowVersion(selectedDefinition.value.id, {
+      copyFromVersionId: createVersionForm.copyFromVersionId,
+      versionLabel: createVersionForm.versionLabel.trim() || undefined,
+      changeSummary: createVersionForm.changeSummary.trim() || undefined
+    });
+    ElMessage.success("版本草稿已创建");
+    createVersionDialogVisible.value = false;
+    await loadVersions();
+    await handleVersionSelect(version);
+    activeTab.value = "versions";
+  } finally {
+    createVersionLoading.value = false;
+  }
+};
+
+const actionHandlers = {
+  submitEditDefinition,
+  submitCreateVersion
+};
+
+void actionHandlers;
+
+async function saveVersionDraft() {
+  if (!selectedVersion.value || !isDraftVersion.value) {
+    return;
+  }
+  await versionFormRef.value?.validate();
+  const updated = await updateWorkflowVersion(selectedVersion.value.id, {
+    versionLabel: versionForm.versionLabel.trim() || undefined,
+    formKey: versionForm.formKey.trim() || undefined,
+    formVersionId: Number(versionForm.formVersionId),
+    changeSummary: versionForm.changeSummary.trim() || undefined,
+    bpmnXml: versionForm.bpmnXml
+  });
+  ElMessage.success("草稿版本已保存");
+  selectedVersion.value = updated;
+  syncVersionForm(updated);
+  await loadVersions();
+}
+
+async function deleteSelectedVersion() {
+  if (!selectedVersion.value || selectedVersion.value.status !== "DRAFT") {
+    return;
+  }
+  await ElMessageBox.confirm(`确认删除版本 v${selectedVersion.value.versionNo} 吗？`, "删除草稿", { type: "warning" });
+  await deleteWorkflowVersion(selectedVersion.value.id);
+  ElMessage.success("草稿版本已删除");
+  selectedVersion.value = null;
+  await loadVersions();
+}
+
+async function loadNodes() {
+  if (!selectedVersion.value) {
+    return;
+  }
+  nodeLoading.value = true;
+  try {
+    nodeConfigs.value = await listWorkflowNodeConfigs(selectedVersion.value.id);
+  } finally {
+    nodeLoading.value = false;
+  }
+}
+
+async function saveNodes() {
+  if (!selectedVersion.value || !isDraftVersion.value) {
+    return;
+  }
+  await saveWorkflowNodeConfigs(selectedVersion.value.id, nodeConfigs.value);
+  ElMessage.success("节点配置已保存");
+  await loadNodes();
+}
+
+async function loadLogs() {
+  if (!selectedVersion.value) {
+    return;
+  }
+  logLoading.value = true;
+  try {
+    publishLogs.value = await listWorkflowPublishLogs(selectedVersion.value.id);
+  } finally {
+    logLoading.value = false;
+  }
+}
+
+async function loadUsage() {
+  if (!selectedVersion.value) {
+    return;
+  }
+  usageLoading.value = true;
+  try {
+    versionUsage.value = await getWorkflowVersionUsage(selectedVersion.value.id);
+  } finally {
+    usageLoading.value = false;
+  }
+}
+
+async function changeVersionState(action: "publish" | "inactivate" | "activate" | "retire") {
+  if (!selectedVersion.value) {
+    return;
+  }
+  const titles: Record<string, string> = {
+    publish: "发布版本",
+    inactivate: "停用版本",
+    activate: "启用版本",
+    retire: "退休版本"
+  };
+  const comment = await promptComment(titles[action]);
+  if (comment === null) {
+    return;
+  }
+
+  if (action === "publish") {
+    await publishWorkflowVersion(selectedVersion.value.id, comment);
+    ElMessage.success("版本已发布");
+  } else if (action === "inactivate") {
+    await inactivateWorkflowVersion(selectedVersion.value.id, comment);
+    ElMessage.success("版本已停用");
+  } else if (action === "activate") {
+    await activateWorkflowVersion(selectedVersion.value.id, comment);
+    ElMessage.success("版本已启用");
+  } else {
+    await retireWorkflowVersion(selectedVersion.value.id, comment);
+    ElMessage.success("版本已退休");
+  }
+
+  await loadDefinitions();
+  if (selectedDefinition.value) {
+    await loadVersions();
+  }
+}
+
+async function promptComment(title: string) {
+  try {
+    const result = await ElMessageBox.prompt("请输入操作说明，可为空", title, {
+      confirmButtonText: "确认",
+      cancelButtonText: "取消",
+      inputValue: ""
+    });
+    return result.value;
+  } catch {
+    return null;
+  }
+}
+
+function definitionStatusType(status: string) {
+  if (status === "ACTIVE") {
+    return "success";
+  }
+  if (status === "INACTIVE") {
+    return "warning";
+  }
+  if (status === "ARCHIVED") {
+    return "info";
+  }
+  return "primary";
+}
+
+function versionStatusType(status: string) {
+  if (status === "PUBLISHED") {
+    return "success";
+  }
+  if (status === "INACTIVE") {
+    return "warning";
+  }
+  if (status === "RETIRED") {
+    return "info";
+  }
+  return "primary";
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+  return value.replace("T", " ").slice(0, 19);
+}
 </script>
 
 <style scoped>
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .admin-page {
   display: flex;
   flex-direction: column;
@@ -26,30 +1055,164 @@
 .heading {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.page-subtitle {
-  margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.placeholder-content {
-  padding: 48px;
-  text-align: center;
-}
-
-.stack {
+.heading-actions {
   display: flex;
-  flex-direction: column;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.summary-grid,
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric {
+  padding: 18px;
+}
+
+.metric-label {
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.metric-value {
+  margin-top: 10px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.workflow-shell {
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
   gap: 18px;
+  align-items: start;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.inner-card {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.85) 0%, rgba(241, 245, 249, 0.92) 100%);
+  box-shadow: none;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: flex-start;
+}
+
+.panel-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.panel-subtitle {
+  margin-top: 6px;
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.toolbar.wrap {
+  flex-wrap: wrap;
+}
+
+.toolbar.compact {
+  margin-bottom: 0;
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.empty-state {
+  padding: 42px 24px;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.binding-summary {
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.sub-panel {
+  padding: 16px;
+}
+
+.panel-title.small {
+  font-size: 15px;
+}
+
+.mono-input :deep(textarea) {
+  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .workflow-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-grid,
+  .usage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .summary-grid,
+  .usage-grid,
+  .two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .binding-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-head,
+  .heading {
+    flex-direction: column;
+  }
 }
 </style>

@@ -14,6 +14,8 @@ public interface WorkflowDefinitionVersionRepository extends JpaRepository<Workf
 
     Optional<WorkflowDefinitionVersion> findByDefinitionIdAndStatusAndIsDeleted(Long definitionId, String status, Integer isDeleted);
 
+    Optional<WorkflowDefinitionVersion> findByFlowableProcessDefinitionIdAndIsDeleted(String flowableProcessDefinitionId, Integer isDeleted);
+
     boolean existsByDefinitionIdAndVersionNoAndIsDeleted(Long definitionId, Integer versionNo, Integer isDeleted);
 
     long countByDefinitionIdAndIsDeleted(Long definitionId, Integer isDeleted);

@@ -48,16 +48,33 @@ wait_for_port() {
   local port="$1"
   local name="$2"
   local attempts="${3:-60}"
+  local log_file="${4:-}"
+  local extend_keyword="${5:-}"
 
   for ((i = 1; i <= attempts; i++)); do
     if is_port_in_use "$port"; then
       return 0
+    fi
+
+    if [[ -n "$log_file" && -n "$extend_keyword" ]] && latest_log_contains "$log_file" "$extend_keyword"; then
+      attempts=$((attempts + 1))
     fi
     sleep 1
   done
 
   echo "$name failed to open port $port"
   return 1
+}
+
+latest_log_contains() {
+  local log_file="$1"
+  local keyword="$2"
+  local last_line=""
+
+  [[ -f "$log_file" ]] || return 1
+
+  last_line="$(tail -n 1 "$log_file" 2>/dev/null || true)"
+  [[ "$last_line" == *"$keyword"* ]]
 }
 
 wait_for_http() {
@@ -174,7 +191,7 @@ start_backend() {
   setsid /usr/bin/env bash -lc "$command" >"$BACKEND_LOG" 2>&1 < /dev/null &
   echo "$backend_port" >"$BACKEND_PORT_FILE"
 
-  wait_for_port "$backend_port" "Backend" 90 || {
+  wait_for_port "$backend_port" "Backend" 90 "$BACKEND_LOG" "Downloading" || {
     echo "Backend log: $BACKEND_LOG"
     return 1
   }

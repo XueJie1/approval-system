@@ -78,6 +78,28 @@ public class FormService {
                 .orElseThrow(() -> new IllegalArgumentException("Form version not found"));
     }
 
+    public BoundFormVersion resolveBoundFormVersion(Long formVersionId) {
+        FormVersion version = formVersionRepository.findById(formVersionId)
+                .orElseThrow(() -> new IllegalArgumentException("Form version not found"));
+        FormDefinition definition = formDefinitionRepository.findById(version.getFormId())
+                .orElseThrow(() -> new IllegalArgumentException("Form definition not found"));
+        if (definition.getStatus() == null || definition.getStatus() != 1) {
+            throw new IllegalArgumentException("Form definition is not available");
+        }
+        BoundFormVersion bound = new BoundFormVersion();
+        bound.setFormDefinition(definition);
+        bound.setFormVersion(version);
+        return bound;
+    }
+
+    public List<FormDefinition> listDefinitions() {
+        return formDefinitionRepository.findAllByOrderByFormNameAscIdAsc();
+    }
+
+    public List<FormVersion> listVersions(Long formId) {
+        return formVersionRepository.findByFormIdOrderByVersionDesc(formId);
+    }
+
     public FormInstance createFormInstance(Long formVersionId, String businessKey, Map<String, Object> data) {
         FormVersion version = formVersionRepository.findById(formVersionId)
                 .orElseThrow(() -> new IllegalArgumentException("Form version not found"));
@@ -123,6 +145,12 @@ public class FormService {
         private String visibleRule;
         private String validateRule;
         private String optionsJson;
+    }
+
+    @Data
+    public static class BoundFormVersion {
+        private FormDefinition formDefinition;
+        private FormVersion formVersion;
     }
 
     private void validateFormData(String schemaJson, Map<String, Object> data) {

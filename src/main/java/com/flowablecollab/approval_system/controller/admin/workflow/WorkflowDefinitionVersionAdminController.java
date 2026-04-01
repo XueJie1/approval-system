@@ -3,7 +3,6 @@ package com.flowablecollab.approval_system.controller.admin.workflow;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowDefinitionVersionService;
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowManageDtos;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,10 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequiredArgsConstructor
 public class WorkflowDefinitionVersionAdminController {
 
     private final WorkflowDefinitionVersionService workflowDefinitionVersionService;
+
+    public WorkflowDefinitionVersionAdminController(WorkflowDefinitionVersionService workflowDefinitionVersionService) {
+        this.workflowDefinitionVersionService = workflowDefinitionVersionService;
+    }
 
     @PostMapping("/api/admin/workflow-definitions/{definitionId}/versions")
     public ResponseEntity<WorkflowManageDtos.WorkflowDefinitionVersionView> createDraft(

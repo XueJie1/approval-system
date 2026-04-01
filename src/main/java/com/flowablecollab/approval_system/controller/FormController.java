@@ -6,8 +6,6 @@ import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.FormService;
-import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,27 +14,30 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/forms")
-@RequiredArgsConstructor
 public class FormController {
 
     private final FormService formService;
 
+    public FormController(FormService formService) {
+        this.formService = formService;
+    }
+
     @PostMapping("/definitions")
     public ResponseEntity<FormDefinition> createDefinition(@RequestBody CreateFormDefinitionRequest request) {
-        ensureRequestUserMatchesLogin(request.getUserId());
-        return ResponseEntity.ok(formService.createFormDefinition(request.getFormKey(), request.getFormName()));
+        ensureRequestUserMatchesLogin(request.userId);
+        return ResponseEntity.ok(formService.createFormDefinition(request.formKey, request.formName));
     }
 
     @PostMapping("/versions")
     public ResponseEntity<FormVersion> createVersion(@RequestBody CreateFormVersionRequest request) {
-        ensureRequestUserMatchesLogin(request.getUserId());
-        return ResponseEntity.ok(formService.createFormVersion(request.getFormId(), request.getSchemaJson()));
+        ensureRequestUserMatchesLogin(request.userId);
+        return ResponseEntity.ok(formService.createFormVersion(request.formId, request.schemaJson));
     }
 
     @PostMapping("/fields")
     public ResponseEntity<ActionResponse> replaceFields(@RequestBody ReplaceFieldsRequest request) {
-        ensureRequestUserMatchesLogin(request.getUserId());
-        formService.replaceFields(request.getFormVersionId(), request.getFields());
+        ensureRequestUserMatchesLogin(request.userId);
+        formService.replaceFields(request.formVersionId, request.fields);
         return ResponseEntity.ok(ActionResponse.ok("Fields updated"));
     }
 
@@ -50,16 +51,26 @@ public class FormController {
         return ResponseEntity.ok(formService.getFields(formVersionId));
     }
 
+    @GetMapping("/definitions")
+    public ResponseEntity<List<FormDefinition>> listDefinitions() {
+        return ResponseEntity.ok(formService.listDefinitions());
+    }
+
+    @GetMapping("/versions")
+    public ResponseEntity<List<FormVersion>> listVersions(@RequestParam Long formId) {
+        return ResponseEntity.ok(formService.listVersions(formId));
+    }
+
     @PostMapping("/instances")
     public ResponseEntity<FormInstance> createInstance(@RequestBody CreateFormInstanceRequest request) {
-        ensureRequestUserMatchesLogin(request.getUserId());
-        return ResponseEntity.ok(formService.createFormInstance(request.getFormVersionId(), request.getBusinessKey(), request.getData()));
+        ensureRequestUserMatchesLogin(request.userId);
+        return ResponseEntity.ok(formService.createFormInstance(request.formVersionId, request.businessKey, request.data));
     }
 
     @PostMapping("/validate")
     public ResponseEntity<ActionResponse> validateInstance(@RequestBody ValidateFormInstanceRequest request) {
-        ensureRequestUserMatchesLogin(request.getUserId());
-        formService.validateFormInstance(request.getFormVersionId(), request.getData());
+        ensureRequestUserMatchesLogin(request.userId);
+        formService.validateFormInstance(request.formVersionId, request.data);
         return ResponseEntity.ok(ActionResponse.ok("Validation passed"));
     }
 
@@ -74,51 +85,45 @@ public class FormController {
         throw new ForbiddenOperationException("userId must match current login user");
     }
 
-    @Data
     public static class CreateFormDefinitionRequest {
-        private Long userId;
-        private String formKey;
-        private String formName;
+        public Long userId;
+        public String formKey;
+        public String formName;
     }
 
-    @Data
     public static class CreateFormVersionRequest {
-        private Long userId;
-        private Long formId;
-        private String schemaJson;
+        public Long userId;
+        public Long formId;
+        public String schemaJson;
     }
 
-    @Data
     public static class CreateFormInstanceRequest {
-        private Long userId;
-        private Long formVersionId;
-        private String businessKey;
-        private Map<String, Object> data;
+        public Long userId;
+        public Long formVersionId;
+        public String businessKey;
+        public Map<String, Object> data;
     }
 
-    @Data
     public static class ValidateFormInstanceRequest {
-        private Long userId;
-        private Long formVersionId;
-        private Map<String, Object> data;
+        public Long userId;
+        public Long formVersionId;
+        public Map<String, Object> data;
     }
 
-    @Data
     public static class ReplaceFieldsRequest {
-        private Long userId;
-        private Long formVersionId;
-        private List<FormService.FormFieldRequest> fields;
+        public Long userId;
+        public Long formVersionId;
+        public List<FormService.FormFieldRequest> fields;
     }
 
-    @Data
     public static class ActionResponse {
-        private boolean success;
-        private String message;
+        public boolean success;
+        public String message;
 
         public static ActionResponse ok(String message) {
             ActionResponse response = new ActionResponse();
-            response.setSuccess(true);
-            response.setMessage(message);
+            response.success = true;
+            response.message = message;
             return response;
         }
     }

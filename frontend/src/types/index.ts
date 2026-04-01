@@ -32,9 +32,135 @@ export interface UserDirectoryItem {
 export interface PageResult<T> {
   content: T[];
   total: number;
+  totalElements?: number;
   page: number;
   size: number;
   totalPages: number;
+}
+
+export interface WorkflowDefinitionSummary {
+  id: number;
+  processKey: string;
+  processName: string;
+  category?: string | null;
+  description?: string | null;
+  status: string;
+  currentVersionId?: number | null;
+  currentVersionNo?: number | null;
+  latestVersionNo: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowDefinitionPayload {
+  processKey: string;
+  processName: string;
+  category?: string | null;
+  description?: string | null;
+}
+
+export interface FormDefinitionSummary {
+  id: number;
+  formName: string;
+  formKey: string;
+  status: number;
+}
+
+export interface FormVersionSummary {
+  id: number;
+  formId: number;
+  version: number;
+  schemaJson: string;
+}
+
+export interface WorkflowDefinitionUpdatePayload {
+  processName: string;
+  category?: string | null;
+  description?: string | null;
+}
+
+export interface WorkflowVersionSummary {
+  id: number;
+  definitionId: number;
+  versionNo: number;
+  versionLabel?: string | null;
+  status: string;
+  bpmnXml: string;
+  bpmnChecksum?: string | null;
+  flowableDeploymentId?: string | null;
+  flowableProcessDefinitionId?: string | null;
+  formKey?: string | null;
+  formVersionId?: number | null;
+  changeSummary?: string | null;
+  publishedBy?: number | null;
+  publishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowVersionCreatePayload {
+  copyFromVersionId?: number | null;
+  versionLabel?: string | null;
+  changeSummary?: string | null;
+}
+
+export interface WorkflowVersionUpdatePayload {
+  versionLabel?: string | null;
+  bpmnXml: string;
+  formKey?: string | null;
+  formVersionId: number;
+  changeSummary?: string | null;
+}
+
+export interface WorkflowNodeConfigItem {
+  id?: number | null;
+  definitionVersionId?: number | null;
+  nodeId: string;
+  nodeName: string;
+  nodeType: string;
+  approvalType?: string | null;
+  assigneeStrategy?: string | null;
+  assigneeConfig?: Record<string, unknown> | null;
+  commentRequired: boolean;
+  allowDelegate: boolean;
+  allowReassign: boolean;
+  allowReturnPrevious: boolean;
+  allowReturnApplicant: boolean;
+  aiEnabled: boolean;
+  timeoutRule?: Record<string, unknown> | null;
+  extraConfig?: Record<string, unknown> | null;
+  sortOrder: number;
+}
+
+export interface WorkflowPublishLogItem {
+  id: number;
+  definitionId: number;
+  definitionVersionId: number;
+  action: string;
+  result: string;
+  message?: string | null;
+  flowableDeploymentId?: string | null;
+  flowableProcessDefinitionId?: string | null;
+  operatorId: number;
+  operatedAt: string;
+}
+
+export interface WorkflowVersionUsageItem {
+  requestId: number;
+  businessKey: string;
+  processInstanceId?: string | null;
+  title: string;
+  status: number;
+  submitTime?: string | null;
+  finishTime?: string | null;
+}
+
+export interface WorkflowVersionUsage {
+  definitionVersionId: number;
+  totalCount: number;
+  runningCount: number;
+  finishedCount: number;
+  recentRequests: WorkflowVersionUsageItem[];
 }
 
 export interface AdminDeptOption {

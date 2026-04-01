@@ -28,6 +28,7 @@ public class WorkflowDefinitionVersionService {
     private final WorkflowDefinitionVersionRepository workflowDefinitionVersionRepository;
     private final WorkflowNodeConfigRepository workflowNodeConfigRepository;
     private final FormVersionRepository formVersionRepository;
+    private final com.flowablecollab.approval_system.service.FormService formService;
     private final WorkflowDefinitionService workflowDefinitionService;
 
     @Transactional
@@ -102,12 +103,17 @@ public class WorkflowDefinitionVersionService {
         if (request.getFormVersionId() == null) {
             throw new IllegalArgumentException("formVersionId is required");
         }
-        FormVersion formVersion = formVersionRepository.findById(request.getFormVersionId())
-                .orElseThrow(() -> new IllegalArgumentException("form version not found"));
+        com.flowablecollab.approval_system.service.FormService.BoundFormVersion boundForm =
+                formService.resolveBoundFormVersion(request.getFormVersionId());
+        FormVersion formVersion = boundForm.getFormVersion();
         version.setVersionLabel(request.getVersionLabel());
         version.setBpmnXml(request.getBpmnXml());
         version.setBpmnChecksum(calculateChecksum(request.getBpmnXml()));
-        version.setFormKey(request.getFormKey());
+        String formKey = request.getFormKey();
+        if (formKey != null && !formKey.isBlank() && !formKey.equals(boundForm.getFormDefinition().getFormKey())) {
+            throw new IllegalArgumentException("formKey does not match selected formVersionId");
+        }
+        version.setFormKey(boundForm.getFormDefinition().getFormKey());
         version.setFormVersionId(formVersion.getId());
         version.setChangeSummary(request.getChangeSummary());
         version.setUpdatedBy(operatorId);

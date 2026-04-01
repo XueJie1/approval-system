@@ -61,11 +61,33 @@ public class WorkflowNodeConfigService {
         WorkflowDefinitionVersion version = workflowDefinitionVersionService.getVersionEntity(versionId);
         workflowDefinitionVersionService.ensureDraft(version);
         List<WorkflowManageDtos.BpmnNodeSnapshot> snapshots = parseBpmnNodes(version.getBpmnXml());
+        replaceNodeConfigs(versionId, request.getNodes(), snapshots);
+        return listNodeConfigs(versionId);
+    }
+
+    @Transactional
+    public void bootstrapNodeConfigs(Long versionId, String bpmnXml) {
+        List<WorkflowManageDtos.BpmnNodeSnapshot> snapshots = parseBpmnNodes(bpmnXml);
+        List<WorkflowManageDtos.WorkflowNodeConfigItemRequest> nodes = snapshots.stream().map(snapshot -> {
+            WorkflowManageDtos.WorkflowNodeConfigItemRequest item = new WorkflowManageDtos.WorkflowNodeConfigItemRequest();
+            item.setNodeId(snapshot.getNodeId());
+            item.setNodeName(snapshot.getNodeName());
+            item.setNodeType(snapshot.getNodeType());
+            item.setSortOrder(snapshot.getSortOrder());
+            return item;
+        }).toList();
+        replaceNodeConfigs(versionId, nodes, snapshots);
+    }
+
+    private void replaceNodeConfigs(
+            Long versionId,
+            List<WorkflowManageDtos.WorkflowNodeConfigItemRequest> requestNodes,
+            List<WorkflowManageDtos.BpmnNodeSnapshot> snapshots) {
         Map<String, WorkflowManageDtos.BpmnNodeSnapshot> snapshotMap = new LinkedHashMap<>();
         for (WorkflowManageDtos.BpmnNodeSnapshot snapshot : snapshots) {
             snapshotMap.put(snapshot.getNodeId(), snapshot);
         }
-        List<WorkflowManageDtos.WorkflowNodeConfigItemRequest> nodes = request.getNodes() == null ? List.of() : request.getNodes();
+        List<WorkflowManageDtos.WorkflowNodeConfigItemRequest> nodes = requestNodes == null ? List.of() : requestNodes;
         for (WorkflowManageDtos.WorkflowNodeConfigItemRequest item : nodes) {
             if (!snapshotMap.containsKey(item.getNodeId())) {
                 throw new IllegalArgumentException("nodeId not found in BPMN: " + item.getNodeId());
@@ -93,7 +115,6 @@ public class WorkflowNodeConfigService {
             entity.setSortOrder(item.getSortOrder() == null ? snapshot.getSortOrder() : item.getSortOrder());
             workflowNodeConfigRepository.save(entity);
         }
-        return listNodeConfigs(versionId);
     }
 
     @Transactional(readOnly = true)
