@@ -5,31 +5,22 @@
         <h2 class="page-title">流程管理</h2>
         <p class="page-subtitle">管理流程定义、版本发布、节点元数据与使用追溯</p>
       </div>
-      <div class="heading-actions">
-        <el-button :loading="globalLoading" @click="refreshAll">刷新数据</el-button>
-      </div>
     </div>
 
     <el-row :gutter="14" class="summary-grid">
-      <el-col :xs="24" :sm="12" :lg="6">
+      <el-col :xs="24" :sm="12" :lg="8">
         <div class="metric page-card">
           <div class="metric-label">流程总数</div>
           <div class="metric-value">{{ definitionPage.total }}</div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <div class="metric page-card">
-          <div class="metric-label">当前选中</div>
-          <div class="metric-value">{{ selectedDefinition ? 1 : 0 }}</div>
-        </div>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
+      <el-col :xs="24" :sm="12" :lg="8">
         <div class="metric page-card">
           <div class="metric-label">已发布版本</div>
           <div class="metric-value">{{ publishedCount }}</div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
+      <el-col :xs="24" :sm="12" :lg="8">
         <div class="metric page-card">
           <div class="metric-label">草稿版本</div>
           <div class="metric-value">{{ draftCount }}</div>
@@ -41,13 +32,20 @@
       <section class="left-column stack">
         <div class="panel page-card">
           <div class="toolbar wrap">
-            <el-input v-model="query.keyword" clearable placeholder="按流程标识或名称搜索" @keyup.enter="searchDefinitions" />
-            <el-input v-model="query.category" clearable placeholder="分类" @keyup.enter="searchDefinitions" />
-            <el-select v-model="query.status" clearable placeholder="状态" style="width: 150px">
+            <el-input v-model="query.keyword" clearable placeholder="按流程标识或名称搜索" @input="debounceSearch">
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-input v-model="query.category" clearable placeholder="分类" @input="debounceSearch" />
+            <el-select v-model="query.status" clearable placeholder="状态" style="width: 150px" @change="debounceSearch">
               <el-option v-for="item in definitionStatuses" :key="item" :label="item" :value="item" />
             </el-select>
-            <el-button type="primary" @click="searchDefinitions">查询</el-button>
             <el-button @click="resetQuery">重置</el-button>
+            <el-button type="primary" @click="openCreateDefinitionDialog">
+              <el-icon><Plus /></el-icon>
+              新建流程
+            </el-button>
           </div>
 
           <el-table
@@ -62,6 +60,7 @@
           >
             <el-table-column prop="processName" label="流程名称" min-width="180" />
             <el-table-column prop="processKey" label="标识" min-width="160" />
+            <el-table-column prop="category" label="分类" min-width="100" show-overflow-tooltip />
             <el-table-column label="状态" width="120">
               <template #default="{ row }">
                 <el-tag :type="definitionStatusType(row.status)">{{ row.status }}</el-tag>
@@ -87,28 +86,6 @@
             />
           </div>
         </div>
-
-        <div class="panel page-card">
-          <div class="panel-title">新建流程定义</div>
-          <el-form ref="createDefinitionFormRef" :model="createDefinitionForm" :rules="definitionRules" label-position="top" class="form-grid">
-            <el-form-item label="流程标识" prop="processKey">
-              <el-input v-model="createDefinitionForm.processKey" maxlength="64" show-word-limit placeholder="例如 approvalTravel" />
-            </el-form-item>
-            <el-form-item label="流程名称" prop="processName">
-              <el-input v-model="createDefinitionForm.processName" maxlength="128" show-word-limit placeholder="例如 差旅申请流程" />
-            </el-form-item>
-            <el-form-item label="分类">
-              <el-input v-model="createDefinitionForm.category" maxlength="64" show-word-limit placeholder="例如 OA / 财务" />
-            </el-form-item>
-            <el-form-item label="描述">
-              <el-input v-model="createDefinitionForm.description" type="textarea" :rows="3" maxlength="512" show-word-limit />
-            </el-form-item>
-          </el-form>
-          <div class="action-row">
-            <el-button type="primary" :loading="createDefinitionLoading" @click="submitCreateDefinition">创建流程</el-button>
-            <el-button @click="resetCreateDefinitionForm">清空</el-button>
-          </div>
-        </div>
       </section>
 
       <section class="right-column stack">
@@ -116,12 +93,25 @@
           <div class="panel-head">
             <div>
               <div class="panel-title">{{ selectedDefinition.processName }}</div>
-              <div class="panel-subtitle">{{ selectedDefinition.processKey }} · 当前状态 {{ selectedDefinition.status }}</div>
+              <div class="panel-subtitle">
+                <el-tag :type="definitionStatusType(selectedDefinition.status)" size="small">{{ selectedDefinition.status }}</el-tag>
+                <span class="ml-8">{{ selectedDefinition.processKey }}</span>
+                <span v-if="selectedDefinition.category" class="ml-8">· 分类：{{ selectedDefinition.category }}</span>
+              </div>
             </div>
             <div class="toolbar wrap compact">
-              <el-button @click="openEditDefinition">编辑基础信息</el-button>
-              <el-button type="warning" plain @click="changeDefinitionState('inactivate')">停用定义</el-button>
-              <el-button type="danger" plain @click="changeDefinitionState('archive')">归档定义</el-button>
+              <el-button @click="openEditDefinition">编辑</el-button>
+              <el-dropdown trigger="click" @command="handleDefinitionAction">
+                <el-button type="danger" plain>
+                  更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="inactivate" :disabled="selectedDefinition.status === 'INACTIVE' || selectedDefinition.status === 'ARCHIVED'">停用</el-dropdown-item>
+                    <el-dropdown-item command="archive" :disabled="selectedDefinition.status === 'ARCHIVED'">归档</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
 
@@ -136,7 +126,7 @@
           </el-descriptions>
         </div>
 
-        <el-empty v-else description="请选择左侧流程定义" class="page-card empty-state" />
+        <el-empty v-else description="请从左侧列表选择一个流程定义，查看或编辑详细信息" class="page-card empty-state" />
 
         <template v-if="selectedDefinition">
           <el-tabs v-model="activeTab" class="tabs">
@@ -144,14 +134,26 @@
               <div class="stack">
                 <div class="panel page-card">
                   <div class="toolbar wrap">
-                    <el-button type="primary" @click="openCreateVersion">新建草稿版本</el-button>
-                    <el-button :disabled="!selectedVersion" @click="loadVersionRelatedData">刷新版本数据</el-button>
-                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'DRAFT'" type="success" plain @click="saveVersionDraft">保存草稿</el-button>
-                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'DRAFT'" type="success" @click="changeVersionState('publish')">发布</el-button>
-                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'PUBLISHED'" type="warning" plain @click="changeVersionState('inactivate')">停用</el-button>
-                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'INACTIVE'" type="warning" @click="changeVersionState('activate')">启用</el-button>
-                    <el-button :disabled="!selectedVersion || !['PUBLISHED', 'INACTIVE'].includes(selectedVersion.status)" type="danger" plain @click="changeVersionState('retire')">退休</el-button>
-                    <el-button :disabled="!selectedVersion || selectedVersion.status !== 'DRAFT'" type="danger" plain @click="deleteSelectedVersion">删除草稿</el-button>
+                    <el-button type="primary" @click="openCreateVersion">
+                      <el-icon><Plus /></el-icon>
+                      新建版本
+                    </el-button>
+                    <el-button :disabled="!selectedVersion" @click="loadVersionRelatedData">刷新</el-button>
+                    <el-dropdown trigger="click" @command="handleVersionAction">
+                      <el-button :disabled="!selectedVersion">
+                        版本操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                      </el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="saveDraft" :disabled="selectedVersion?.status !== 'DRAFT'">保存草稿</el-dropdown-item>
+                          <el-dropdown-item command="publish" :disabled="selectedVersion?.status !== 'DRAFT'">发布</el-dropdown-item>
+                          <el-dropdown-item command="inactivate" :disabled="selectedVersion?.status !== 'PUBLISHED'">停用</el-dropdown-item>
+                          <el-dropdown-item command="activate" :disabled="selectedVersion?.status !== 'INACTIVE'">启用</el-dropdown-item>
+                          <el-dropdown-item command="retire" :disabled="!selectedVersion || !['PUBLISHED', 'INACTIVE'].includes(selectedVersion.status)">退休</el-dropdown-item>
+                          <el-dropdown-item command="delete" divided :disabled="selectedVersion?.status !== 'DRAFT'">删除草稿</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                   </div>
 
                   <el-table
@@ -265,60 +267,56 @@
                 <div class="toolbar wrap">
                   <el-button :disabled="!selectedVersion" @click="loadNodes">刷新节点</el-button>
                   <el-button :disabled="!selectedVersion || !isDraftVersion" type="primary" @click="saveNodes">保存节点配置</el-button>
+                  <el-tag v-if="selectedVersion && !isDraftVersion" type="warning" size="small">仅草稿版本可编辑</el-tag>
                 </div>
 
-                <el-table v-loading="nodeLoading" :data="nodeConfigs" border stripe row-key="nodeId">
-                  <el-table-column prop="nodeId" label="节点 ID" min-width="150" />
-                  <el-table-column prop="nodeName" label="节点名称" min-width="160">
+                <el-empty v-if="!selectedVersion" description="请先选择一个版本" />
+                <el-table v-else v-loading="nodeLoading" :data="nodeConfigs" border stripe row-key="nodeId" :expand-row-keys="expandedNodeRows" @expand-change="handleNodeExpand">
+                  <el-table-column type="expand">
                     <template #default="{ row }">
-                      <el-input v-model="row.nodeName" :disabled="!isDraftVersion" />
+                      <div class="node-expand-content">
+                        <el-descriptions :column="2" border size="small">
+                          <el-descriptions-item label="节点 ID">{{ row.nodeId }}</el-descriptions-item>
+                          <el-descriptions-item label="节点类型">{{ row.nodeType }}</el-descriptions-item>
+                          <el-descriptions-item label="节点名称">
+                            <el-input v-model="row.nodeName" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                          <el-descriptions-item label="审批类型">
+                            <el-select v-model="row.approvalType" :disabled="!isDraftVersion" clearable size="small" style="width: 100%">
+                              <el-option v-for="item in approvalTypes" :key="item" :label="item" :value="item" />
+                            </el-select>
+                          </el-descriptions-item>
+                          <el-descriptions-item label="审批人策略">
+                            <el-select v-model="row.assigneeStrategy" :disabled="!isDraftVersion" clearable size="small" style="width: 100%">
+                              <el-option v-for="item in assigneeStrategies" :key="item" :label="item" :value="item" />
+                            </el-select>
+                          </el-descriptions-item>
+                          <el-descriptions-item label="意见必填">
+                            <el-switch v-model="row.commentRequired" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                          <el-descriptions-item label="允许委派">
+                            <el-switch v-model="row.allowDelegate" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                          <el-descriptions-item label="允许转办">
+                            <el-switch v-model="row.allowReassign" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                          <el-descriptions-item label="允许退回上一节点">
+                            <el-switch v-model="row.allowReturnPrevious" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                          <el-descriptions-item label="允许退回申请人">
+                            <el-switch v-model="row.allowReturnApplicant" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                          <el-descriptions-item label="AI 建议">
+                            <el-switch v-model="row.aiEnabled" :disabled="!isDraftVersion" size="small" />
+                          </el-descriptions-item>
+                        </el-descriptions>
+                      </div>
                     </template>
                   </el-table-column>
+                  <el-table-column label="序号" type="index" width="60" />
+                  <el-table-column prop="nodeId" label="节点 ID" min-width="150" show-overflow-tooltip />
+                  <el-table-column prop="nodeName" label="节点名称" min-width="160" show-overflow-tooltip />
                   <el-table-column prop="nodeType" label="类型" width="120" />
-                  <el-table-column label="审批类型" min-width="140">
-                    <template #default="{ row }">
-                      <el-select v-model="row.approvalType" :disabled="!isDraftVersion" clearable>
-                        <el-option v-for="item in approvalTypes" :key="item" :label="item" :value="item" />
-                      </el-select>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="审批人策略" min-width="150">
-                    <template #default="{ row }">
-                      <el-select v-model="row.assigneeStrategy" :disabled="!isDraftVersion" clearable>
-                        <el-option v-for="item in assigneeStrategies" :key="item" :label="item" :value="item" />
-                      </el-select>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="意见必填" width="110">
-                    <template #default="{ row }">
-                      <el-switch v-model="row.commentRequired" :disabled="!isDraftVersion" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="委派" width="90">
-                    <template #default="{ row }">
-                      <el-switch v-model="row.allowDelegate" :disabled="!isDraftVersion" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="转办" width="90">
-                    <template #default="{ row }">
-                      <el-switch v-model="row.allowReassign" :disabled="!isDraftVersion" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="退回上一节点" width="120">
-                    <template #default="{ row }">
-                      <el-switch v-model="row.allowReturnPrevious" :disabled="!isDraftVersion" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="退回申请人" width="120">
-                    <template #default="{ row }">
-                      <el-switch v-model="row.allowReturnApplicant" :disabled="!isDraftVersion" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="AI 建议" width="90">
-                    <template #default="{ row }">
-                      <el-switch v-model="row.aiEnabled" :disabled="!isDraftVersion" />
-                    </template>
-                  </el-table-column>
                 </el-table>
               </div>
             </el-tab-pane>
@@ -328,7 +326,9 @@
                 <div class="toolbar wrap">
                   <el-button :disabled="!selectedVersion" @click="loadLogs">刷新日志</el-button>
                 </div>
-                <el-table v-loading="logLoading" :data="publishLogs" border stripe>
+                <el-empty v-if="!selectedVersion" description="请先选择一个版本" />
+                <el-empty v-else-if="!logLoading && publishLogs.length === 0" description="暂无发布日志" />
+                <el-table v-else v-loading="logLoading" :data="publishLogs" border stripe>
                   <el-table-column prop="action" label="动作" width="120" />
                   <el-table-column prop="result" label="结果" width="100" />
                   <el-table-column prop="message" label="说明" min-width="220" />
@@ -361,7 +361,9 @@
                   <div class="toolbar wrap">
                     <el-button :disabled="!selectedVersion" @click="loadUsage">刷新使用情况</el-button>
                   </div>
-                  <el-table v-loading="usageLoading" :data="versionUsage?.recentRequests || []" border stripe>
+                  <el-empty v-if="!selectedVersion" description="请先选择一个版本" />
+                  <el-empty v-else-if="!usageLoading && (!versionUsage?.recentRequests || versionUsage.recentRequests.length === 0)" description="暂无使用记录" />
+                  <el-table v-else v-loading="usageLoading" :data="versionUsage?.recentRequests || []" border stripe>
                     <el-table-column prop="requestId" label="申请 ID" width="100" />
                     <el-table-column prop="businessKey" label="业务键" min-width="180" />
                     <el-table-column prop="title" label="标题" min-width="180" />
@@ -380,6 +382,27 @@
         </template>
       </section>
     </div>
+
+    <el-dialog v-model="createDefinitionDialogVisible" title="新建流程定义" width="560px">
+      <el-form ref="createDefinitionFormRef" :model="createDefinitionForm" :rules="definitionRules" label-position="top" class="form-grid">
+        <el-form-item label="流程标识" prop="processKey">
+          <el-input v-model="createDefinitionForm.processKey" maxlength="64" show-word-limit placeholder="例如 approvalTravel" />
+        </el-form-item>
+        <el-form-item label="流程名称" prop="processName">
+          <el-input v-model="createDefinitionForm.processName" maxlength="128" show-word-limit placeholder="例如 差旅申请流程" />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-input v-model="createDefinitionForm.category" maxlength="64" show-word-limit placeholder="例如 OA / 财务" />
+        </el-form-item>
+        <el-form-item label="描述" class="full-span">
+          <el-input v-model="createDefinitionForm.description" type="textarea" :rows="3" maxlength="512" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDefinitionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createDefinitionLoading" @click="submitCreateDefinition">创建</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="editDefinitionDialogVisible" title="编辑流程定义" width="720px">
       <el-form ref="editDefinitionFormRef" :model="editDefinitionForm" :rules="{ processName: [{ required: true, message: '请输入流程名称', trigger: 'blur' }] }" label-position="top" class="form-grid">
@@ -424,6 +447,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus";
+import { Search, Plus, ArrowDown } from "@element-plus/icons-vue";
 import type {
   PageResult,
   WorkflowDefinitionPayload,
@@ -477,7 +501,11 @@ const editDefinitionFormRef = ref<FormInstance>();
 const versionFormRef = ref<FormInstance>();
 
 const editDefinitionDialogVisible = ref(false);
+const createDefinitionDialogVisible = ref(false);
 const createVersionDialogVisible = ref(false);
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+const expandedNodeRows = ref<string[]>([]);
 
 const query = reactive({
   keyword: "",
@@ -639,6 +667,18 @@ async function searchDefinitions() {
   await loadDefinitions();
 }
 
+function debounceSearch() {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    searchDefinitions();
+  }, 400);
+}
+
+function openCreateDefinitionDialog() {
+  resetCreateDefinitionForm();
+  createDefinitionDialogVisible.value = true;
+}
+
 async function resetQuery() {
   query.keyword = "";
   query.category = "";
@@ -659,7 +699,7 @@ async function changeDefinitionPageSize(size: number) {
 }
 
 async function handleDefinitionSelect(row: WorkflowDefinitionSummary | null) {
-  if (!row) {
+  if (!row || selectedDefinition.value?.id === row.id) {
     return;
   }
   selectedDefinition.value = row;
@@ -848,6 +888,24 @@ async function changeDefinitionState(action: "inactivate" | "archive") {
   await refreshAll();
 }
 
+async function handleDefinitionAction(command: string) {
+  await changeDefinitionState(command as "inactivate" | "archive");
+}
+
+async function handleVersionAction(command: string) {
+  if (command === "saveDraft") {
+    await saveVersionDraft();
+  } else if (command === "delete") {
+    await deleteSelectedVersion();
+  } else {
+    await changeVersionState(command as "publish" | "inactivate" | "activate" | "retire");
+  }
+}
+
+function handleNodeExpand(_row: WorkflowNodeConfigItem, expandedRows: WorkflowNodeConfigItem[]) {
+  expandedNodeRows.value = expandedRows.map((r) => r.nodeId);
+}
+
 function openCreateVersion() {
   createVersionForm.copyFromVersionId = selectedVersion.value?.id;
   createVersionForm.versionLabel = "";
@@ -875,13 +933,6 @@ const submitCreateVersion = async () => {
     createVersionLoading.value = false;
   }
 };
-
-const actionHandlers = {
-  submitEditDefinition,
-  submitCreateVersion
-};
-
-void actionHandlers;
 
 async function saveVersionDraft() {
   if (!selectedVersion.value || !isDraftVersion.value) {
@@ -1059,12 +1110,6 @@ function formatDateTime(value?: string | null) {
   gap: 12px;
 }
 
-.heading-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .summary-grid,
 .usage-grid {
   display: grid;
@@ -1090,7 +1135,7 @@ function formatDateTime(value?: string | null) {
 
 .workflow-shell {
   display: grid;
-  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -1147,12 +1192,6 @@ function formatDateTime(value?: string | null) {
   margin-top: 16px;
 }
 
-.action-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .empty-state {
   padding: 42px 24px;
 }
@@ -1186,6 +1225,15 @@ function formatDateTime(value?: string | null) {
 
 .two-columns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ml-8 {
+  margin-left: 8px;
+}
+
+.node-expand-content {
+  padding: 16px 20px;
+  background: #f8fafc;
 }
 
 @media (max-width: 1180px) {
