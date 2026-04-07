@@ -26,6 +26,7 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
         SysDept finance = rbacService.createDept(deptCode, "Finance", null);
         SysRole employeeRole = ensureRole("EMPLOYEE");
         SysPost reviewerPost = rbacService.createPost(unique("FIN_REVIEW"), "Finance Reviewer");
+        SysUser manager = createUser(unique("manager"), "Password@123", finance.getId(), "EMPLOYEE");
 
         String response = mockMvc.perform(post("/api/admin/users")
                         .header("Authorization", authorization(adminToken))
@@ -35,13 +36,15 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
                                   "username": "%s",
                                   "password": "Password@123",
                                   "deptId": %d,
+                                  "managerUserId": %d,
                                   "roleIds": [%d],
                                   "postIds": [%d],
                                   "status": 1
                                 }
-                                """.formatted(unique("employee"), finance.getId(), employeeRole.getId(), reviewerPost.getId())))
+                                """.formatted(unique("employee"), finance.getId(), manager.getId(), employeeRole.getId(), reviewerPost.getId())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.department.deptCode").value(deptCode))
+                .andExpect(jsonPath("$.managerUserId").value(manager.getId()))
                 .andExpect(jsonPath("$.roles[0].roleCode").value("EMPLOYEE"))
                 .andExpect(jsonPath("$.posts[0].postCode").value(reviewerPost.getPostCode()))
                 .andReturn()
@@ -238,6 +241,18 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
         mockMvc.perform(get("/api/admin/users")
                         .header("Authorization", authorization(accessToken(employee, "EMPLOYEE"))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void options_includeUsersForManagerSelection() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
+        String adminToken = accessToken(admin, "ADMIN");
+        SysUser manager = createUser(unique("leader"), "Password@123", null, "EMPLOYEE");
+
+        mockMvc.perform(get("/api/admin/users/options")
+                        .header("Authorization", authorization(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.users[?(@.id==%d)].username".formatted(manager.getId())).value(org.hamcrest.Matchers.hasItem(manager.getUsername())));
     }
 
     private byte[] buildWorkbook(String[] headers, String[] values) throws Exception {

@@ -82,7 +82,10 @@ public class AdminUserService {
         List<PostOption> posts = sysPostRepository.findAllByOrderByPostCodeAsc().stream()
                 .map(post -> new PostOption(post.getId(), post.getPostCode(), post.getPostName()))
                 .toList();
-        return new UserOptions(departments, roles, posts);
+        List<UserOption> users = sysUserRepository.findAllByOrderByUsernameAsc().stream()
+                .map(user -> new UserOption(user.getId(), user.getUsername()))
+                .toList();
+        return new UserOptions(departments, roles, posts, users);
     }
 
     public PageResult<UserListItem> listUsers(String keyword, Integer status, Long deptId, Long roleId, Integer page, Integer size) {
@@ -104,7 +107,10 @@ public class AdminUserService {
     public UserDetail createUser(CreateUserCommand command) {
         validateRoleIds(command.roleIds());
         validatePostIds(command.postIds());
+        validateManagerUserId(command.managerUserId(), null);
         SysUser user = rbacService.createUser(command.username(), command.password(), command.deptId(), command.status());
+        user.setManagerUserId(command.managerUserId());
+        sysUserRepository.save(user);
         replaceRoles(user.getId(), command.roleIds());
         replacePosts(user.getId(), command.postIds());
         return toUserDetail(getRequiredUser(user.getId()));
@@ -118,7 +124,9 @@ public class AdminUserService {
         }
         validateRoleIds(command.roleIds());
         validatePostIds(command.postIds());
+        validateManagerUserId(command.managerUserId(), userId);
         user.setDeptId(command.deptId());
+        user.setManagerUserId(command.managerUserId());
         user.setStatus(command.status());
         sysUserRepository.save(user);
         replaceRoles(userId, command.roleIds());
@@ -307,6 +315,7 @@ public class AdminUserService {
                     row.username(),
                     row.password(),
                     resolveDeptId(row.deptCode()),
+                    null,
                     resolveRoleIds(row.roleCodes()),
                     resolvePostIds(row.postCodes()),
                     row.status()
@@ -645,6 +654,7 @@ public class AdminUserService {
                 user.getId(),
                 user.getUsername(),
                 dept,
+                user.getManagerUserId(),
                 roles,
                 posts,
                 user.getStatus(),
@@ -659,6 +669,7 @@ public class AdminUserService {
                 user.getId(),
                 user.getUsername(),
                 loadDept(user.getDeptId()),
+                user.getManagerUserId(),
                 loadRoles(user.getId()),
                 loadPosts(user.getId()),
                 user.getStatus(),
@@ -709,11 +720,24 @@ public class AdminUserService {
                 .orElseThrow(() -> new IllegalArgumentException("user not found: " + userId));
     }
 
+    private void validateManagerUserId(Long managerUserId, Long userId) {
+        if (managerUserId == null) {
+            return;
+        }
+        if (userId != null && userId.equals(managerUserId)) {
+            throw new IllegalArgumentException("managerUserId cannot be the same as userId");
+        }
+        if (!sysUserRepository.existsById(managerUserId)) {
+            throw new IllegalArgumentException("managerUserId does not exist: " + managerUserId);
+        }
+    }
+
     private Map<String, Object> summarizeUser(SysUser user) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("userId", user.getId());
         snapshot.put("username", user.getUsername());
         snapshot.put("dept", loadDept(user.getDeptId()));
+        snapshot.put("managerUserId", user.getManagerUserId());
         snapshot.put("roles", loadRoles(user.getId()).stream().map(RoleOption::roleCode).toList());
         snapshot.put("posts", loadPosts(user.getId()).stream().map(PostOption::postCode).toList());
         snapshot.put("status", user.getStatus());
@@ -790,6 +814,7 @@ public class AdminUserService {
             String username,
             String password,
             Long deptId,
+            Long managerUserId,
             List<Long> roleIds,
             List<Long> postIds,
             Integer status
@@ -798,13 +823,14 @@ public class AdminUserService {
 
     public record UpdateUserCommand(
             Long deptId,
+            Long managerUserId,
             List<Long> roleIds,
             List<Long> postIds,
             Integer status
     ) {
     }
 
-    public record UserOptions(List<DeptOption> departments, List<RoleOption> roles, List<PostOption> posts) {
+    public record UserOptions(List<DeptOption> departments, List<RoleOption> roles, List<PostOption> posts, List<UserOption> users) {
     }
 
     public record PageResult<T>(
@@ -825,10 +851,14 @@ public class AdminUserService {
     public record PostOption(Long id, String postCode, String postName) {
     }
 
+    public record UserOption(Long id, String username) {
+    }
+
     public record UserListItem(
             Long userId,
             String username,
             DeptOption department,
+            Long managerUserId,
             List<RoleOption> roles,
             List<PostOption> posts,
             Integer status,
@@ -842,6 +872,7 @@ public class AdminUserService {
             Long userId,
             String username,
             DeptOption department,
+            Long managerUserId,
             List<RoleOption> roles,
             List<PostOption> posts,
             Integer status,
@@ -855,6 +886,7 @@ public class AdminUserService {
             user.setId(userId);
             user.setUsername(username);
             user.setDeptId(department == null ? null : department.id());
+            user.setManagerUserId(managerUserId);
             user.setStatus(status);
             user.setTwoFactorEnabled(twoFactorEnabled ? 1 : 0);
             user.setLastLoginAt(lastLoginAt);

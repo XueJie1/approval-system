@@ -24,6 +24,11 @@ export async function listWorkflowDefinitions(params: {
   return normalizePageResult(data);
 }
 
+export async function listLaunchableWorkflowDefinitions() {
+  const { data } = await http.get<WorkflowDefinitionSummary[]>('/admin/workflow-definitions/launchable');
+  return data;
+}
+
 export async function createWorkflowDefinition(payload: WorkflowDefinitionPayload) {
   const { data } = await http.post<WorkflowDefinitionSummary>("/admin/workflow-definitions", payload);
   return data;

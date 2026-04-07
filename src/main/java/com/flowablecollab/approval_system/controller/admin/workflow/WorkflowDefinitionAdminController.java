@@ -43,6 +43,11 @@ public class WorkflowDefinitionAdminController {
         return ResponseEntity.ok(workflowDefinitionService.listDefinitions(request));
     }
 
+    @GetMapping("/launchable")
+    public ResponseEntity<java.util.List<WorkflowManageDtos.WorkflowDefinitionView>> listLaunchableDefinitions() {
+        return ResponseEntity.ok(workflowDefinitionService.listLaunchableDefinitions());
+    }
+
     @GetMapping("/{definitionId}")
     public ResponseEntity<WorkflowManageDtos.WorkflowDefinitionView> getDefinition(@PathVariable Long definitionId) {
         return ResponseEntity.ok(workflowDefinitionService.getDefinition(definitionId));

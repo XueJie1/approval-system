@@ -66,6 +66,73 @@ export interface FormDefinitionSummary {
   status: number;
 }
 
+export interface RequestTemplateSummary {
+  id: number;
+  templateKey: string;
+  templateName: string;
+  category?: string | null;
+  description?: string | null;
+  formKey?: string | null;
+  formName?: string | null;
+  processKey: string;
+  countersignMode: string;
+  passRatio: string;
+  flowSummary?: string | null;
+  approvalConfig?: RequestTemplateApprovalConfig | null;
+  allowManualApproverSelect?: boolean;
+  sortOrder: number;
+  status: string;
+  usageCount?: number;
+}
+
+export interface RequestTemplateApprovalStep {
+  type: string;
+  userId?: number | null;
+}
+
+export interface RequestTemplateApprovalCondition {
+  field: string;
+  operator: string;
+  value: number;
+}
+
+export interface RequestTemplateApprovalRule {
+  name?: string | null;
+  conditions?: RequestTemplateApprovalCondition[] | null;
+  steps: RequestTemplateApprovalStep[];
+}
+
+export interface RequestTemplateApprovalConfig {
+  rules: RequestTemplateApprovalRule[];
+}
+
+export interface RequestTemplateApprovalPreviewStep {
+  orderNo: number;
+  approverId: string;
+  approverName?: string | null;
+  label?: string | null;
+  resolverType?: string | null;
+  resolverLabel?: string | null;
+  sourceDescription?: string | null;
+}
+
+export interface RequestTemplateUpsertPayload {
+  templateKey: string;
+  templateName: string;
+  category?: string | null;
+  description?: string | null;
+  formKey?: string | null;
+  formName?: string | null;
+  processKey: string;
+  countersignMode: string;
+  passRatio: string;
+  flowSummary?: string | null;
+  approvalConfig?: RequestTemplateApprovalConfig | null;
+  allowManualApproverSelect?: boolean;
+  sortOrder: number;
+  status: string;
+}
+
 export interface FormVersionSummary {
   id: number;
   formId: number;
@@ -168,6 +235,7 @@ export interface AdminDeptOption {
   parentId?: number | null;
   deptCode?: string | null;
   deptName: string;
+  leaderUserId?: number | null;
 }
 
 export interface AdminRoleOption {
@@ -187,6 +255,7 @@ export interface AdminUserOptions {
   depts: AdminDeptOption[];
   roles: AdminRoleOption[];
   posts: AdminPostOption[];
+  users: Array<{ id: number; username: string }>;
 }
 
 export interface AdminUserSummary {
@@ -194,6 +263,7 @@ export interface AdminUserSummary {
   username: string;
   deptId?: number | null;
   deptName?: string | null;
+  managerUserId?: number | null;
   status: number;
   twoFactorEnabled: boolean;
   locked: boolean;
@@ -215,6 +285,7 @@ export interface AdminUserFormPayload {
   username: string;
   password: string;
   deptId?: number | null;
+  managerUserId?: number | null;
   roleIds: number[];
   postIds: number[];
   status: number;
@@ -222,6 +293,7 @@ export interface AdminUserFormPayload {
 
 export interface AdminUserUpdatePayload {
   deptId?: number | null;
+  managerUserId?: number | null;
   roleIds?: number[];
   postIds?: number[];
   status?: number;
@@ -314,6 +386,7 @@ export interface StartRequestPayload {
   countersignMode: string;
   passRatio: number;
   variables: Record<string, unknown>;
+  requestTemplateKey?: string | null;
 }
 
 export interface SaveDraftPayload {
@@ -339,6 +412,7 @@ export interface SubmitDraftPayload {
   countersignUsers: string[];
   countersignMode: string;
   passRatio: number;
+  requestTemplateKey?: string | null;
 }
 
 export interface WorkflowStartResult {

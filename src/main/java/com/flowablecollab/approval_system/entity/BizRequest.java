@@ -35,6 +35,9 @@ public class BizRequest {
     @Column(name = "form_version_id")
     private Long formVersionId;
 
+    @Column(name = "request_template_key", length = 64)
+    private String requestTemplateKey;
+
     @Column(name = "applicant_id", nullable = false)
     private Long applicantId;
 

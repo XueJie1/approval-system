@@ -1,6 +1,8 @@
 package com.flowablecollab.approval_system.config;
 
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowCatalogBootstrapService;
+import com.flowablecollab.approval_system.service.workflow.manage.RequestTemplateService;
+import com.flowablecollab.approval_system.service.form.FormCatalogBootstrapService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
@@ -22,7 +24,9 @@ public class FlowableConfig {
             RepositoryService repositoryService,
             RuntimeService runtimeService,
             TaskService taskService,
-            WorkflowCatalogBootstrapService workflowCatalogBootstrapService) {
+            WorkflowCatalogBootstrapService workflowCatalogBootstrapService,
+            RequestTemplateService requestTemplateService,
+            FormCatalogBootstrapService formCatalogBootstrapService) {
         return args -> {
             log.info("✓ Flowable ProcessEngine initialized: {}", processEngine.getName());
             log.info("✓ RepositoryService available");
@@ -32,7 +36,9 @@ public class FlowableConfig {
             long processCount = repositoryService.createProcessDefinitionQuery().count();
             log.info("✓ Deployed process definitions: {}", processCount);
 
+            formCatalogBootstrapService.bootstrapDefaults();
             workflowCatalogBootstrapService.bootstrapCatalog();
+            requestTemplateService.bootstrapDefaults();
         };
     }
 }

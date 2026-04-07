@@ -20,4 +20,7 @@ public class SysDept {
 
     @Column(name = "dept_name", length = 64, nullable = false)
     private String deptName;
+
+    @Column(name = "leader_user_id")
+    private Long leaderUserId;
 }

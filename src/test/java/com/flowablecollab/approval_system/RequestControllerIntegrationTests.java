@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -133,7 +134,148 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
                 .andExpect(jsonPath("$[0].recordId").isNumber());
     }
 
+    @Test
+    void activeTemplateEndpoint_hidesInactiveTemplates() throws Exception {
+        SysUser admin = createUser("template-admin", "Password@123", null, "ADMIN");
+        String adminToken = accessToken(admin, "ADMIN");
+
+        mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "inactive_demo",
+                                  "templateName": "停用模板",
+                                  "processKey": "approvalSingle",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "sortOrder": 999,
+                                  "status": "INACTIVE"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/request-templates")
+                        .header("Authorization", authorization(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.templateKey=='inactive_demo')]").doesNotExist());
+    }
+
+    @Test
+    void adminTemplateList_returnsUsageCountForTemplate() throws Exception {
+        SysUser admin = createUser("template-usage-admin", "Password@123", null, "ADMIN");
+        SysUser applicant = createUser("template-usage-employee", "Password@123", null, "EMPLOYEE");
+        String adminToken = accessToken(admin, "ADMIN");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "usage_demo",
+                                  "templateName": "使用统计测试模板",
+                                  "processKey": "approvalSingle",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "allowManualApproverSelect": true,
+                                  "sortOrder": 999,
+                                  "status": "ACTIVE"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        startSingleApproval(applicantToken, applicant.getId(), unique("req-template-usage"), applicant.getUsername(), "usage_demo");
+
+        mockMvc.perform(get("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.templateKey=='usage_demo')].usageCount").value(org.hamcrest.Matchers.hasItem(1)));
+    }
+
+    @Test
+    void activeTemplateEndpoint_returnsBuiltInTemplatesWithManualApproverDisabled() throws Exception {
+        SysUser employee = createUser("template-reader", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(get("/api/request-templates")
+                        .header("Authorization", authorization(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.templateKey=='leave')].allowManualApproverSelect").value(org.hamcrest.Matchers.hasItem(false)))
+                .andExpect(jsonPath("$[?(@.templateKey=='leave')].approvalConfig[0].rules[0].steps[0].type").doesNotExist())
+                .andExpect(jsonPath("$[?(@.templateKey=='expense')].allowManualApproverSelect").value(org.hamcrest.Matchers.hasItem(false)));
+    }
+
+    @Test
+    void adminTemplateUpdate_persistsApprovalConfigAndManualApproverFlag() throws Exception {
+        SysUser admin = createUser("template-config-admin", "Password@123", null, "ADMIN");
+        SysUser reviewer = createUser("template-fixed-reviewer", "Password@123", null, "EMPLOYEE");
+        String adminToken = accessToken(admin, "ADMIN");
+
+        String templateKey = unique("template-config-demo").replace('-', '_');
+        Long templateId = json(mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "%s",
+                                  "templateName": "测试模板",
+                                  "category": "测试",
+                                  "description": "用于测试审批规则配置保存。",
+                                  "processKey": "approvalSequential",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "flowSummary": "测试模板初始配置",
+                                  "sortOrder": 10,
+                                  "status": "ACTIVE"
+                                }
+                                """.formatted(templateKey)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(put("/api/admin/request-templates/{id}", templateId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "%s",
+                                  "templateName": "测试模板",
+                                  "category": "测试",
+                                  "description": "用于测试审批规则配置保存。",
+                                  "processKey": "approvalSequential",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "flowSummary": "测试审批规则配置",
+                                  "allowManualApproverSelect": true,
+                                  "approvalConfig": {
+                                    "rules": [
+                                      {
+                                        "name": "测试规则",
+                                        "conditions": [],
+                                        "steps": [
+                                          { "type": "SPECIFIC_USER", "userId": %d },
+                                          { "type": "DEPT_LEADER" }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "sortOrder": 10,
+                                  "status": "ACTIVE"
+                                }
+                                """.formatted(templateKey, reviewer.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowManualApproverSelect").value(true))
+                .andExpect(jsonPath("$.approvalConfig.rules[0].steps[0].type").value("SPECIFIC_USER"))
+                .andExpect(jsonPath("$.approvalConfig.rules[0].steps[0].userId").value(reviewer.getId()));
+    }
+
     private String startSingleApproval(String applicantToken, Long applicantId, String businessKey, String approverId) throws Exception {
+        return startSingleApproval(applicantToken, applicantId, businessKey, approverId, null);
+    }
+
+    private String startSingleApproval(String applicantToken, Long applicantId, String businessKey, String approverId, String requestTemplateKey) throws Exception {
         return json(mockMvc.perform(post("/api/workflow/requests")
                         .header("Authorization", authorization(applicantToken))
                         .contentType(APPLICATION_JSON)
@@ -143,11 +285,16 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
                                   "title": "Request visibility test",
                                   "applicantId": %d,
                                   "processKey": "approvalSingle",
+                                  "requestTemplateKey": %s,
                                   "variables": {
                                     "approverId": "%s"
                                   }
                                 }
-                                """.formatted(businessKey, applicantId, approverId)))
+                                """.formatted(
+                                        businessKey,
+                                        applicantId,
+                                        requestTemplateKey == null ? "null" : ("\"" + requestTemplateKey + "\""),
+                                        approverId)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

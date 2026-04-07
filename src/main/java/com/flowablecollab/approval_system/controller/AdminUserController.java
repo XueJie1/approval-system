@@ -55,6 +55,7 @@ public class AdminUserController {
                 request.getUsername(),
                 request.getPassword(),
                 request.getDeptId(),
+                request.getManagerUserId(),
                 request.getRoleIds(),
                 request.getPostIds(),
                 request.getStatus()
@@ -68,6 +69,7 @@ public class AdminUserController {
             @Valid @RequestBody UpdateAdminUserRequest request) {
         return ResponseEntity.ok(adminUserService.updateUser(userId, new AdminUserService.UpdateUserCommand(
                 request.getDeptId(),
+                request.getManagerUserId(),
                 request.getRoleIds(),
                 request.getPostIds(),
                 request.getStatus()
@@ -154,6 +156,8 @@ public class AdminUserController {
 
         private Long deptId;
 
+        private Long managerUserId;
+
         @NotEmpty(message = "roleIds is required")
         private List<Long> roleIds;
 
@@ -168,6 +172,8 @@ public class AdminUserController {
     @Data
     public static class UpdateAdminUserRequest {
         private Long deptId;
+
+        private Long managerUserId;
 
         @NotEmpty(message = "roleIds is required")
         private List<Long> roleIds;

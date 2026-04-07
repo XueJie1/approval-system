@@ -55,6 +55,8 @@ public class WorkflowService {
     private final BizRequestLogRepository bizRequestLogRepository;
     private final SysUserRepository sysUserRepository;
     private final TaskAiSuggestionService taskAiSuggestionService;
+    private final RequestApprovalResolverService requestApprovalResolverService;
+    private final RequestTemplateApprovalResolverService requestTemplateApprovalResolverService;
 
     @Transactional
     public String startApprovalProcess(StartRequest request) {
@@ -85,6 +87,7 @@ public class WorkflowService {
         draft.setApplicantDeptId(request.getApplicantDeptId());
         draft.setApplicantPostId(request.getApplicantPostId());
         draft.setFormInstanceId(request.getFormInstanceId());
+        draft.setRequestTemplateKey(request.getRequestTemplateKey());
         draft.setStatus(REQUEST_STATUS_DRAFT);
         draft.setCurrentTaskId(null);
         draft.setCurrentAssigneeId(null);
@@ -173,6 +176,20 @@ public class WorkflowService {
             variables.put("formInstanceId", request.getFormInstanceId());
         }
 
+        String templateKey = request.getRequestTemplateKey();
+        RequestApprovalResolverService.Resolution resolution = requestTemplateApprovalResolverService.resolve(
+                templateKey,
+                request.getApplicantId(),
+                variables);
+        if (resolution != null) {
+            variables.put("approverId", resolution.approverIds().get(0));
+            variables.put("countersignUsers", resolution.approverIds());
+            variables.put("approvalResolveStrategy", resolution.strategy());
+            request.setProcessKey(resolution.approverIds().size() > 1 ? "approvalSequential" : "approvalSingle");
+            request.setCountersignUsers(resolution.approverIds());
+            processKey = request.getProcessKey();
+        }
+
         List<String> countersignUsers = request.getCountersignUsers();
         if (countersignUsers == null || countersignUsers.isEmpty()) {
             countersignUsers = List.of(String.valueOf(request.getApplicantId()));
@@ -211,6 +228,7 @@ public class WorkflowService {
         bizRequest.setWorkflowDefinitionId(request.getWorkflowDefinitionId());
         bizRequest.setWorkflowDefinitionVersionId(request.getWorkflowDefinitionVersionId());
         bizRequest.setFormVersionId(request.getFormVersionId());
+        bizRequest.setRequestTemplateKey(request.getRequestTemplateKey());
         bizRequest.setApplicantId(request.getApplicantId());
         bizRequest.setApplicantDeptId(request.getApplicantDeptId());
         bizRequest.setApplicantPostId(request.getApplicantPostId());
@@ -230,6 +248,30 @@ public class WorkflowService {
 
         log.info("Started approval process {} for businessKey {}", processInstance.getId(), businessKey);
         return processInstance.getId();
+    }
+
+    private Double resolveLeaveDays(Map<String, Object> variables) {
+        if (variables == null || variables.isEmpty()) {
+            return null;
+        }
+        Object raw = variables.get("days");
+        if (raw == null) {
+            raw = variables.get("leaveDays");
+        }
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (raw instanceof String stringValue && !stringValue.isBlank()) {
+            try {
+                return Double.parseDouble(stringValue.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     public List<TaskInfo> getTasksForAssignee(String assignee, boolean includeCandidate) {
@@ -756,6 +798,7 @@ public class WorkflowService {
         private Long applicantDeptId;
         private Long applicantPostId;
         private Long formInstanceId;
+        private String requestTemplateKey;
     }
 
     @Data
@@ -813,5 +856,6 @@ public class WorkflowService {
         private List<String> countersignUsers;
         private String countersignMode;
         private BigDecimal passRatio;
+        private String requestTemplateKey;
     }
 }

@@ -2,6 +2,7 @@ package com.flowablecollab.approval_system.controller;
 
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.exception.ResourceConflictException;
+import com.flowablecollab.approval_system.exception.ResourceNotFoundException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.FlowableException;
@@ -42,6 +43,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceConflictException.class)
     public ResponseEntity<Map<String, String>> handleConflict(ResourceConflictException ex) {
         return ResponseEntity.status(409).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(404).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(JwtException.class)

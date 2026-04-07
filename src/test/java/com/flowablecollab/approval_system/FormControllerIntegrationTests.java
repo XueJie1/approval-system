@@ -149,6 +149,18 @@ class FormControllerIntegrationTests extends AbstractIntegrationTestSupport {
     }
 
     @Test
+    void latestVersion_returns404_whenFormDefinitionDoesNotExist() throws Exception {
+        SysUser designer = createUser("designer", "Password@123", null, "DESIGNER");
+        String designerToken = accessToken(designer, "DESIGNER");
+
+        mockMvc.perform(get("/api/forms/versions/latest")
+                        .header("Authorization", authorization(designerToken))
+                        .param("formKey", unique("missing-form")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Form definition not found"));
+    }
+
+    @Test
     void validate_returnsStructuredErrors_forInvalidFormData() throws Exception {
         SysUser designer = createUser("designer", "Password@123", null, "DESIGNER");
         SysUser employee = createUser("employee", "Password@123", null, "EMPLOYEE");

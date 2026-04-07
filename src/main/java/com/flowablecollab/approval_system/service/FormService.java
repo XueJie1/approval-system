@@ -5,6 +5,7 @@ import com.flowablecollab.approval_system.entity.form.FormDefinition;
 import com.flowablecollab.approval_system.entity.form.FormField;
 import com.flowablecollab.approval_system.entity.form.FormInstance;
 import com.flowablecollab.approval_system.entity.form.FormVersion;
+import com.flowablecollab.approval_system.exception.ResourceNotFoundException;
 import com.flowablecollab.approval_system.repository.form.FormDefinitionRepository;
 import com.flowablecollab.approval_system.repository.form.FormFieldRepository;
 import com.flowablecollab.approval_system.repository.form.FormInstanceRepository;
@@ -68,9 +69,9 @@ public class FormService {
 
     public FormVersion getLatestVersion(String formKey) {
         FormDefinition definition = formDefinitionRepository.findByFormKey(formKey)
-                .orElseThrow();
+                .orElseThrow(() -> new ResourceNotFoundException("Form definition not found"));
         return formVersionRepository.findTopByFormIdOrderByVersionDesc(definition.getId())
-                .orElseThrow();
+                .orElseThrow(() -> new ResourceNotFoundException("Form version not found"));
     }
 
     public FormVersion getVersion(Long formVersionId) {

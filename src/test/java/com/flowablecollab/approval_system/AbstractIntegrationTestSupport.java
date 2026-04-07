@@ -19,6 +19,7 @@ import com.flowablecollab.approval_system.repository.rbac.SysRoleDataScopeReposi
 import com.flowablecollab.approval_system.repository.rbac.SysRoleRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRoleRepository;
+import com.flowablecollab.approval_system.repository.workflow.RequestTemplateRepository;
 import com.flowablecollab.approval_system.security.JwtService;
 import com.flowablecollab.approval_system.service.RbacService;
 import org.apache.commons.codec.binary.Base32;
@@ -96,6 +97,9 @@ abstract class AbstractIntegrationTestSupport {
 
     @Autowired
     protected BizRequestLogRepository bizRequestLogRepository;
+
+    @Autowired
+    protected RequestTemplateRepository requestTemplateRepository;
 
     @BeforeEach
     void clearSecurityArtifacts() {

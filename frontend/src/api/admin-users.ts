@@ -41,6 +41,12 @@ interface BackendDeptOption {
   parentId?: number | null;
   deptCode?: string | null;
   deptName: string;
+  leaderUserId?: number | null;
+}
+
+interface BackendUserOption {
+  id: number;
+  username: string;
 }
 
 interface BackendRoleOption {
@@ -60,12 +66,14 @@ interface BackendUserOptions {
   departments: BackendDeptOption[];
   roles: BackendRoleOption[];
   posts: BackendPostOption[];
+  users: BackendUserOption[];
 }
 
 interface BackendAdminUserSummary {
   userId: number;
   username: string;
   department?: BackendDeptOption | null;
+  managerUserId?: number | null;
   roles: BackendRoleOption[];
   posts: BackendPostOption[];
   status: number;
@@ -104,6 +112,7 @@ function mapUserSummary(data: BackendAdminUserSummary): AdminUserSummary {
     username: data.username,
     deptId: data.department?.id ?? null,
     deptName: data.department?.deptName ?? null,
+    managerUserId: data.managerUserId ?? null,
     status: data.status,
     twoFactorEnabled: data.twoFactorEnabled,
     locked: data.locked,
@@ -130,7 +139,8 @@ export async function fetchAdminUserOptions() {
   return {
     depts: data.departments,
     roles: data.roles,
-    posts: data.posts
+    posts: data.posts,
+    users: data.users
   } satisfies AdminUserOptions;
 }
 

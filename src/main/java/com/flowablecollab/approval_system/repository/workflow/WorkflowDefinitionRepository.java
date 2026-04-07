@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface WorkflowDefinitionRepository extends JpaRepository<WorkflowDefinition, Long>, JpaSpecificationExecutor<WorkflowDefinition> {
 
@@ -13,4 +14,8 @@ public interface WorkflowDefinitionRepository extends JpaRepository<WorkflowDefi
     Optional<WorkflowDefinition> findByIdAndIsDeleted(Long id, Integer isDeleted);
 
     boolean existsByProcessKeyAndIsDeleted(String processKey, Integer isDeleted);
+
+    List<WorkflowDefinition> findByStatusAndCurrentVersionIdIsNotNullAndIsDeletedOrderByProcessNameAsc(
+            String status,
+            Integer isDeleted);
 }

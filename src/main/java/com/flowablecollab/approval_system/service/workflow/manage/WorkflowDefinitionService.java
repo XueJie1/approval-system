@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -80,6 +81,26 @@ public class WorkflowDefinitionService {
     public WorkflowManageDtos.WorkflowDefinitionView getDefinition(Long definitionId) {
         WorkflowDefinition definition = getDefinitionEntity(definitionId);
         return toDefinitionView(definition, resolveCurrentVersion(definition.getCurrentVersionId()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkflowManageDtos.WorkflowDefinitionView> listLaunchableDefinitions() {
+        return workflowDefinitionRepository
+                .findByStatusAndCurrentVersionIdIsNotNullAndIsDeletedOrderByProcessNameAsc(
+                        WorkflowDefinition.STATUS_ACTIVE,
+                        NOT_DELETED)
+                .stream()
+                .map(definition -> toDefinitionView(definition, resolveCurrentVersion(definition.getCurrentVersionId())))
+                .filter(view -> view.getCurrentVersionId() != null)
+                .filter(view -> view.getCurrentVersionNo() != null)
+                .filter(view -> {
+                    WorkflowDefinitionVersion version = resolveCurrentVersion(view.getCurrentVersionId());
+                    return version != null
+                            && WorkflowDefinitionVersion.STATUS_PUBLISHED.equals(version.getStatus())
+                            && version.getFlowableProcessDefinitionId() != null
+                            && !version.getFlowableProcessDefinitionId().isBlank();
+                })
+                .toList();
     }
 
     @Transactional

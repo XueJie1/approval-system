@@ -21,6 +21,9 @@ public class SysUser {
     @Column(name = "dept_id")
     private Long deptId;
 
+    @Column(name = "manager_user_id")
+    private Long managerUserId;
+
     @Column(name = "status", nullable = false)
     private Integer status;
 

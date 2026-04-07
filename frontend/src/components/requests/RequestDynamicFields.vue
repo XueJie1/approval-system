@@ -10,9 +10,17 @@
     <div class="form-grid">
       <el-form-item v-for="field in fields" :key="field.fieldKey" :label="field.label || field.fieldKey">
         <el-input
-          v-if="field.fieldType === 'string' || field.fieldType === 'date'"
+          v-if="field.fieldType === 'string' && !isTemporalField(field)"
           :model-value="resolveValue(field.fieldKey)"
-          :placeholder="field.fieldType === 'date' ? 'YYYY-MM-DD' : ''"
+          @update:model-value="updateValue(field.fieldKey, $event)"
+        />
+        <el-date-picker
+          v-else-if="isTemporalField(field)"
+          :model-value="resolveValue(field.fieldKey)"
+          :type="resolvePickerType(field)"
+          :value-format="resolveValueFormat(field)"
+          :placeholder="resolvePickerPlaceholder(field)"
+          style="width: 100%"
           @update:model-value="updateValue(field.fieldKey, $event)"
         />
         <el-input-number
@@ -74,12 +82,57 @@ function updateValue(fieldKey: string, value: string | number | null | undefined
   });
 }
 
+function isTemporalField(field: FormField) {
+  if (field.fieldType === 'date' || field.fieldType === 'datetime') {
+    return true;
+  }
+  const indicator = `${field.fieldKey ?? ''} ${field.label ?? ''}`.toLowerCase();
+  return /日期|时间|date|time/.test(indicator);
+}
+
+function resolvePickerType(field: FormField) {
+  const indicator = `${field.fieldKey ?? ''} ${field.label ?? ''}`.toLowerCase();
+  if (field.fieldType === 'datetime' || /时间|time/.test(indicator)) {
+    return 'datetime';
+  }
+  return 'date';
+}
+
+function resolveValueFormat(field: FormField) {
+  return resolvePickerType(field) === 'datetime' ? 'YYYY-MM-DD HH:mm:ss' : 'YYYY-MM-DD';
+}
+
+function resolvePickerPlaceholder(field: FormField) {
+  return resolvePickerType(field) === 'datetime' ? '请选择时间' : '请选择日期';
+}
+
 function parseOptions(optionsJson?: string) {
   if (!optionsJson) {
     return [] as Array<{ label: string; value: string | number }>;
   }
   try {
-    return JSON.parse(optionsJson) as Array<{ label: string; value: string | number }>;
+    const parsed = JSON.parse(optionsJson) as Array<string | number | { label?: string; value?: string | number }>;
+    return parsed
+      .map((option) => {
+        if (typeof option === 'string' || typeof option === 'number') {
+          return {
+            label: String(option),
+            value: option
+          };
+        }
+        if (option && typeof option === 'object') {
+          const value = option.value ?? option.label;
+          if (value === undefined || value === null) {
+            return null;
+          }
+          return {
+            label: String(option.label ?? value),
+            value
+          };
+        }
+        return null;
+      })
+      .filter((option): option is { label: string; value: string | number } => option !== null);
   } catch {
     return [];
   }

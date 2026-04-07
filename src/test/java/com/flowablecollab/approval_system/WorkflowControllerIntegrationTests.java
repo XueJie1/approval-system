@@ -2,6 +2,7 @@ package com.flowablecollab.approval_system;
 
 import com.flowablecollab.approval_system.entity.BizRequestTask;
 import com.flowablecollab.approval_system.entity.BizRequest;
+import com.flowablecollab.approval_system.entity.rbac.SysDept;
 import com.flowablecollab.approval_system.entity.rbac.SysUser;
 import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
 import org.flowable.task.api.Task;
@@ -16,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,6 +31,13 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Autowired
     private TaskAiSuggestionService taskAiSuggestionService;
+
+    private SysDept createDept(String code, String name) {
+        SysDept dept = new SysDept();
+        dept.setDeptCode(code);
+        dept.setDeptName(name);
+        return sysDeptRepository.save(dept);
+    }
 
     @Test
     void startProcess_andQueryTasks_exposesSingleApprovalInRuntime() throws Exception {
@@ -64,6 +73,195 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
                         .header("Authorization", authorization(authorizationUserToken(approver))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].assignee").value(approver.getUsername()));
+    }
+
+    @Test
+    void leaveRequest_autoAssignsManagerAsApprover() throws Exception {
+        SysDept dept = sysDeptRepository.save(createDept("LEAVE_TEAM", "Leave Team"));
+        SysUser manager = createUser("leave-manager", "Password@123", dept.getId(), "EMPLOYEE");
+        SysUser applicant = createUser("leave-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        applicant.setManagerUserId(manager.getId());
+        sysUserRepository.save(applicant);
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        String businessKey = unique("leave-auto-manager");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "请假申请",
+                                  "applicantId": %d,
+                                  "applicantDeptId": %d,
+                                  "requestTemplateKey": "leave",
+                                  "processKey": "approvalSequential",
+                                  "variables": {}
+                                }
+                                """.formatted(businessKey, applicant.getId(), dept.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+
+        Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+        assertThat(task).isNotNull();
+        assertThat(task.getAssignee()).isEqualTo(String.valueOf(manager.getId()));
+    }
+
+    @Test
+    void leaveRequest_fallsBackToDepartmentLeaderWhenManagerMissing() throws Exception {
+        SysUser leader = createUser("leave-leader", "Password@123", null, "EMPLOYEE");
+        SysDept dept = createDept("LEAVE_DEPT", "Leave Department");
+        dept.setLeaderUserId(leader.getId());
+        dept = sysDeptRepository.save(dept);
+        SysUser applicant = createUser("leave-no-manager", "Password@123", dept.getId(), "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        String businessKey = unique("leave-auto-leader");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "请假申请",
+                                  "applicantId": %d,
+                                  "applicantDeptId": %d,
+                                  "requestTemplateKey": "leave",
+                                  "processKey": "approvalSequential",
+                                  "variables": {}
+                                }
+                                """.formatted(businessKey, applicant.getId(), dept.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+
+        Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+        assertThat(task).isNotNull();
+        assertThat(task.getAssignee()).isEqualTo(String.valueOf(leader.getId()));
+    }
+
+    @Test
+    void leaveRequest_escalatesToSequentialApprovalWhenLeaveDaysExceedThreshold() throws Exception {
+        SysUser parentLeader = createUser("parent-leader", "Password@123", null, "EMPLOYEE");
+        SysDept parentDept = createDept("HQ", "Headquarters");
+        parentDept.setLeaderUserId(parentLeader.getId());
+        parentDept = sysDeptRepository.save(parentDept);
+
+        SysUser deptLeader = createUser("dept-leader", "Password@123", null, "EMPLOYEE");
+        SysDept dept = createDept("OPS", "Operations");
+        dept.setParentId(parentDept.getId());
+        dept.setLeaderUserId(deptLeader.getId());
+        dept = sysDeptRepository.save(dept);
+
+        SysUser manager = createUser("line-manager", "Password@123", dept.getId(), "EMPLOYEE");
+        SysUser applicant = createUser("long-leave-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        applicant.setManagerUserId(manager.getId());
+        sysUserRepository.save(applicant);
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+
+        String businessKey = unique("leave-sequential");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "长请假申请",
+                                  "applicantId": %d,
+                                  "applicantDeptId": %d,
+                                  "requestTemplateKey": "leave",
+                                  "processKey": "approvalSequential",
+                                  "variables": {
+                                    "days": 4
+                                  }
+                                }
+                                """.formatted(businessKey, applicant.getId(), dept.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+
+        List<Task> tasks = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).list();
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks.get(0).getAssignee()).isEqualTo(String.valueOf(manager.getId()));
+
+        mockMvc.perform(post("/api/workflow/tasks/{taskId}/complete", tasks.get(0).getId())
+                        .header("Authorization", authorization(accessToken(manager, "EMPLOYEE")))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "approvalResult": "APPROVE",
+                                  "comments": "agree"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        Task secondTask = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+        assertThat(secondTask).isNotNull();
+        assertThat(secondTask.getAssignee()).isEqualTo(String.valueOf(deptLeader.getId()));
+    }
+
+    @Test
+    void leaveTemplateSpecificApproverConfig_takesEffectAtRuntime() throws Exception {
+        SysUser admin = createUser("leave-template-admin", "Password@123", null, "ADMIN");
+        SysUser fixedApprover = createUser("leave-fixed-approver", "Password@123", null, "EMPLOYEE");
+        SysDept dept = sysDeptRepository.save(createDept("LEAVE_CFG", "Leave Config Dept"));
+        SysUser applicant = createUser("leave-config-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        String adminToken = accessToken(admin, "ADMIN");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String templateKey = unique("runtime-template").replace('-', '_');
+
+        mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "%s",
+                                  "templateName": "运行时审批模板",
+                                  "category": "测试",
+                                  "description": "用于测试动态审批人。",
+                                  "processKey": "approvalSingle",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "flowSummary": "固定审批人测试",
+                                  "allowManualApproverSelect": false,
+                                  "approvalConfig": {
+                                    "rules": [
+                                      {
+                                        "name": "固定审批人",
+                                        "conditions": [],
+                                        "steps": [
+                                          { "type": "SPECIFIC_USER", "userId": %d }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "sortOrder": 10,
+                                  "status": "ACTIVE"
+                                }
+                                """.formatted(templateKey, fixedApprover.getId())))
+                .andExpect(status().isOk());
+
+        String businessKey = unique("leave-config-runtime");
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "请假申请",
+                                  "applicantId": %d,
+                                  "applicantDeptId": %d,
+                                  "requestTemplateKey": "%s",
+                                  "processKey": "approvalSequential",
+                                  "variables": {}
+                                }
+                                """.formatted(businessKey, applicant.getId(), dept.getId(), templateKey)))
+                .andExpect(status().isOk());
+
+        Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
+        assertThat(task).isNotNull();
+        assertThat(task.getAssignee()).isEqualTo(String.valueOf(fixedApprover.getId()));
     }
 
     @Test

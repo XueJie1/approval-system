@@ -16,6 +16,7 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
     void admin_canCreateDepartment() throws Exception {
         SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
         String adminToken = accessToken(admin, "ADMIN");
+        SysUser leader = createUser(unique("dept-leader"), "Password@123", null, "EMPLOYEE");
 
         String response = mockMvc.perform(post("/api/departments")
                         .header("Authorization", authorization(adminToken))
@@ -23,19 +24,22 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
                         .content("""
                                 {
                                   "deptCode": "DEPT001",
-                                  "deptName": "IT Department"
+                                  "deptName": "IT Department",
+                                  "leaderUserId": %d
                                 }
-                                """))
+                                """.formatted(leader.getId())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNumber())
                 .andExpect(jsonPath("$.deptCode").value("DEPT001"))
                 .andExpect(jsonPath("$.deptName").value("IT Department"))
+                .andExpect(jsonPath("$.leaderUserId").value(leader.getId()))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
         SysDept dept = sysDeptRepository.findByDeptCode("DEPT001").orElseThrow();
         assertThat(dept.getDeptName()).isEqualTo("IT Department");
+        assertThat(dept.getLeaderUserId()).isEqualTo(leader.getId());
     }
 
     @Test
@@ -231,6 +235,52 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
                                 }
                                 """))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateDepartment_rejectsSelfAsParent() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
+        String adminToken = accessToken(admin, "ADMIN");
+        SysDept dept = sysDeptRepository.save(createDept("SELF", "Self Parent"));
+
+        mockMvc.perform(put("/api/departments/{id}", dept.getId())
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "deptCode": "SELF",
+                                  "deptName": "Self Parent",
+                                  "parentId": %d
+                                }
+                                """.formatted(dept.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("parentId cannot be the same as department id"));
+    }
+
+    @Test
+    void updateDepartment_rejectsCycleParent() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
+        String adminToken = accessToken(admin, "ADMIN");
+        SysDept grandParent = sysDeptRepository.save(createDept("ROOT", "Root"));
+        SysDept parent = sysDeptRepository.save(createDept("PARENT2", "Parent2"));
+        parent.setParentId(grandParent.getId());
+        parent = sysDeptRepository.save(parent);
+        SysDept child = sysDeptRepository.save(createDept("CHILD2", "Child2"));
+        child.setParentId(parent.getId());
+        child = sysDeptRepository.save(child);
+
+        mockMvc.perform(put("/api/departments/{id}", grandParent.getId())
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "deptCode": "ROOT",
+                                  "deptName": "Root",
+                                  "parentId": %d
+                                }
+                                """.formatted(child.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("parentId would create a department cycle"));
     }
 
     @Test

@@ -27,15 +27,6 @@
                 </el-form-item>
               </el-col>
 
-              <el-col :span="24">
-                <el-form-item label="业务单号">
-                  <el-input
-                    v-model="form.businessKey"
-                    placeholder="留空系统自动生成"
-                  />
-                  <div class="field-hint">业务单号用于标识此申请，留空时系统自动生成唯一编号</div>
-                </el-form-item>
-              </el-col>
             </el-row>
           </el-form>
         </el-card>
@@ -43,47 +34,68 @@
         <el-card shadow="never" class="form-section">
           <template #header>
             <div class="section-header">
-              <span class="section-title">审批流程</span>
+              <span class="section-title">申请类型</span>
             </div>
           </template>
 
           <el-form label-position="top">
             <el-row :gutter="16">
-              <el-col :xs="24" :sm="12">
-                <el-form-item label="流程类型" required>
-                  <el-select v-model="form.processKey" style="width: 100%">
-                    <el-option label="并行会签（多人同时审批）" value="approvalCountersign" />
-                    <el-option label="或签（任意一人通过即可）" value="approvalOrSign" />
-                    <el-option label="顺序审批（按顺序依次审批）" value="approvalSequential" />
-                    <el-option label="单人审批" value="approvalSingle" />
-                  </el-select>
-                  <div class="field-hint">选择适合本次申请的审批模式</div>
-                </el-form-item>
-              </el-col>
-
-              <el-col :xs="24" :sm="12">
-                <el-form-item label="会签模式">
-                  <el-select v-model="form.countersignMode" style="width: 100%">
-                    <el-option label="全票通过（所有人同意）" value="ALL" />
-                    <el-option label="多数通过（超过半数同意）" value="MAJORITY" />
+              <el-col :span="24">
+                <el-form-item label="申请类型" required>
+                  <el-select v-model="form.templateKey" style="width: 100%" @change="handleTemplateChange">
+                    <el-option
+                      v-for="template in requestTemplates"
+                      :key="template.templateKey"
+                      :label="template.templateName"
+                      :value="template.templateKey"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
 
-              <el-col :xs="24" :sm="12">
+              <el-col :span="24">
+                <div class="template-summary">
+                  <div class="template-summary__title">{{ currentTemplate?.templateName ?? '暂无申请模板' }}</div>
+                  <p class="template-summary__desc">{{ currentTemplate?.description ?? '请联系管理员配置申请模板。' }}</p>
+                  <div class="template-summary__meta">
+                    <span>默认流程：{{ currentTemplate?.flowSummary ?? '未配置' }}</span>
+                    <span>表单模板：{{ currentTemplate?.formName ?? '未配置' }}</span>
+                  </div>
+                </div>
+              </el-col>
+
+              <el-col v-if="allowManualApproverSelect" :span="24">
                 <el-form-item label="审批人">
                   <CountersignUserPickerDialog v-model="form.countersignUsers" />
-                  <div class="field-hint">选择需要审批的人员</div>
+                  <div class="field-hint">选择本次申请的主要审批人，系统会按申请类型套用默认审批模式</div>
                 </el-form-item>
               </el-col>
 
-              <el-col :xs="24" :sm="12">
-                <el-form-item label="通过比例">
-                  <el-input
-                    v-model="form.passRatio"
-                    placeholder="例如：0.6 表示60%同意即通过"
-                  />
-                </el-form-item>
+              <el-col v-else :span="24">
+                <el-alert
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="该申请类型按公司规则自动确定审批人，无需手动指定。"
+                />
+              </el-col>
+
+              <el-col :span="24">
+                <div class="approval-preview-card">
+                  <div class="approval-preview-card__title">预计审批链</div>
+                  <div v-if="approvalPreviewLoading" class="field-hint">正在计算审批链...</div>
+                  <div v-else-if="approvalPreviewError" class="field-hint approval-preview-error">{{ approvalPreviewError }}</div>
+                  <div v-else-if="approvalPreviewSteps.length" class="approval-preview-list">
+                    <div v-for="step in approvalPreviewSteps" :key="`${step.orderNo}-${step.approverId}`" class="approval-preview-item">
+                      <span class="approval-preview-order">{{ step.orderNo }}</span>
+                      <div>
+                        <div class="approval-preview-label">{{ step.approverName || `用户 ${step.approverId}` }}</div>
+                        <div class="approval-preview-meta">{{ step.sourceDescription || step.resolverLabel || step.label || '自动审批' }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="field-hint">系统会根据当前模板、组织关系和表单数据自动计算审批链。</div>
+                </div>
               </el-col>
             </el-row>
           </el-form>
@@ -93,20 +105,12 @@
           <template #header>
             <div class="section-header">
               <span class="section-title">表单内容</span>
-              <div class="section-actions">
-                <el-input
-                  v-model="form.formKey"
-                  placeholder="输入表单模板Key"
-                  style="width: 200px"
-                  clearable
-                />
-                <el-button :loading="loadingForm" @click="loadDynamicForm">加载模板</el-button>
-              </div>
+              <span class="section-subtitle">{{ currentTemplate?.formName ?? '未配置表单' }}</span>
             </div>
           </template>
 
           <div v-if="!form.formKey" class="empty-form">
-            <el-empty description="输入表单模板Key加载动态表单字段" :image-size="80" />
+            <el-empty description="当前申请类型暂未配置表单模板" :image-size="80" />
           </div>
 
           <RequestDynamicFields
@@ -116,19 +120,13 @@
             :loaded-version-id="loadedVersionId"
           />
 
-          <el-divider v-if="form.formKey" />
-
-          <el-form label-position="top">
-            <el-form-item label="补充信息（JSON格式）">
-              <el-input
-                v-model="form.variablesText"
-                type="textarea"
-                :rows="3"
-                placeholder='例如：{"amount": 3000, "reason": "出差"}'
-              />
-              <div class="field-hint">可填写额外的业务数据，以JSON格式输入</div>
-            </el-form-item>
-          </el-form>
+          <el-alert
+            v-if="form.formKey"
+            type="info"
+            :closable="false"
+            show-icon
+            title="表单已按申请类型自动加载，无需填写技术参数"
+          />
         </el-card>
 
         <el-card v-if="lastProcessId" shadow="never" class="form-section success-card">
@@ -185,24 +183,24 @@
 
         <el-card shadow="never" class="help-card">
           <template #header>
-            <span class="section-title">流程说明</span>
+            <span class="section-title">填写说明</span>
           </template>
           <div class="help-content">
             <div class="help-item">
-              <strong>并行会签</strong>
-              <p>所有审批人同时收到待办，需全部或多数同意后流转</p>
+              <strong>{{ currentTemplate?.templateName ?? '暂无申请模板' }}</strong>
+              <p>{{ currentTemplate?.description ?? '当前还没有可用的申请模板。' }}</p>
             </div>
             <div class="help-item">
-              <strong>或签</strong>
-              <p>所有审批人同时收到待办，任意一人同意即流转</p>
+              <strong>默认审批方式</strong>
+              <p>{{ currentTemplate?.flowSummary ?? '请先由管理员配置审批流程说明。' }}</p>
             </div>
             <div class="help-item">
-              <strong>顺序审批</strong>
-              <p>审批人按顺序依次收到待办</p>
+              <strong>提交建议</strong>
+              <p>先完整填写业务表单，再选择本次需要参与审批的人员</p>
             </div>
             <div class="help-item">
-              <strong>单人审批</strong>
-              <p>仅一人审批即可完成</p>
+              <strong>草稿能力</strong>
+              <p>未准备好时可先保存草稿，之后再继续补充并提交</p>
             </div>
           </div>
         </el-card>
@@ -212,13 +210,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import type { AxiosError } from 'axios';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { InfoFilled } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import type { FormField, SaveDraftPayload, StartRequestPayload, SubmitDraftPayload } from '../types';
+import type { FormField, RequestTemplateApprovalPreviewStep, RequestTemplateSummary, SaveDraftPayload, StartRequestPayload, SubmitDraftPayload } from '../types';
 import { fetchFormFields, latestFormVersion, validateForm } from '../api/forms';
+import { listRequestTemplates, previewRequestTemplateApproval } from '../api/request-templates';
 import { saveDraft as saveDraftApi, startRequest, submitDraft as submitDraftApi } from '../api/workflow';
 import CountersignUserPickerDialog from '../components/requests/CountersignUserPickerDialog.vue';
 import RequestDynamicFields from '../components/requests/RequestDynamicFields.vue';
@@ -234,11 +234,16 @@ const lastDraftBusinessKey = ref('');
 const dynamicFields = ref<FormField[]>([]);
 const dynamicData = ref<Record<string, unknown>>({});
 const loadedVersionId = ref<number | null>(null);
+const requestTemplates = ref<RequestTemplateSummary[]>([]);
+const approvalPreviewSteps = ref<RequestTemplateApprovalPreviewStep[]>([]);
+const approvalPreviewLoading = ref(false);
+const approvalPreviewError = ref('');
 
 const form = reactive({
   businessKey: '',
   title: '',
-  processKey: 'approvalCountersign',
+  templateKey: '',
+  processKey: 'approvalSequential',
   countersignUsers: [] as string[],
   countersignMode: 'ALL',
   passRatio: '1.0',
@@ -246,23 +251,27 @@ const form = reactive({
   variablesText: ''
 });
 
+const currentTemplate = computed(() => {
+  return requestTemplates.value.find(template => template.templateKey === form.templateKey) ?? null;
+});
+
+const allowManualApproverSelect = computed(() => currentTemplate.value?.allowManualApproverSelect === true);
+
 function currentUserId() {
   return auth.currentUser?.userId ?? null;
 }
 
 function parseVariables() {
-  if (!form.variablesText.trim()) {
-    return {} as Record<string, unknown>;
-  }
-  try {
-    return JSON.parse(form.variablesText) as Record<string, unknown>;
-  } catch {
-    ElMessage.error('补充信息 JSON 格式错误');
-    return null;
-  }
+  return {
+    requestTemplateKey: form.templateKey,
+    requestTemplateLabel: currentTemplate.value?.templateName ?? ''
+  } as Record<string, unknown>;
 }
 
 function parseCountersignUsers() {
+  if (!allowManualApproverSelect.value) {
+    return [] as string[];
+  }
   return form.countersignUsers.filter(Boolean);
 }
 
@@ -304,7 +313,9 @@ function buildFormData() {
 
 async function loadDynamicForm() {
   if (!form.formKey.trim()) {
-    ElMessage.warning('请输入表单模板Key');
+    loadedVersionId.value = null;
+    dynamicFields.value = [];
+    dynamicData.value = {};
     return;
   }
 
@@ -319,9 +330,97 @@ async function loadDynamicForm() {
     ElMessage.success('表单模板已加载');
   } catch (e) {
     console.error(e);
+    loadedVersionId.value = null;
+    dynamicFields.value = [];
+    dynamicData.value = {};
+    const error = e as AxiosError<{ error?: string }>;
+    if (error.response?.status === 404) {
+      ElMessage.warning('该申请类型暂未配置可用表单');
+      return;
+    }
     ElMessage.error('加载表单模板失败');
   } finally {
     loadingForm.value = false;
+  }
+}
+
+async function applyTemplate() {
+  if (!currentTemplate.value) {
+    form.processKey = 'approvalSequential';
+    form.countersignMode = 'ALL';
+    form.passRatio = '1.0';
+    form.formKey = '';
+    dynamicFields.value = [];
+    loadedVersionId.value = null;
+    approvalPreviewSteps.value = [];
+    approvalPreviewError.value = '';
+    return;
+  }
+
+  form.processKey = currentTemplate.value.processKey;
+  form.countersignMode = currentTemplate.value.countersignMode;
+  form.passRatio = currentTemplate.value.passRatio;
+  form.formKey = currentTemplate.value.formKey ?? '';
+
+  if (!form.title.trim()) {
+    form.title = currentTemplate.value.templateName;
+  }
+
+  await loadDynamicForm();
+  await loadApprovalPreview();
+}
+
+async function handleTemplateChange() {
+  dynamicData.value = {};
+  await applyTemplate();
+}
+
+async function loadApprovalPreview() {
+  if (!form.templateKey) {
+    approvalPreviewSteps.value = [];
+    approvalPreviewError.value = '';
+    return;
+  }
+  const applicantId = currentUserId();
+  if (!applicantId) {
+    approvalPreviewSteps.value = [];
+    approvalPreviewError.value = '登录信息已失效';
+    return;
+  }
+  approvalPreviewLoading.value = true;
+  approvalPreviewError.value = '';
+  try {
+    approvalPreviewSteps.value = await previewRequestTemplateApproval(form.templateKey, {
+      applicantId,
+      variables: {
+        ...parseVariables(),
+        ...(buildFormData() ?? {})
+      }
+    });
+  } catch (e) {
+    approvalPreviewSteps.value = [];
+    const error = e as AxiosError<{ error?: string }>;
+    approvalPreviewError.value = error.response?.data?.error || '暂时无法预览审批链';
+  } finally {
+    approvalPreviewLoading.value = false;
+  }
+}
+
+async function loadRequestTemplates() {
+  try {
+    const templates = await listRequestTemplates();
+    requestTemplates.value = templates;
+    if (!templates.length) {
+      ElMessage.warning('当前还没有可用的申请模板');
+      return;
+    }
+    if (!form.templateKey || !templates.some(template => template.templateKey === form.templateKey)) {
+      form.templateKey = templates[0].templateKey;
+    }
+    await applyTemplate();
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('加载申请模板失败');
   }
 }
 
@@ -380,6 +479,7 @@ async function submitDraftRequest() {
       formInstanceId: null,
       processKey: form.processKey,
       variables: submissionContext.variables,
+      requestTemplateKey: form.templateKey,
       countersignUsers: submissionContext.countersignUsers,
       countersignMode: form.countersignMode,
       passRatio: Number(form.passRatio)
@@ -463,6 +563,7 @@ async function submitRequest() {
       formVersionId: loadedVersionId.value,
       formData,
       processKey: form.processKey,
+      requestTemplateKey: form.templateKey,
       countersignUsers: submissionContext.countersignUsers,
       countersignMode: form.countersignMode,
       passRatio: Number(form.passRatio),
@@ -482,7 +583,8 @@ async function submitRequest() {
 function resetForm() {
   form.businessKey = '';
   form.title = '';
-  form.processKey = 'approvalCountersign';
+  form.templateKey = requestTemplates.value[0]?.templateKey ?? '';
+  form.processKey = 'approvalSequential';
   form.countersignUsers = [];
   form.countersignMode = 'ALL';
   form.passRatio = '1.0';
@@ -500,8 +602,15 @@ function goRequests() {
 }
 
 onMounted(() => {
+  loadRequestTemplates();
   // 可从 query 读取草稿 businessKey 进行恢复
 });
+
+watch(dynamicData, () => {
+  if (currentTemplate.value && !allowManualApproverSelect.value) {
+    loadApprovalPreview();
+  }
+}, { deep: true });
 </script>
 
 <style scoped>
@@ -547,6 +656,11 @@ onMounted(() => {
 .section-title {
   font-size: 16px;
   font-weight: 600;
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #64748b;
 }
 
 .section-actions {
@@ -615,6 +729,85 @@ onMounted(() => {
   font-size: 13px;
   color: #64748b;
   line-height: 1.5;
+}
+
+.template-summary {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fafc, #eef6ff);
+  border: 1px solid #dbeafe;
+}
+
+.template-summary__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.template-summary__desc {
+  margin: 6px 0 0;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.template-summary__meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #1d4ed8;
+}
+
+.approval-preview-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.approval-preview-card__title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.approval-preview-list {
+  display: grid;
+  gap: 10px;
+}
+
+.approval-preview-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.approval-preview-order {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.approval-preview-label {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.approval-preview-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.approval-preview-error {
+  color: #dc2626;
 }
 
 @media (max-width: 1024px) {

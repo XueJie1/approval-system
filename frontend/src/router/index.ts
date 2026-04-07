@@ -27,9 +27,11 @@ const routes = [
     component: () => import("../layouts/AdminLayout.vue"),
     meta: { requiresAuth: true, roles: ["ADMIN", "SYS_ADMIN"] },
     children: [
-      { path: "", redirect: "/admin/users" },
+      { path: "", redirect: "/admin/home" },
+      { path: "home", name: "admin-home", component: () => import("../views/AdminWelcomeView.vue") },
       { path: "users", name: "admin-users", component: () => import("../views/AdminUsersView.vue") },
       { path: "roles", name: "admin-roles", component: () => import("../views/AdminRolesView.vue") },
+      { path: "request-templates", name: "admin-request-templates", component: () => import("../views/AdminRequestTemplatesView.vue") },
       { path: "departments", name: "admin-departments", component: () => import("../views/AdminDepartmentsView.vue") },
       { path: "positions", name: "admin-positions", component: () => import("../views/AdminPositionsView.vue") },
       { path: "workflows", name: "admin-workflows", component: () => import("../views/AdminWorkflowsView.vue") },

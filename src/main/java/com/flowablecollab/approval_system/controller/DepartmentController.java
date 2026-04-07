@@ -48,7 +48,8 @@ public class DepartmentController {
         SysDept dept = departmentService.createDepartment(
                 request.getDeptCode(),
                 request.getDeptName(),
-                request.getParentId()
+                request.getParentId(),
+                request.getLeaderUserId()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(dept);
     }
@@ -63,7 +64,8 @@ public class DepartmentController {
                 id,
                 request.getDeptCode(),
                 request.getDeptName(),
-                request.getParentId()
+                request.getParentId(),
+                request.getLeaderUserId()
         );
         return ResponseEntity.ok(dept);
     }
@@ -99,6 +101,8 @@ public class DepartmentController {
         private String deptName;
 
         private Long parentId;
+
+        private Long leaderUserId;
     }
 
     @Data
@@ -113,5 +117,7 @@ public class DepartmentController {
         private String deptName;
 
         private Long parentId;
+
+        private Long leaderUserId;
     }
 }

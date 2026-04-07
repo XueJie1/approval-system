@@ -21,5 +21,7 @@ public interface BizRequestRepository extends JpaRepository<BizRequest, Long> {
 
     long countByWorkflowDefinitionVersionIdAndFinishTimeIsNull(Long workflowDefinitionVersionId);
 
+    long countByRequestTemplateKey(String requestTemplateKey);
+
     List<BizRequest> findTop10ByWorkflowDefinitionVersionIdOrderBySubmitTimeDescIdDesc(Long workflowDefinitionVersionId);
 }

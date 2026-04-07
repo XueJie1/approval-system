@@ -70,6 +70,11 @@
                 {{ resolveDeptName(row.deptId) }}
               </template>
             </el-table-column>
+            <el-table-column label="直属主管" min-width="160">
+              <template #default="{ row }">
+                {{ resolveUserName(row.managerUserId) }}
+              </template>
+            </el-table-column>
             <el-table-column label="角色" min-width="220">
               <template #default="{ row }">
                 <span>{{ formatNames(row.roleNames) }}</span>
@@ -141,6 +146,11 @@
             <el-form-item label="部门">
               <el-select v-model="createForm.deptId" clearable filterable placeholder="选择部门">
                 <el-option v-for="dept in options.depts" :key="dept.id" :label="dept.deptName" :value="dept.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="直属主管">
+              <el-select v-model="createForm.managerUserId" clearable filterable placeholder="选择直属主管">
+                <el-option v-for="user in managerCandidates" :key="user.id" :label="user.username" :value="user.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="角色" prop="roleIds">
@@ -318,6 +328,7 @@
       <el-descriptions v-if="selectedUser" :column="2" border>
         <el-descriptions-item label="用户名">{{ selectedUser.username }}</el-descriptions-item>
         <el-descriptions-item label="部门">{{ resolveDeptName(selectedUser.deptId) }}</el-descriptions-item>
+        <el-descriptions-item label="直属主管">{{ resolveUserName(selectedUser.managerUserId) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="selectedUser.status === 1 ? 'success' : 'info'">{{ selectedUser.status === 1 ? "启用" : "停用" }}</el-tag>
         </el-descriptions-item>
@@ -348,6 +359,11 @@
         <el-form-item label="部门">
           <el-select v-model="editForm.deptId" clearable filterable placeholder="选择部门">
             <el-option v-for="dept in options.depts" :key="dept.id" :label="dept.deptName" :value="dept.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="直属主管">
+          <el-select v-model="editForm.managerUserId" clearable filterable placeholder="选择直属主管">
+            <el-option v-for="user in managerCandidates" :key="user.id" :label="user.username" :value="user.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="角色" prop="roleIds">
@@ -421,7 +437,7 @@ const importFileInput = ref<HTMLInputElement | null>(null);
 const importFile = ref<File | null>(null);
 const importStrategy = ref("CREATE_ONLY");
 const skipErrorRows = ref(true);
-const options = ref<AdminUserOptions>({ depts: [], roles: [], posts: [] });
+const options = ref<AdminUserOptions>({ depts: [], roles: [], posts: [], users: [] });
 const userPage = ref<PageResult<AdminUserSummary>>({ content: [], total: 0, page: 0, size: 10, totalPages: 0 });
 const importJobs = ref<PageResult<UserImportJobSummary>>({ content: [], total: 0, page: 0, size: 10, totalPages: 0 });
 const importJobItems = ref<UserImportJobItem[]>([]);
@@ -450,6 +466,7 @@ const createForm = reactive<AdminUserFormPayload>({
   username: "",
   password: "",
   deptId: undefined,
+  managerUserId: undefined,
   roleIds: [],
   postIds: [],
   status: 1
@@ -457,6 +474,7 @@ const createForm = reactive<AdminUserFormPayload>({
 
 const editForm = reactive<AdminUserUpdatePayload>({
   deptId: undefined,
+  managerUserId: undefined,
   roleIds: [],
   postIds: [],
   status: 1
@@ -507,6 +525,7 @@ const currentImportJob = computed(() => {
 });
 
 const importFileName = computed(() => importFile.value?.name ?? "未选择文件");
+const managerCandidates = computed(() => options.value.users ?? []);
 
 watch(activeTab, async (tab) => {
   if (tab === "records" && importJobs.value.content.length === 0) {
@@ -816,6 +835,13 @@ function resolveDeptName(deptId?: number | null) {
     return "-";
   }
   return options.value.depts.find((dept) => dept.id === deptId)?.deptName ?? `#${deptId}`;
+}
+
+function resolveUserName(userId?: number | null) {
+  if (userId == null) {
+    return "-";
+  }
+  return options.value.users.find((user) => user.id === userId)?.username ?? `#${userId}`;
 }
 
 function formatNames(values?: string[] | null) {

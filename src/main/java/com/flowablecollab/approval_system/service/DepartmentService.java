@@ -3,6 +3,7 @@ package com.flowablecollab.approval_system.service;
 import com.flowablecollab.approval_system.entity.rbac.SysDept;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.exception.ResourceConflictException;
+import com.flowablecollab.approval_system.exception.ResourceNotFoundException;
 import com.flowablecollab.approval_system.repository.rbac.SysDeptRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysRoleDataScopeRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
@@ -30,14 +31,18 @@ public class DepartmentService {
 
     public SysDept getDepartmentById(Long id) {
         return sysDeptRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Department not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Department not found: " + id));
     }
 
     @Transactional
     public SysDept createDepartment(String code, String name, Long parentId) {
-        if (parentId != null && !sysDeptRepository.existsById(parentId)) {
-            throw new IllegalArgumentException("parentId does not exist: " + parentId);
-        }
+        return createDepartment(code, name, parentId, null);
+    }
+
+    @Transactional
+    public SysDept createDepartment(String code, String name, Long parentId, Long leaderUserId) {
+        validateParentDepartment(null, parentId);
+        validateLeaderUserId(leaderUserId);
         String normalizedCode = code == null || code.isBlank() ? null : code.trim();
         if (normalizedCode != null && sysDeptRepository.findByDeptCode(normalizedCode).isPresent()) {
             throw new ResourceConflictException("deptCode already exists: " + normalizedCode);
@@ -46,17 +51,22 @@ public class DepartmentService {
         dept.setDeptCode(normalizedCode);
         dept.setDeptName(name.trim());
         dept.setParentId(parentId);
+        dept.setLeaderUserId(leaderUserId);
         return sysDeptRepository.save(dept);
     }
 
     @Transactional
     public SysDept updateDepartment(Long id, String code, String name, Long parentId) {
-        SysDept dept = sysDeptRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Department not found: " + id));
+        return updateDepartment(id, code, name, parentId, null);
+    }
 
-        if (parentId != null && !sysDeptRepository.existsById(parentId)) {
-            throw new IllegalArgumentException("parentId does not exist: " + parentId);
-        }
+    @Transactional
+    public SysDept updateDepartment(Long id, String code, String name, Long parentId, Long leaderUserId) {
+        SysDept dept = sysDeptRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Department not found: " + id));
+
+        validateParentDepartment(id, parentId);
+        validateLeaderUserId(leaderUserId);
 
         String normalizedCode = code == null || code.isBlank() ? null : code.trim();
         if (normalizedCode != null) {
@@ -69,13 +79,14 @@ public class DepartmentService {
         dept.setDeptCode(normalizedCode);
         dept.setDeptName(name.trim());
         dept.setParentId(parentId);
+        dept.setLeaderUserId(leaderUserId);
         return sysDeptRepository.save(dept);
     }
 
     @Transactional
     public void deleteDepartment(Long id) {
         SysDept dept = sysDeptRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Department not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Department not found: " + id));
 
         if (hasChildDepartments(id)) {
             throw new ForbiddenOperationException("Cannot delete department with child departments");
@@ -99,5 +110,44 @@ public class DepartmentService {
 
     private boolean hasUsersInDepartment(Long deptId) {
         return sysUserRepository.findByDeptId(deptId).isPresent();
+    }
+
+    private void validateParentDepartment(Long deptId, Long parentId) {
+        if (parentId == null) {
+            return;
+        }
+        if (!sysDeptRepository.existsById(parentId)) {
+            throw new IllegalArgumentException("parentId does not exist: " + parentId);
+        }
+        if (deptId != null && deptId.equals(parentId)) {
+            throw new IllegalArgumentException("parentId cannot be the same as department id");
+        }
+        if (deptId != null && wouldCreateCycle(deptId, parentId)) {
+            throw new IllegalArgumentException("parentId would create a department cycle");
+        }
+    }
+
+    private boolean wouldCreateCycle(Long deptId, Long parentId) {
+        Long currentId = parentId;
+        while (currentId != null) {
+            if (deptId.equals(currentId)) {
+                return true;
+            }
+            SysDept current = sysDeptRepository.findById(currentId).orElse(null);
+            if (current == null) {
+                return false;
+            }
+            currentId = current.getParentId();
+        }
+        return false;
+    }
+
+    private void validateLeaderUserId(Long leaderUserId) {
+        if (leaderUserId == null) {
+            return;
+        }
+        if (!sysUserRepository.existsById(leaderUserId)) {
+            throw new IllegalArgumentException("leaderUserId does not exist: " + leaderUserId);
+        }
     }
 }

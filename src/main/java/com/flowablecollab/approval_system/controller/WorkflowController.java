@@ -7,6 +7,7 @@ import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.RbacService;
 import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
+import com.flowablecollab.approval_system.service.workflow.manage.RequestTemplateService;
 import com.flowablecollab.approval_system.service.WorkflowService;
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowLaunchResolverService;
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowManageDtos;
@@ -37,6 +38,7 @@ public class WorkflowController {
     private final TaskAiSuggestionService taskAiSuggestionService;
     private final RbacService rbacService;
     private final WorkflowLaunchResolverService workflowLaunchResolverService;
+    private final RequestTemplateService requestTemplateService;
 
     @PostMapping("/requests")
     public ResponseEntity<StartProcessResponse> startProcess(@Valid @RequestBody StartProcessRequest request) {
@@ -55,7 +57,10 @@ public class WorkflowController {
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
+        startRequest.setRequestTemplateKey(request.getRequestTemplateKey());
         WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
+        RequestTemplateService.TemplateView template = resolveTemplate(request.getRequestTemplateKey());
+        validateApproverEligibility(template);
         if (launchDefinition != null) {
             startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
             startRequest.setWorkflowDefinitionVersionId(launchDefinition.getVersionId());
@@ -125,6 +130,7 @@ public class WorkflowController {
         draftRequest.setApplicantDeptId(request.getApplicantDeptId());
         draftRequest.setApplicantPostId(request.getApplicantPostId());
         draftRequest.setFormInstanceId(formInstanceId);
+        draftRequest.setRequestTemplateKey(request.getRequestTemplateKey());
 
         businessKey = workflowService.saveDraft(draftRequest);
         SaveDraftResponse response = new SaveDraftResponse();
@@ -158,7 +164,10 @@ public class WorkflowController {
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
+        startRequest.setRequestTemplateKey(request.getRequestTemplateKey());
         WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
+        RequestTemplateService.TemplateView template = resolveTemplate(request.getRequestTemplateKey());
+        validateApproverEligibility(template);
         if (launchDefinition != null) {
             startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
             startRequest.setWorkflowDefinitionVersionId(launchDefinition.getVersionId());
@@ -497,6 +506,30 @@ public class WorkflowController {
         }
     }
 
+    private void validateApproverEligibility(RequestTemplateService.TemplateView template) {
+        if (template == null || template.getApprovalConfig() == null || template.getApprovalConfig().getRules() == null) {
+            return;
+        }
+        boolean containsAdminApprover = template.getApprovalConfig().getRules().stream()
+                .filter(rule -> rule != null && rule.getSteps() != null)
+                .flatMap(rule -> rule.getSteps().stream())
+                .filter(step -> step != null && "SPECIFIC_USER".equalsIgnoreCase(step.getType()) && step.getUserId() != null)
+                .anyMatch(step -> !rbacService.isApproverEligible(step.getUserId()));
+        if (containsAdminApprover) {
+            throw new IllegalArgumentException("ADMIN accounts cannot be approvers");
+        }
+    }
+
+    private RequestTemplateService.TemplateView resolveTemplate(String templateKey) {
+        if (templateKey == null || templateKey.isBlank()) {
+            return null;
+        }
+        return requestTemplateService.listAllTemplates().stream()
+                .filter(template -> templateKey.equals(template.getTemplateKey()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("request template not found: " + templateKey));
+    }
+
     private WorkflowManageDtos.WorkflowLaunchDefinition resolveLaunchDefinition(String processKey) {
         String normalizedProcessKey = (processKey == null || processKey.isBlank()) ? "approvalWorkflow" : processKey;
         return workflowLaunchResolverService.resolveCurrentLaunchDefinition(normalizedProcessKey);
@@ -518,6 +551,7 @@ public class WorkflowController {
         private List<String> countersignUsers;
         private String countersignMode;
         private BigDecimal passRatio;
+        private String requestTemplateKey;
     }
 
     @Data
@@ -538,6 +572,7 @@ public class WorkflowController {
         private String formKey;
         private Long formVersionId;
         private Map<String, Object> formData;
+        private String requestTemplateKey;
     }
 
     @Data
@@ -558,6 +593,7 @@ public class WorkflowController {
         private List<String> countersignUsers;
         private String countersignMode;
         private BigDecimal passRatio;
+        private String requestTemplateKey;
     }
 
     @Data

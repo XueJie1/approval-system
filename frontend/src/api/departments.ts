@@ -5,18 +5,21 @@ export interface Department {
   deptCode: string | null;
   deptName: string;
   parentId: number | null;
+  leaderUserId?: number | null;
 }
 
 export interface CreateDepartmentRequest {
   deptCode?: string;
   deptName: string;
   parentId?: number | null;
+  leaderUserId?: number | null;
 }
 
 export interface UpdateDepartmentRequest {
   deptCode?: string;
   deptName: string;
   parentId?: number | null;
+  leaderUserId?: number | null;
 }
 
 export const departmentApi = {
