@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/admin/login-logs")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasRole('SYS_ADMIN')")
 public class LoginLogController {
 
     private final SysLoginLogRepository loginLogRepository;

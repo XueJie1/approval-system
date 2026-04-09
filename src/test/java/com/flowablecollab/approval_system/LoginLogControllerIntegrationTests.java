@@ -13,9 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class LoginLogControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
-    void admin_canListAndFetchLoginLogs() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canListAndFetchLoginLogs() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysLoginLog log = new SysLoginLog();
         log.setUserId(admin.getId());

@@ -14,9 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RbacControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
-    void admin_canManageUsersRolesDepartmentsPosts_andDataScopes() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canManageUsersRolesDepartmentsPosts_andDataScopes() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         String deptResponse = mockMvc.perform(post("/api/rbac/depts")
                         .header("Authorization", authorization(adminToken))
@@ -132,8 +132,8 @@ class RbacControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createUser_validatesPayload() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(post("/api/rbac/users")
                         .header("Authorization", authorization(adminToken))

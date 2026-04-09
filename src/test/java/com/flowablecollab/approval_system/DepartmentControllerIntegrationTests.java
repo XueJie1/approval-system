@@ -13,9 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
-    void admin_canCreateDepartment() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canCreateDepartment() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         SysUser leader = createUser(unique("dept-leader"), "Password@123", null, "EMPLOYEE");
 
         String response = mockMvc.perform(post("/api/departments")
@@ -43,9 +43,9 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
     }
 
     @Test
-    void admin_canCreateSubDepartment() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canCreateSubDepartment() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysDept parentDept = createDept("PARENT001", "Parent Department");
         parentDept = sysDeptRepository.save(parentDept);
@@ -72,9 +72,9 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
     }
 
     @Test
-    void admin_canListAllDepartments() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canListAllDepartments() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         sysDeptRepository.deleteAll();
         sysDeptRepository.save(createDept("HR", "Human Resources"));
@@ -88,9 +88,9 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
     }
 
     @Test
-    void admin_canGetDepartmentById() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canGetDepartmentById() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysDept dept = sysDeptRepository.save(createDept("TEST", "Test Department"));
 
@@ -103,9 +103,9 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
     }
 
     @Test
-    void admin_canUpdateDepartment() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canUpdateDepartment() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysDept dept = sysDeptRepository.save(createDept("OLD", "Old Name"));
 
@@ -129,9 +129,9 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
     }
 
     @Test
-    void admin_canDeleteDepartment() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canDeleteDepartment() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysDept dept = sysDeptRepository.save(createDept("TODELETE", "To Delete"));
 
@@ -144,8 +144,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void cannotDeleteDepartmentWithChildren() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysDept parentDept = sysDeptRepository.save(createDept("PARENT", "Parent"));
         SysDept childDept = sysDeptRepository.save(createDept("CHILD", "Child"));
@@ -160,8 +160,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void cannotDeleteDepartmentWithUsers() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysDept dept = sysDeptRepository.save(createDept("HASUSER", "Has User"));
         SysUser user = rbacService.createUser(unique("user"), "User@123", dept.getId(), 1);
@@ -174,8 +174,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void createDepartment_validatesDeptCodeUniqueness() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         sysDeptRepository.save(createDept("UNIQUE", "Unique Department"));
 
@@ -207,13 +207,13 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("operator has no RBAC management permission"));
+                .andExpect(jsonPath("$.error").value("Forbidden"));
     }
 
     @Test
     void getDepartmentNotFound_returns404() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(get("/api/departments/99999")
                         .header("Authorization", authorization(adminToken)))
@@ -222,8 +222,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void updateDepartmentNotFound_returns404() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(put("/api/departments/99999")
                         .header("Authorization", authorization(adminToken))
@@ -239,8 +239,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void updateDepartment_rejectsSelfAsParent() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         SysDept dept = sysDeptRepository.save(createDept("SELF", "Self Parent"));
 
         mockMvc.perform(put("/api/departments/{id}", dept.getId())
@@ -259,8 +259,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void updateDepartment_rejectsCycleParent() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         SysDept grandParent = sysDeptRepository.save(createDept("ROOT", "Root"));
         SysDept parent = sysDeptRepository.save(createDept("PARENT2", "Parent2"));
         parent.setParentId(grandParent.getId());
@@ -285,8 +285,8 @@ class DepartmentControllerIntegrationTests extends AbstractIntegrationTestSuppor
 
     @Test
     void deleteDepartmentNotFound_returns404() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(delete("/api/departments/99999")
                         .header("Authorization", authorization(adminToken)))

@@ -6,14 +6,13 @@
         <p>Administration Console</p>
       </div>
       <el-menu :default-active="activePath" router class="menu">
-        <el-menu-item index="/admin/home">欢迎页</el-menu-item>
-        <el-menu-item index="/admin/users">用户管理</el-menu-item>
-        <el-menu-item index="/admin/roles">角色管理</el-menu-item>
-        <el-menu-item index="/admin/request-templates">申请模板</el-menu-item>
-        <el-menu-item index="/admin/departments">部门管理</el-menu-item>
-        <el-menu-item index="/admin/positions">岗位管理</el-menu-item>
-        <el-menu-item index="/admin/workflows">流程管理</el-menu-item>
-        <el-menu-item index="/admin/settings">系统设置</el-menu-item>
+        <el-menu-item
+          v-for="item in visibleMenuItems"
+          :key="item.path"
+          :index="item.path"
+        >
+          {{ item.label }}
+        </el-menu-item>
       </el-menu>
     </aside>
 
@@ -41,9 +40,32 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 
+interface AdminMenuItem {
+  path: string;
+  label: string;
+  roles: string[];
+}
+
+const MENU_ITEMS: AdminMenuItem[] = [
+  { path: "/admin/home", label: "欢迎页", roles: ["ADMIN", "SYS_ADMIN"] },
+  { path: "/admin/request-templates", label: "申请模板", roles: ["ADMIN", "SYS_ADMIN"] },
+  { path: "/admin/users", label: "用户管理", roles: ["SYS_ADMIN"] },
+  { path: "/admin/roles", label: "角色管理", roles: ["SYS_ADMIN"] },
+  { path: "/admin/departments", label: "部门管理", roles: ["SYS_ADMIN"] },
+  { path: "/admin/positions", label: "岗位管理", roles: ["SYS_ADMIN"] },
+  { path: "/admin/workflows", label: "流程管理", roles: ["SYS_ADMIN"] },
+  { path: "/admin/settings", label: "系统设置", roles: ["SYS_ADMIN"] }
+];
+
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
+
+const userRoles = computed(() => auth.currentUser?.roles ?? []);
+
+const visibleMenuItems = computed(() => {
+  return MENU_ITEMS.filter((item) => item.roles.some((role) => userRoles.value.includes(role)));
+});
 
 const activePath = computed(() => route.path);
 const greeting = computed(() => {

@@ -1,6 +1,33 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 
+const BUSINESS_ADMIN_ROLES = ["ADMIN", "SYS_ADMIN"] as const;
+const TECH_ADMIN_ROLES = ["SYS_ADMIN"] as const;
+
+type AppRole = (typeof BUSINESS_ADMIN_ROLES)[number];
+
+function hasAnyRole(userRoles: string[], requiredRoles: readonly string[]) {
+  return requiredRoles.some((role) => userRoles.includes(role));
+}
+
+function isBusinessAdmin(userRoles: string[]) {
+  return hasAnyRole(userRoles, BUSINESS_ADMIN_ROLES);
+}
+
+function isTechAdmin(userRoles: string[]) {
+  return hasAnyRole(userRoles, TECH_ADMIN_ROLES);
+}
+
+function determineAdminDefaultPath(userRoles: string[]) {
+  if (isTechAdmin(userRoles)) {
+    return "/admin/home";
+  }
+  if (isBusinessAdmin(userRoles)) {
+    return "/admin/request-templates";
+  }
+  return "/user/start";
+}
+
 const routes = [
   { path: "/", redirect: "/login" },
   { path: "/login", name: "login", component: () => import("../views/LoginView.vue"), meta: { guestOnly: true } },
@@ -25,17 +52,17 @@ const routes = [
   {
     path: "/admin",
     component: () => import("../layouts/AdminLayout.vue"),
-    meta: { requiresAuth: true, roles: ["ADMIN", "SYS_ADMIN"] },
+    meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] },
     children: [
-      { path: "", redirect: "/admin/home" },
-      { path: "home", name: "admin-home", component: () => import("../views/AdminWelcomeView.vue") },
-      { path: "users", name: "admin-users", component: () => import("../views/AdminUsersView.vue") },
-      { path: "roles", name: "admin-roles", component: () => import("../views/AdminRolesView.vue") },
-      { path: "request-templates", name: "admin-request-templates", component: () => import("../views/AdminRequestTemplatesView.vue") },
-      { path: "departments", name: "admin-departments", component: () => import("../views/AdminDepartmentsView.vue") },
-      { path: "positions", name: "admin-positions", component: () => import("../views/AdminPositionsView.vue") },
-      { path: "workflows", name: "admin-workflows", component: () => import("../views/AdminWorkflowsView.vue") },
-      { path: "settings", name: "admin-settings", component: () => import("../views/AdminSettingsView.vue") }
+      { path: "", name: "admin-root", component: () => import("../views/AdminWelcomeView.vue"), meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] } },
+      { path: "home", name: "admin-home", component: () => import("../views/AdminWelcomeView.vue"), meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] } },
+      { path: "users", name: "admin-users", component: () => import("../views/AdminUsersView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
+      { path: "roles", name: "admin-roles", component: () => import("../views/AdminRolesView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
+      { path: "request-templates", name: "admin-request-templates", component: () => import("../views/AdminRequestTemplatesView.vue"), meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] } },
+      { path: "departments", name: "admin-departments", component: () => import("../views/AdminDepartmentsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
+      { path: "positions", name: "admin-positions", component: () => import("../views/AdminPositionsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
+      { path: "workflows", name: "admin-workflows", component: () => import("../views/AdminWorkflowsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
+      { path: "settings", name: "admin-settings", component: () => import("../views/AdminSettingsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } }
     ]
   }
 ];
@@ -65,19 +92,28 @@ router.beforeEach(async (to) => {
     }
   }
 
-  const requiredRoles = (to.meta.roles as string[] | undefined) ?? [];
+  const requiredRoles = (to.meta.roles as AppRole[] | undefined) ?? [];
   if (requiredRoles.length > 0) {
     const userRoles = auth.currentUser?.roles ?? [];
-    const hasRole = requiredRoles.some((role) => userRoles.includes(role));
-    if (!hasRole) {
+    if (!hasAnyRole(userRoles, requiredRoles)) {
+      if (isBusinessAdmin(userRoles) && to.path.startsWith("/admin")) {
+        return determineAdminDefaultPath(userRoles);
+      }
       return "/user/start";
     }
+  }
+
+  if (to.path === "/admin") {
+    return determineAdminDefaultPath(auth.currentUser?.roles ?? []);
   }
 
   return true;
 });
 
 function determineRedirectPath(auth: ReturnType<typeof useAuthStore>): string {
-  const isAdmin = (auth.currentUser?.roles ?? []).some((role) => role === "ADMIN" || role === "SYS_ADMIN");
-  return isAdmin ? "/admin" : "/user";
+  const userRoles = auth.currentUser?.roles ?? [];
+  if (isBusinessAdmin(userRoles)) {
+    return determineAdminDefaultPath(userRoles);
+  }
+  return "/user";
 }

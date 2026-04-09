@@ -4,6 +4,7 @@ import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowDefinitionVersionService;
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowManageDtos;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
+@PreAuthorize("hasRole('SYS_ADMIN')")
 public class WorkflowDefinitionVersionAdminController {
 
     private final WorkflowDefinitionVersionService workflowDefinitionVersionService;

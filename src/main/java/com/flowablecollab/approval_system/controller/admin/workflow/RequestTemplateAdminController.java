@@ -3,6 +3,7 @@ package com.flowablecollab.approval_system.controller.admin.workflow;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.workflow.manage.RequestTemplateService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/request-templates")
+@PreAuthorize("hasAnyRole('ADMIN','SYS_ADMIN')")
 public class RequestTemplateAdminController {
 
     private final RequestTemplateService requestTemplateService;

@@ -25,9 +25,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
-    private String createAdminToken() {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        return accessToken(admin, "ADMIN");
+    private String createSysAdminToken() {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        return accessToken(admin, "SYS_ADMIN");
     }
 
     private SysRole createRole(String adminToken, String roleCode, String roleName) throws Exception {
@@ -59,8 +59,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_returnsAllRoles() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         // 创建测试角色
         String roleCode1 = unique("TEST_ROLE_1").toUpperCase().replace('-', '_');
@@ -84,8 +84,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_filterByKeyword_roleCode() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         String roleCode = unique("MANAGER").toUpperCase().replace('-', '_');
         createRole(adminToken, roleCode, "Manager Role");
@@ -107,8 +107,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_filterByKeyword_roleName() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         String roleCode = unique("EDITOR").toUpperCase().replace('-', '_');
         createRole(adminToken, roleCode, "Editor Role");
@@ -129,8 +129,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_filterByStatus() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         // 创建启用和停用角色
         String activeRoleCode = unique("ACTIVE").toUpperCase().replace('-', '_');
@@ -159,8 +159,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_filterByKeywordAndStatus() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         // 创建多个角色
         String activeRoleCode = unique("MANAGER").toUpperCase().replace('-', '_');
@@ -190,8 +190,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_emptyResult_whenKeywordNotMatched() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         String response = mockMvc.perform(get("/api/rbac/roles")
                         .header("Authorization", authorization(adminToken))
@@ -210,7 +210,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createRole_success() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("NEW_ROLE").toUpperCase().replace('-', '_');
         String roleName = "New Test Role";
 
@@ -234,7 +234,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createRole_duplicateRoleCode_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("DUPLICATE").toUpperCase().replace('-', '_');
 
         // 第一次创建成功
@@ -256,7 +256,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createRole_emptyRoleCode_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
 
         mockMvc.perform(post("/api/rbac/roles")
                         .header("Authorization", authorization(adminToken))
@@ -274,7 +274,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createRole_emptyRoleName_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("EMPTY_NAME").toUpperCase().replace('-', '_');
 
         mockMvc.perform(post("/api/rbac/roles")
@@ -315,7 +315,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void updateRole_success() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("UPDATE_TEST").toUpperCase().replace('-', '_');
         SysRole role = createRole(adminToken, roleCode, "Original Name");
 
@@ -340,7 +340,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void updateRole_sameRoleCode_success() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("SAME_CODE").toUpperCase().replace('-', '_');
         SysRole role = createRole(adminToken, roleCode, "Original Name");
 
@@ -361,7 +361,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void updateRole_conflictingRoleCode_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode1 = unique("CONFLICT_1").toUpperCase().replace('-', '_');
         String roleCode2 = unique("CONFLICT_2").toUpperCase().replace('-', '_');
         
@@ -385,7 +385,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void updateRole_nonExistentRoleId_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
 
         mockMvc.perform(put("/api/rbac/roles/{roleId}", 99999L)
                         .header("Authorization", authorization(adminToken))
@@ -403,7 +403,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void updateRole_missingRequiredFields_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         SysRole role = createRole(adminToken, unique("UPDATE_MISSING").toUpperCase().replace('-', '_'), "Test");
 
         mockMvc.perform(put("/api/rbac/roles/{roleId}", role.getId())
@@ -443,7 +443,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void deleteRole_success() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("DELETE_TEST").toUpperCase().replace('-', '_');
         SysRole role = createRole(adminToken, roleCode, "To Be Deleted");
 
@@ -458,7 +458,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void deleteRole_nonExistentRoleId_fails() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
 
         mockMvc.perform(delete("/api/rbac/roles/{roleId}", 99999L)
                         .header("Authorization", authorization(adminToken)))
@@ -468,8 +468,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void deleteRole_withUserAssignment_fails() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String roleCode = unique("ASSIGNED_ROLE").toUpperCase().replace('-', '_');
         SysRole role = createRole(adminToken, roleCode, "Assigned Role");
 
@@ -501,7 +501,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createRole_specialCharactersInName_success() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("SPECIAL_CHARS").toUpperCase().replace('-', '_');
         String roleName = "Test Role (Special) 角色 @2024";
 
@@ -520,7 +520,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void createRole_whitespaceInCode_trimmed() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         String roleCode = unique("TRIMMED").toUpperCase().replace('-', '_');
 
         mockMvc.perform(post("/api/rbac/roles")
@@ -540,7 +540,7 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void updateRole_statusBoundary_values() throws Exception {
-        String adminToken = createAdminToken();
+        String adminToken = createSysAdminToken();
         SysRole role = createRole(adminToken, unique("STATUS_TEST").toUpperCase().replace('-', '_'), "Test");
 
         // 测试状态 0（停用）
@@ -574,8 +574,8 @@ class RoleCrudIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void listRoles_sortedByRoleCode() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         // 创建多个角色（不按字母顺序）
         createRole(adminToken, unique("ZEBRA").toUpperCase().replace('-', '_'), "Zebra");

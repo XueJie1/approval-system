@@ -5,6 +5,7 @@ import com.flowablecollab.approval_system.service.workflow.manage.WorkflowDefini
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowManageDtos;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,12 +23,14 @@ public class WorkflowDefinitionAdminController {
     private final WorkflowDefinitionService workflowDefinitionService;
 
     @PostMapping
+    @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<WorkflowManageDtos.WorkflowDefinitionView> createDefinition(
             @RequestBody WorkflowManageDtos.CreateWorkflowDefinitionRequest request) {
         return ResponseEntity.ok(workflowDefinitionService.createDefinition(request, requireOperatorId()));
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<WorkflowManageDtos.PageResult<WorkflowManageDtos.WorkflowDefinitionView>> listDefinitions(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String category,
@@ -44,16 +47,19 @@ public class WorkflowDefinitionAdminController {
     }
 
     @GetMapping("/launchable")
+    @PreAuthorize("hasAnyRole('ADMIN','SYS_ADMIN')")
     public ResponseEntity<java.util.List<WorkflowManageDtos.WorkflowDefinitionView>> listLaunchableDefinitions() {
         return ResponseEntity.ok(workflowDefinitionService.listLaunchableDefinitions());
     }
 
     @GetMapping("/{definitionId}")
+    @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<WorkflowManageDtos.WorkflowDefinitionView> getDefinition(@PathVariable Long definitionId) {
         return ResponseEntity.ok(workflowDefinitionService.getDefinition(definitionId));
     }
 
     @PutMapping("/{definitionId}")
+    @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<WorkflowManageDtos.WorkflowDefinitionView> updateDefinition(
             @PathVariable Long definitionId,
             @RequestBody WorkflowManageDtos.UpdateWorkflowDefinitionRequest request) {
@@ -61,6 +67,7 @@ public class WorkflowDefinitionAdminController {
     }
 
     @PostMapping("/{definitionId}/inactivate")
+    @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<ActionResponse> inactivateDefinition(
             @PathVariable Long definitionId,
             @RequestBody(required = false) WorkflowManageDtos.ChangeVersionStatusRequest request) {
@@ -72,6 +79,7 @@ public class WorkflowDefinitionAdminController {
     }
 
     @PostMapping("/{definitionId}/archive")
+    @PreAuthorize("hasRole('SYS_ADMIN')")
     public ResponseEntity<ActionResponse> archiveDefinition(
             @PathVariable Long definitionId,
             @RequestBody(required = false) WorkflowManageDtos.ChangeVersionStatusRequest request) {

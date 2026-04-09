@@ -19,9 +19,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
-    void admin_canCreateAndManageUsers() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canCreateAndManageUsers() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String deptCode = unique("FIN").toUpperCase().replace('-', '_');
         SysDept finance = rbacService.createDept(deptCode, "Finance", null);
         SysRole employeeRole = ensureRole("EMPLOYEE");
@@ -88,9 +88,9 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
     }
 
     @Test
-    void admin_canValidateAndExecuteCsvImport() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canValidateAndExecuteCsvImport() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String deptCode = unique("FIN").toUpperCase().replace('-', '_');
         rbacService.createDept(deptCode, "Finance", null);
         SysRole employeeRole = ensureRole("EMPLOYEE");
@@ -152,9 +152,9 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
     }
 
     @Test
-    void admin_canValidateXlsxImportAndGetErrors() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canValidateXlsxImportAndGetErrors() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         ensureRole("EMPLOYEE");
 
         byte[] workbookBytes = buildWorkbook(
@@ -188,8 +188,8 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
 
     @Test
     void failedExport_keepsValidationFailuresAfterExecute() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         SysRole employeeRole = ensureRole("EMPLOYEE");
 
         MockMultipartFile file = new MockMultipartFile(
@@ -245,8 +245,8 @@ class AdminUserControllerIntegrationTests extends AbstractIntegrationTestSupport
 
     @Test
     void options_includeUsersForManagerSelection() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         SysUser manager = createUser(unique("leader"), "Password@123", null, "EMPLOYEE");
 
         mockMvc.perform(get("/api/admin/users/options")

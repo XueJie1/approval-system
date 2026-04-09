@@ -69,12 +69,12 @@
         </template>
 
         <div class="quick-actions">
-          <el-button type="primary" plain @click="go('/admin/users')">用户管理</el-button>
-          <el-button type="primary" plain @click="go('/admin/roles')">角色管理</el-button>
-          <el-button type="primary" plain @click="go('/admin/departments')">部门管理</el-button>
           <el-button type="primary" plain @click="go('/admin/request-templates')">模板管理</el-button>
-          <el-button type="primary" plain @click="go('/admin/workflows')">流程管理</el-button>
-          <el-button @click="go('/admin/settings')">系统设置</el-button>
+          <el-button v-if="isTechAdmin" type="primary" plain @click="go('/admin/users')">用户管理</el-button>
+          <el-button v-if="isTechAdmin" type="primary" plain @click="go('/admin/roles')">角色管理</el-button>
+          <el-button v-if="isTechAdmin" type="primary" plain @click="go('/admin/departments')">部门管理</el-button>
+          <el-button v-if="isTechAdmin" type="primary" plain @click="go('/admin/workflows')">流程管理</el-button>
+          <el-button v-if="isTechAdmin" @click="go('/admin/settings')">系统设置</el-button>
         </div>
       </el-card>
     </div>
@@ -103,6 +103,8 @@ const templateTotal = ref<number | null>(null);
 const templateActive = ref<number | null>(null);
 const workflowTotal = ref<number | null>(null);
 
+const isTechAdmin = computed(() => (auth.currentUser?.roles ?? []).includes('SYS_ADMIN'));
+
 const greeting = computed(() => {
   const hour = new Date().getHours();
   if (hour < 6) return '夜深了';
@@ -119,11 +121,11 @@ onMounted(() => {
 
 async function loadDashboard() {
   loading.value = true;
-  await Promise.allSettled([
-    loadOverview(),
-    loadTemplateStats(),
-    loadWorkflowStats()
-  ]);
+  const jobs: Array<Promise<unknown>> = [loadTemplateStats()];
+  if (isTechAdmin.value) {
+    jobs.push(loadOverview(), loadWorkflowStats());
+  }
+  await Promise.allSettled(jobs);
   loading.value = false;
 }
 

@@ -136,8 +136,8 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void activeTemplateEndpoint_hidesInactiveTemplates() throws Exception {
-        SysUser admin = createUser("template-admin", "Password@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("template-admin", "Password@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(post("/api/admin/request-templates")
                         .header("Authorization", authorization(adminToken))
@@ -163,9 +163,9 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
     void adminTemplateList_returnsUsageCountForTemplate() throws Exception {
-        SysUser admin = createUser("template-usage-admin", "Password@123", null, "ADMIN");
+        SysUser admin = createUser("template-usage-admin", "Password@123", null, "SYS_ADMIN");
         SysUser applicant = createUser("template-usage-employee", "Password@123", null, "EMPLOYEE");
-        String adminToken = accessToken(admin, "ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String applicantToken = accessToken(applicant, "EMPLOYEE");
 
         mockMvc.perform(post("/api/admin/request-templates")

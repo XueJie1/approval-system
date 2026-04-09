@@ -29,11 +29,11 @@ class WorkflowManagementIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void publishVersion_andStartProcess_bindsCurrentVersionToBizRequest() throws Exception {
-        SysUser admin = createUser("wf-admin", "Password@123", null, "ADMIN");
+        SysUser admin = createUser("wf-admin", "Password@123", null, "SYS_ADMIN");
         SysUser designer = createUser("wf-designer", "Password@123", null, "DESIGNER");
         SysUser applicant = createUser("wf-applier", "Password@123", null, "EMPLOYEE");
         SysUser approver = createUser("wf-approver", "Password@123", null, "EMPLOYEE");
-        String adminToken = accessToken(admin, "ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String designerToken = accessToken(designer, "DESIGNER");
         String applicantToken = accessToken(applicant, "EMPLOYEE");
 
@@ -111,9 +111,9 @@ class WorkflowManagementIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void publishSecondVersion_inactivatesPreviousPublishedVersion() throws Exception {
-        SysUser admin = createUser("wf-admin2", "Password@123", null, "ADMIN");
+        SysUser admin = createUser("wf-admin2", "Password@123", null, "SYS_ADMIN");
         SysUser designer = createUser("wf-des2", "Password@123", null, "DESIGNER");
-        String adminToken = accessToken(admin, "ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String designerToken = accessToken(designer, "DESIGNER");
         String processKey = unique("wfpub").replace('-', '_');
         Long formVersionId = createFormVersionForWorkflow(designer, designerToken, processKey + "_form");
@@ -150,11 +150,11 @@ class WorkflowManagementIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void inactiveDefinition_blocksNewLaunch() throws Exception {
-        SysUser admin = createUser("wf-admin3", "Password@123", null, "ADMIN");
+        SysUser admin = createUser("wf-admin3", "Password@123", null, "SYS_ADMIN");
         SysUser designer = createUser("wf-des3", "Password@123", null, "DESIGNER");
         SysUser applicant = createUser("wf-app3", "Password@123", null, "EMPLOYEE");
         SysUser approver = createUser("wf-aprv3", "Password@123", null, "EMPLOYEE");
-        String adminToken = accessToken(admin, "ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
         String designerToken = accessToken(designer, "DESIGNER");
         String applicantToken = accessToken(applicant, "EMPLOYEE");
         String processKey = unique("wfinact").replace('-', '_');

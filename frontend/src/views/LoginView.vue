@@ -85,8 +85,17 @@ function storeAndJump(result: LoginResult) {
   auth.setAuth(result.accessToken, user);
   
   // 根据角色跳转到对应入口
-  const isAdmin = user.roles.some((role) => role === "ADMIN" || role === "SYS_ADMIN");
-  router.replace(isAdmin ? "/admin" : "/user");
+  const isTechAdmin = user.roles.includes("SYS_ADMIN");
+  const isBusinessAdmin = user.roles.includes("ADMIN") || isTechAdmin;
+  if (isTechAdmin) {
+    router.replace("/admin/home");
+    return;
+  }
+  if (isBusinessAdmin) {
+    router.replace("/admin/request-templates");
+    return;
+  }
+  router.replace("/user");
 }
 
 async function submitLogin() {

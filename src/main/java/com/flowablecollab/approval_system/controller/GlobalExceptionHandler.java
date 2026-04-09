@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.FlowableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +40,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenOperationException.class)
     public ResponseEntity<Map<String, String>> handleForbidden(ForbiddenOperationException ex) {
         return ResponseEntity.status(403).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})
+    public ResponseEntity<Map<String, String>> handleAccessDenied(Exception ex) {
+        return ResponseEntity.status(403).body(Map.of("error", "Forbidden"));
     }
 
     @ExceptionHandler(ResourceConflictException.class)

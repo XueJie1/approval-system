@@ -12,9 +12,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport {
 
     @Test
-    void admin_canCreatePosition() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canCreatePosition() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         String response = mockMvc.perform(post("/api/positions")
                         .header("Authorization", authorization(adminToken))
@@ -38,9 +38,9 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
-    void admin_canListAllPositions() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canListAllPositions() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         sysPostRepository.deleteAll();
         sysPostRepository.save(createPost("DEV", "Developer"));
@@ -54,9 +54,9 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
-    void admin_canGetPositionById() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canGetPositionById() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysPost post = sysPostRepository.save(createPost("TEST", "Test Position"));
 
@@ -69,9 +69,9 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
-    void admin_canUpdatePosition() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canUpdatePosition() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysPost post = sysPostRepository.save(createPost("OLD", "Old Position"));
 
@@ -95,9 +95,9 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
-    void admin_canDeletePosition() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+    void sysAdmin_canDeletePosition() throws Exception {
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysPost post = sysPostRepository.save(createPost("TODELETE", "To Delete"));
 
@@ -110,8 +110,8 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void cannotDeletePositionWithUsers() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         SysPost post = sysPostRepository.save(createPost("HASUSER", "Has User"));
         SysUser user = rbacService.createUser(unique("user"), "User@123", null, 1);
@@ -125,8 +125,8 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void createPosition_validatesPostCodeUniqueness() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         sysPostRepository.save(createPost("UNIQUE", "Unique Position"));
 
@@ -158,13 +158,13 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("operator has no RBAC management permission"));
+                .andExpect(jsonPath("$.error").value("Forbidden"));
     }
 
     @Test
     void getPositionNotFound_returns404() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(get("/api/positions/99999")
                         .header("Authorization", authorization(adminToken)))
@@ -173,8 +173,8 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void updatePositionNotFound_returns404() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(put("/api/positions/99999")
                         .header("Authorization", authorization(adminToken))
@@ -190,8 +190,8 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void deletePositionNotFound_returns404() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(delete("/api/positions/99999")
                         .header("Authorization", authorization(adminToken)))
@@ -200,8 +200,8 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void createPosition_requiresPostCode() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(post("/api/positions")
                         .header("Authorization", authorization(adminToken))
@@ -218,8 +218,8 @@ class PositionControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
     @Test
     void createPosition_requiresPostName() throws Exception {
-        SysUser admin = createUser("admin", "Admin@123", null, "ADMIN");
-        String adminToken = accessToken(admin, "ADMIN");
+        SysUser admin = createUser("admin", "Admin@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
 
         mockMvc.perform(post("/api/positions")
                         .header("Authorization", authorization(adminToken))
