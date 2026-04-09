@@ -43,13 +43,18 @@ public class AuthService {
         }
 
         SysRole adminRole = sysRoleRepository.findByRoleCode("ADMIN")
-                .orElseGet(() -> rbacService.createRole("ADMIN", "System Administrator"));
+                .orElseGet(() -> rbacService.createRole("ADMIN", "Business Administrator"));
+        SysRole sysAdminRole = sysRoleRepository.findByRoleCode("SYS_ADMIN")
+                .orElseGet(() -> rbacService.createRole("SYS_ADMIN", "System Administrator"));
 
         SysUser user = sysUserRepository.findByUsername(username.trim())
                 .orElseGet(() -> rbacService.createUser(username.trim(), password, null, 1));
 
         if (!sysUserRoleRepository.existsByUserIdAndRoleId(user.getId(), adminRole.getId())) {
             rbacService.assignRole(user.getId(), adminRole.getId());
+        }
+        if (!sysUserRoleRepository.existsByUserIdAndRoleId(user.getId(), sysAdminRole.getId())) {
+            rbacService.assignRole(user.getId(), sysAdminRole.getId());
         }
 
         // Log bootstrap success
@@ -258,7 +263,7 @@ public class AuthService {
     }
 
     private LoginResult issueAccessToken(SysUser user) {
-        Set<String> roles = loadRoleCodes(user.getId());
+        Set<String> roles = ensureInitialSysAdminForLegacyAdmin(user);
 
         LoginResult result = new LoginResult();
         result.setTwoFactorRequired(false);
@@ -280,6 +285,32 @@ public class AuthService {
         return sysRoleRepository.findByIdIn(roleIds).stream()
                 .map(SysRole::getRoleCode)
                 .collect(Collectors.toSet());
+    }
+
+    private Set<String> ensureInitialSysAdminForLegacyAdmin(SysUser user) {
+        Set<String> roles = loadRoleCodes(user.getId());
+        if (roles.contains("SYS_ADMIN") || !roles.contains("ADMIN")) {
+            return roles;
+        }
+
+        SysRole adminRole = sysRoleRepository.findByRoleCode("ADMIN").orElse(null);
+        if (adminRole == null || !"System Administrator".equals(adminRole.getRoleName())) {
+            return roles;
+        }
+
+        SysRole sysAdminRole = sysRoleRepository.findByRoleCode("SYS_ADMIN").orElse(null);
+        if (sysAdminRole != null && sysUserRoleRepository.existsByRoleId(sysAdminRole.getId())) {
+            return roles;
+        }
+
+        if (sysAdminRole == null) {
+            sysAdminRole = rbacService.createRole("SYS_ADMIN", "System Administrator");
+        }
+        if (!sysUserRoleRepository.existsByUserIdAndRoleId(user.getId(), sysAdminRole.getId())) {
+            rbacService.assignRole(user.getId(), sysAdminRole.getId());
+        }
+
+        return loadRoleCodes(user.getId());
     }
 
     private boolean isTwoFactorEnabled(SysUser user) {
