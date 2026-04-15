@@ -623,7 +623,10 @@ function formatDateTime(value?: string | null) {
   gap: 12px;
 }
 
-.summary-grid,
+.summary-grid {
+  margin: 0;
+}
+
 .usage-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -800,14 +803,12 @@ function formatDateTime(value?: string | null) {
     grid-template-columns: 1fr;
   }
 
-  .summary-grid,
   .usage-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
-  .summary-grid,
   .usage-grid,
   .two-columns {
     grid-template-columns: 1fr;
