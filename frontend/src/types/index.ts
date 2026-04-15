@@ -14,6 +14,14 @@ export interface ActionResult {
   message: string;
 }
 
+export interface ApiErrorResponse {
+  code?: string;
+  message?: string;
+  error?: string;
+  details?: unknown;
+  errors?: unknown;
+}
+
 export interface TwoFactorSetup {
   secret: string;
   otpAuthUri: string;

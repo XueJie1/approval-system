@@ -3,6 +3,7 @@ package com.flowablecollab.approval_system.service.workflow.manage;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowDefinition;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowDefinitionVersion;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowPublishLog;
+import com.flowablecollab.approval_system.exception.WorkflowValidationException;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowDefinitionRepository;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowDefinitionVersionRepository;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowPublishLogRepository;
@@ -16,8 +17,6 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class WorkflowPublishService {
-
-    private static final int NOT_DELETED = 0;
 
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final WorkflowDefinitionVersionRepository workflowDefinitionVersionRepository;
@@ -141,11 +140,15 @@ public class WorkflowPublishService {
 
     private void validatePublish(WorkflowDefinitionVersion version) {
         if (version.getBpmnXml() == null || version.getBpmnXml().isBlank()) {
-            throw new IllegalArgumentException("draft version bpmnXml is required");
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.BPMN_XML_INVALID,
+                    "draft version bpmnXml is required");
         }
-        workflowNodeConfigService.parseBpmnNodes(version.getBpmnXml());
+        workflowDefinitionVersionService.parseMainProcess(version.getBpmnXml());
         if (version.getFormVersionId() == null) {
-            throw new IllegalArgumentException("draft version formVersionId is required");
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.FORM_VERSION_REQUIRED,
+                    "draft version formVersionId is required");
         }
         workflowNodeConfigService.validateNodeConfigs(version.getId());
     }

@@ -4,19 +4,26 @@ import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowDefinition;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowDefinitionVersion;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowNodeConfig;
-import com.flowablecollab.approval_system.repository.form.FormVersionRepository;
+import com.flowablecollab.approval_system.exception.WorkflowValidationException;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowDefinitionRepository;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowDefinitionVersionRepository;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowNodeConfigRepository;
 import lombok.RequiredArgsConstructor;
+import org.flowable.bpmn.converter.BpmnXMLConverter;
+import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.Process;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +34,6 @@ public class WorkflowDefinitionVersionService {
     private final WorkflowDefinitionRepository workflowDefinitionRepository;
     private final WorkflowDefinitionVersionRepository workflowDefinitionVersionRepository;
     private final WorkflowNodeConfigRepository workflowNodeConfigRepository;
-    private final FormVersionRepository formVersionRepository;
     private final com.flowablecollab.approval_system.service.FormService formService;
     private final WorkflowDefinitionService workflowDefinitionService;
 
@@ -62,6 +68,17 @@ public class WorkflowDefinitionVersionService {
             if (draft.getChangeSummary() == null || draft.getChangeSummary().isBlank()) {
                 draft.setChangeSummary(source.getChangeSummary());
             }
+        } else {
+            String defaultBpmnXml = buildDefaultBpmnXml(definition.getProcessKey(), definition.getProcessName());
+            ParsedMainProcess parsedMainProcess = parseMainProcess(defaultBpmnXml);
+            if (!definition.getProcessKey().equals(parsedMainProcess.processId())) {
+                throw new WorkflowValidationException(
+                        WorkflowValidationException.BPMN_KEY_MISMATCH,
+                        "processKey does not match BPMN process id",
+                        Map.of("processKey", definition.getProcessKey(), "processId", parsedMainProcess.processId()));
+            }
+            draft.setBpmnXml(defaultBpmnXml);
+            draft.setBpmnChecksum(calculateChecksum(defaultBpmnXml));
         }
 
         workflowDefinitionVersionRepository.save(draft);
@@ -98,11 +115,16 @@ public class WorkflowDefinitionVersionService {
         WorkflowDefinitionVersion version = getVersionEntity(versionId);
         ensureDraft(version);
         if (request.getBpmnXml() == null || request.getBpmnXml().isBlank()) {
-            throw new IllegalArgumentException("bpmnXml is required");
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.BPMN_XML_INVALID,
+                    "bpmnXml is required");
         }
         if (request.getFormVersionId() == null) {
-            throw new IllegalArgumentException("formVersionId is required");
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.FORM_VERSION_REQUIRED,
+                    "formVersionId is required");
         }
+        validateBpmnForSave(request.getBpmnXml(), version.getDefinitionId());
         com.flowablecollab.approval_system.service.FormService.BoundFormVersion boundForm =
                 formService.resolveBoundFormVersion(request.getFormVersionId());
         FormVersion formVersion = boundForm.getFormVersion();
@@ -203,5 +225,101 @@ public class WorkflowDefinitionVersionService {
             target.setSortOrder(source.getSortOrder());
             workflowNodeConfigRepository.save(target);
         }
+    }
+
+    private String buildDefaultBpmnXml(String processKey, String processName) {
+        String safeProcessName = processName == null || processName.isBlank() ? processKey : processName;
+        return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:flowable="http://flowable.org/bpmn"
+                  id="Definitions_1"
+                  targetNamespace="http://www.flowable.org/processdef">
+                  <bpmn:process id="%s" name="%s" isExecutable="true">
+                    <bpmn:startEvent id="StartEvent_1" name="开始">
+                      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+                    </bpmn:startEvent>
+                    <bpmn:userTask id="Activity_Approve" name="审批">
+                      <bpmn:incoming>Flow_1</bpmn:incoming>
+                      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+                    </bpmn:userTask>
+                    <bpmn:endEvent id="EndEvent_1" name="结束">
+                      <bpmn:incoming>Flow_2</bpmn:incoming>
+                    </bpmn:endEvent>
+                    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Activity_Approve" />
+                    <bpmn:sequenceFlow id="Flow_2" sourceRef="Activity_Approve" targetRef="EndEvent_1" />
+                  </bpmn:process>
+                  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+                    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="%s">
+                      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+                        <dc:Bounds x="150" y="120" width="36" height="36" />
+                      </bpmndi:BPMNShape>
+                      <bpmndi:BPMNShape id="Activity_Approve_di" bpmnElement="Activity_Approve">
+                        <dc:Bounds x="250" y="98" width="100" height="80" />
+                      </bpmndi:BPMNShape>
+                      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+                        <dc:Bounds x="430" y="120" width="36" height="36" />
+                      </bpmndi:BPMNShape>
+                      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+                        <di:waypoint x="186" y="138" />
+                        <di:waypoint x="250" y="138" />
+                      </bpmndi:BPMNEdge>
+                      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+                        <di:waypoint x="350" y="138" />
+                        <di:waypoint x="430" y="138" />
+                      </bpmndi:BPMNEdge>
+                    </bpmndi:BPMNPlane>
+                  </bpmndi:BPMNDiagram>
+                </bpmn:definitions>
+                """.formatted(processKey, safeProcessName, processKey);
+    }
+
+    private void validateBpmnForSave(String bpmnXml, Long definitionId) {
+        ParsedMainProcess parsed = parseMainProcess(bpmnXml);
+        WorkflowDefinition definition = workflowDefinitionService.getDefinitionEntity(definitionId);
+        if (!definition.getProcessKey().equals(parsed.processId())) {
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.BPMN_KEY_MISMATCH,
+                    "processKey does not match BPMN process id",
+                    Map.of("processKey", definition.getProcessKey(), "processId", parsed.processId()));
+        }
+    }
+
+    ParsedMainProcess parseMainProcess(String bpmnXml) {
+        try {
+            XMLInputFactory factory = XMLInputFactory.newInstance();
+            XMLStreamReader reader = factory.createXMLStreamReader(
+                    new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)));
+            BpmnModel model = new BpmnXMLConverter().convertToBpmnModel(reader);
+            List<Process> processes = model.getProcesses();
+            if (processes == null || processes.size() != 1) {
+                int count = processes == null ? 0 : processes.size();
+                throw new WorkflowValidationException(
+                        WorkflowValidationException.BPMN_PROCESS_COUNT_INVALID,
+                        "BPMN must contain exactly 1 process",
+                        Map.of("processCount", count));
+            }
+            Process process = processes.get(0);
+            String processId = process.getId();
+            if (processId == null || processId.isBlank()) {
+                throw new WorkflowValidationException(
+                        WorkflowValidationException.BPMN_XML_INVALID,
+                        "BPMN process id is required");
+            }
+            return new ParsedMainProcess(processId);
+        } catch (WorkflowValidationException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.BPMN_XML_INVALID,
+                    "Invalid BPMN XML");
+        }
+    }
+
+    record ParsedMainProcess(String processId) {
     }
 }

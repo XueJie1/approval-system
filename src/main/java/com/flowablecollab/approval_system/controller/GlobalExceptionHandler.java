@@ -3,6 +3,7 @@ package com.flowablecollab.approval_system.controller;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.exception.ResourceConflictException;
 import com.flowablecollab.approval_system.exception.ResourceNotFoundException;
+import com.flowablecollab.approval_system.exception.WorkflowValidationException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.FlowableException;
@@ -25,6 +26,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(WorkflowValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleWorkflowValidation(WorkflowValidationException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("code", ex.getCode());
+        body.put("message", ex.getMessage());
+        body.put("error", ex.getMessage());
+        if (ex.getDetails() != null && !ex.getDetails().isEmpty()) {
+            body.put("details", ex.getDetails());
+        }
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

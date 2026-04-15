@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowDefinitionVersion;
 import com.flowablecollab.approval_system.entity.workflow.WorkflowNodeConfig;
+import com.flowablecollab.approval_system.exception.WorkflowValidationException;
 import com.flowablecollab.approval_system.repository.workflow.WorkflowNodeConfigRepository;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.converter.BpmnXMLConverter;
@@ -90,7 +91,10 @@ public class WorkflowNodeConfigService {
         List<WorkflowManageDtos.WorkflowNodeConfigItemRequest> nodes = requestNodes == null ? List.of() : requestNodes;
         for (WorkflowManageDtos.WorkflowNodeConfigItemRequest item : nodes) {
             if (!snapshotMap.containsKey(item.getNodeId())) {
-                throw new IllegalArgumentException("nodeId not found in BPMN: " + item.getNodeId());
+                throw new WorkflowValidationException(
+                        WorkflowValidationException.NODE_CONFIG_MISMATCH,
+                        "nodeId not found in BPMN",
+                        Map.of("nodeId", item.getNodeId(), "reason", "CONFIG_NODE_NOT_IN_BPMN"));
             }
         }
         workflowNodeConfigRepository.deleteByDefinitionVersionId(versionId);
@@ -126,9 +130,34 @@ public class WorkflowNodeConfigService {
         }
         for (WorkflowNodeConfig config : workflowNodeConfigRepository.findByDefinitionVersionIdOrderBySortOrderAscIdAsc(versionId)) {
             if (!snapshotMap.containsKey(config.getNodeId())) {
-                throw new IllegalArgumentException("node config does not match BPMN node: " + config.getNodeId());
+                throw new WorkflowValidationException(
+                        WorkflowValidationException.NODE_CONFIG_MISMATCH,
+                        "node config does not match BPMN node",
+                        Map.of("nodeId", config.getNodeId(), "reason", "CONFIG_NODE_NOT_IN_BPMN"));
             }
         }
+        List<WorkflowNodeConfig> configs = workflowNodeConfigRepository.findByDefinitionVersionIdOrderBySortOrderAscIdAsc(versionId);
+        List<String> missingNodeConfigs = snapshotsMissingConfig(configs, snapshotMap.keySet().stream().toList());
+        if (!missingNodeConfigs.isEmpty()) {
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.NODE_CONFIG_MISMATCH,
+                    "BPMN nodes missing node config",
+                    Map.of("missingNodeIds", missingNodeConfigs));
+        }
+    }
+
+    private List<String> snapshotsMissingConfig(List<WorkflowNodeConfig> configs, List<String> bpmnNodeIds) {
+        Map<String, Boolean> configMap = new LinkedHashMap<>();
+        for (WorkflowNodeConfig config : configs) {
+            configMap.put(config.getNodeId(), Boolean.TRUE);
+        }
+        List<String> missing = new ArrayList<>();
+        for (String nodeId : bpmnNodeIds) {
+            if (!configMap.containsKey(nodeId)) {
+                missing.add(nodeId);
+            }
+        }
+        return missing;
     }
 
     public List<WorkflowManageDtos.BpmnNodeSnapshot> parseBpmnNodes(String bpmnXml) {
@@ -157,11 +186,15 @@ public class WorkflowNodeConfigService {
                 }
             }
             if (snapshots.isEmpty()) {
-                throw new IllegalArgumentException("BPMN contains no manageable nodes");
+                throw new WorkflowValidationException(
+                        WorkflowValidationException.BPMN_XML_INVALID,
+                        "BPMN contains no manageable nodes");
             }
             return snapshots;
         } catch (RuntimeException | javax.xml.stream.XMLStreamException ex) {
-            throw new IllegalArgumentException("Invalid BPMN XML", ex);
+            throw new WorkflowValidationException(
+                    WorkflowValidationException.BPMN_XML_INVALID,
+                    "Invalid BPMN XML");
         }
     }
 

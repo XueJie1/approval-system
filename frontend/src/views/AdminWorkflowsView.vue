@@ -239,8 +239,67 @@
                         <div><strong>字段数：</strong>{{ formFields.length }}</div>
                       </div>
                     </el-form-item>
-                    <el-form-item label="BPMN XML" prop="bpmnXml" class="full-span">
-                      <el-input v-model="versionForm.bpmnXml" :disabled="!isDraftVersion" type="textarea" :rows="16" class="mono-input" />
+                    <el-form-item label="BPMN 编辑" prop="bpmnXml" class="full-span">
+                      <div class="bpmn-editor stack">
+                        <div class="toolbar wrap bpmn-mode-toolbar">
+                          <el-radio-group v-model="bpmnEditMode" size="small">
+                            <el-radio-button value="visual">可视化</el-radio-button>
+                            <el-radio-button value="source">源码</el-radio-button>
+                          </el-radio-group>
+                          <el-button size="small" :disabled="!canEditVisual" @click="saveVersionDraft">保存草稿</el-button>
+                          <el-button size="small" @click="toggleSourcePanel">
+                            {{ sourcePanelExpanded ? "收起源码" : "展开源码" }}
+                          </el-button>
+                          <el-button size="small" @click="reloadDesignerFromSource">重载画布</el-button>
+                          <el-button size="small" :type="bpmnFullscreen ? 'danger' : 'primary'" @click="toggleBpmnFullscreen">
+                            {{ bpmnFullscreen ? "退出全屏" : "全屏编辑" }}
+                          </el-button>
+                          <el-tag v-if="bpmnFullscreen" size="small" type="success">ESC 退出全屏 / Ctrl+S 保存</el-tag>
+                          <el-tag v-if="!canVisualEditRole" size="small" type="warning">仅管理员可编辑</el-tag>
+                        </div>
+
+                        <div
+                          ref="bpmnEditorRef"
+                          class="bpmn-editor-content"
+                          :class="{ 'is-bpmn-fullscreen': bpmnFullscreen }"
+                          :style="bpmnFullscreenStyle"
+                        >
+                        <BpmnVisualDesigner
+                          v-if="bpmnEditMode === 'visual'"
+                          :xml="versionForm.bpmnXml"
+                          :process-id="selectedDefinition?.processKey || ''"
+                          :process-name="selectedDefinition?.processName || '流程'"
+                          :disabled="!canEditVisual"
+                          :can-edit="canEditVisual"
+                          :fullscreen="bpmnFullscreen"
+                          :reload-token="designerReloadToken"
+                          @xml-change="handleDesignerXmlChange"
+                          @save="handleDesignerSave"
+                          @import-error="handleDesignerImportError"
+                        />
+
+                        <el-alert
+                          v-if="bpmnImportError"
+                          type="error"
+                          :title="bpmnImportError.message"
+                          :description="bpmnImportError.details"
+                          show-icon
+                          :closable="false"
+                        />
+
+                        <el-collapse-transition>
+                          <div v-show="sourcePanelExpanded" class="source-panel stack">
+                            <el-input
+                              v-model="versionForm.bpmnXml"
+                              :disabled="!canEditVisual"
+                              type="textarea"
+                              :rows="16"
+                              class="mono-input"
+                            />
+                          </div>
+                        </el-collapse-transition>
+                        </div>
+                      </div>
                     </el-form-item>
                   </el-form>
 
@@ -445,10 +504,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import type { AxiosError } from "axios";
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus";
 import { Search, Plus, ArrowDown } from "@element-plus/icons-vue";
+import BpmnVisualDesigner from "../components/workflow/BpmnVisualDesigner.vue";
+import { onBeforeRouteLeave } from "vue-router";
+import { useAuthStore } from "../stores/auth";
 import type {
+  ApiErrorResponse,
   PageResult,
   WorkflowDefinitionPayload,
   FormDefinitionSummary,
@@ -561,6 +625,19 @@ const versionForm = reactive({
   bpmnXml: ""
 });
 
+const bpmnEditMode = ref<"visual" | "source">("visual");
+const sourcePanelExpanded = ref(false);
+const designerReloadToken = ref(0);
+const bpmnImportError = ref<{ message: string; details?: string } | null>(null);
+const bpmnEditorRef = ref<HTMLElement | null>(null);
+const bpmnFullscreen = ref(false);
+const bpmnFullscreenStyle = ref<Record<string, string>>({});
+const bpmnBaselineXml = ref("");
+const bpmnDirty = ref(false);
+const pendingDesignerInitSync = ref(false);
+const suppressBpmnDirtyTracking = ref(false);
+const auth = useAuthStore();
+
 const definitionRules: FormRules = {
   processKey: [
     { required: true, message: "请输入流程标识", trigger: "blur" },
@@ -577,6 +654,8 @@ const versionRules: FormRules = {
 const publishedCount = computed(() => versionList.value.filter((item) => item.status === "PUBLISHED").length);
 const draftCount = computed(() => versionList.value.filter((item) => item.status === "DRAFT").length);
 const isDraftVersion = computed(() => selectedVersion.value?.status === "DRAFT");
+const canVisualEditRole = computed(() => (auth.currentUser?.roles ?? []).some((role) => role === "SYS_ADMIN" || role === "ADMIN"));
+const canEditVisual = computed(() => isDraftVersion.value && canVisualEditRole.value);
 const currentFormVersions = computed(() => {
   if (!selectedFormDefinitionId.value) {
     return [];
@@ -602,9 +681,27 @@ watch(activeTab, async (tab) => {
   }
 });
 
+watch(bpmnEditMode, (mode) => {
+  if (mode === "source") {
+    sourcePanelExpanded.value = true;
+    if (bpmnFullscreen.value) {
+      exitBpmnFullscreen();
+    }
+  }
+});
+
 onMounted(async () => {
+  window.addEventListener("keydown", handleGlobalShortcut);
+  window.addEventListener("beforeunload", handleBeforeUnload);
   await loadFormDefinitions();
   await refreshAll();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleGlobalShortcut);
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+  window.removeEventListener("resize", updateBpmnFullscreenRect);
+  document.body.classList.remove("bpmn-editor-fullscreen-lock");
 });
 
 watch(
@@ -624,6 +721,25 @@ watch(
     await loadFormFields(value);
   }
 );
+
+watch(
+  () => versionForm.bpmnXml,
+  (xml) => {
+    if (suppressBpmnDirtyTracking.value || pendingDesignerInitSync.value) {
+      return;
+    }
+    bpmnDirty.value = normalizeXmlText(xml) !== bpmnBaselineXml.value;
+  }
+);
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (!hasUnsavedBpmnChanges()) {
+    next();
+    return;
+  }
+  const confirmLeave = window.confirm("当前 BPMN 修改尚未保存，确定离开当前页面吗？");
+  next(confirmLeave);
+});
 
 async function refreshAll() {
   globalLoading.value = true;
@@ -729,18 +845,187 @@ async function loadVersions() {
 }
 
 async function handleVersionSelect(row: WorkflowVersionSummary) {
+  exitBpmnFullscreen();
   selectedVersion.value = row;
   syncVersionForm(row);
+  bpmnEditMode.value = "visual";
+  sourcePanelExpanded.value = false;
+  bpmnImportError.value = null;
+  designerReloadToken.value += 1;
   await loadVersionRelatedData();
 }
 
 function syncVersionForm(row: WorkflowVersionSummary) {
+  suppressBpmnDirtyTracking.value = true;
   versionForm.versionLabel = row.versionLabel || "";
   versionForm.formKey = row.formKey || "";
   versionForm.formVersionId = row.formVersionId ?? undefined;
   versionForm.changeSummary = row.changeSummary || "";
   versionForm.bpmnXml = row.bpmnXml || "";
+  bpmnBaselineXml.value = normalizeXmlText(row.bpmnXml || "");
+  bpmnDirty.value = false;
+  pendingDesignerInitSync.value = true;
+  nextTick(() => {
+    suppressBpmnDirtyTracking.value = false;
+  });
+  bpmnImportError.value = null;
   void syncSelectedForm(row.formKey || undefined, row.formVersionId ?? undefined);
+}
+
+function handleDesignerXmlChange(xml: string) {
+  if (!canEditVisual.value) {
+    return;
+  }
+  bpmnImportError.value = null;
+  if (pendingDesignerInitSync.value) {
+    pendingDesignerInitSync.value = false;
+    bpmnBaselineXml.value = normalizeXmlText(xml);
+    bpmnDirty.value = false;
+  }
+  versionForm.bpmnXml = xml;
+}
+
+async function handleDesignerSave(xml: string) {
+  if (!canEditVisual.value) {
+    return;
+  }
+  bpmnImportError.value = null;
+  versionForm.bpmnXml = xml;
+  await saveVersionDraft();
+}
+
+function handleDesignerImportError(payload: { message: string; details?: string }) {
+  bpmnImportError.value = payload;
+  bpmnEditMode.value = "source";
+  sourcePanelExpanded.value = true;
+  ElMessage.error(payload.message);
+}
+
+function toggleSourcePanel() {
+  sourcePanelExpanded.value = !sourcePanelExpanded.value;
+  if (sourcePanelExpanded.value && bpmnEditMode.value !== "source") {
+    bpmnEditMode.value = "source";
+  }
+}
+
+function reloadDesignerFromSource() {
+  if (!canEditVisual.value) {
+    ElMessage.warning("仅管理员可编辑草稿 BPMN");
+    return;
+  }
+  if (bpmnEditMode.value !== "visual") {
+    bpmnEditMode.value = "visual";
+  }
+  bpmnImportError.value = null;
+  designerReloadToken.value += 1;
+}
+
+function normalizeXmlText(xml: string) {
+  return (xml || "").trim();
+}
+
+function hasUnsavedBpmnChanges() {
+  return Boolean(selectedVersion.value && canEditVisual.value && bpmnDirty.value);
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!hasUnsavedBpmnChanges()) {
+    return;
+  }
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+function handleGlobalShortcut(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    if (activeTab.value === "versions" && canEditVisual.value) {
+      event.preventDefault();
+      void saveVersionDraft();
+    }
+    return;
+  }
+  if (event.key === "Escape" && bpmnFullscreen.value) {
+    event.preventDefault();
+    exitBpmnFullscreen();
+  }
+}
+
+function updateBpmnFullscreenRect() {
+  if (!bpmnFullscreen.value) {
+    return;
+  }
+  const editorEl = bpmnEditorRef.value;
+  const viewEl = editorEl?.closest(".view") as HTMLElement | null;
+  if (!viewEl) {
+    return;
+  }
+  const rect = viewEl.getBoundingClientRect();
+  bpmnFullscreenStyle.value = {
+    left: `${Math.round(rect.left)}px`,
+    top: `${Math.round(rect.top)}px`,
+    width: `${Math.round(rect.width)}px`,
+    height: `${Math.round(rect.height)}px`
+  };
+}
+
+function enterBpmnFullscreen() {
+  if (bpmnEditMode.value !== "visual") {
+    bpmnEditMode.value = "visual";
+  }
+  bpmnFullscreen.value = true;
+  document.body.classList.add("bpmn-editor-fullscreen-lock");
+  nextTick(() => {
+    updateBpmnFullscreenRect();
+  });
+  window.addEventListener("resize", updateBpmnFullscreenRect);
+}
+
+function exitBpmnFullscreen() {
+  if (!bpmnFullscreen.value) {
+    return;
+  }
+  bpmnFullscreen.value = false;
+  bpmnFullscreenStyle.value = {};
+  window.removeEventListener("resize", updateBpmnFullscreenRect);
+  document.body.classList.remove("bpmn-editor-fullscreen-lock");
+}
+
+function toggleBpmnFullscreen() {
+  if (bpmnFullscreen.value) {
+    exitBpmnFullscreen();
+    return;
+  }
+  enterBpmnFullscreen();
+}
+
+function extractMainProcessIdFromXml(xml: string) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "application/xml");
+  if (doc.querySelector("parsererror")) {
+    return null;
+  }
+  const processElements = Array.from(doc.getElementsByTagNameNS("*", "process"));
+  if (processElements.length !== 1) {
+    return null;
+  }
+  return processElements[0]?.getAttribute("id")?.trim() || null;
+}
+
+function validateProcessKeyMatchForDraftSave() {
+  const definition = selectedDefinition.value;
+  if (!definition) {
+    return true;
+  }
+  const processId = extractMainProcessIdFromXml(versionForm.bpmnXml || "");
+  if (!processId) {
+    ElMessage.error("BPMN 主流程解析失败，请确认仅包含 1 个 Process 且 XML 合法");
+    return false;
+  }
+  if (processId !== definition.processKey) {
+    ElMessage.error(`流程标识不一致：processKey=${definition.processKey}，BPMN process id=${processId}`);
+    return false;
+  }
+  return true;
 }
 
 async function loadVersionRelatedData() {
@@ -935,10 +1220,13 @@ const submitCreateVersion = async () => {
 };
 
 async function saveVersionDraft() {
-  if (!selectedVersion.value || !isDraftVersion.value) {
+  if (!selectedVersion.value || !canEditVisual.value) {
     return;
   }
   await versionFormRef.value?.validate();
+  if (!validateProcessKeyMatchForDraftSave()) {
+    return;
+  }
   const updated = await updateWorkflowVersion(selectedVersion.value.id, {
     versionLabel: versionForm.versionLabel.trim() || undefined,
     formKey: versionForm.formKey.trim() || undefined,
@@ -1023,18 +1311,29 @@ async function changeVersionState(action: "publish" | "inactivate" | "activate" 
     return;
   }
 
-  if (action === "publish") {
-    await publishWorkflowVersion(selectedVersion.value.id, comment);
-    ElMessage.success("版本已发布");
-  } else if (action === "inactivate") {
-    await inactivateWorkflowVersion(selectedVersion.value.id, comment);
-    ElMessage.success("版本已停用");
-  } else if (action === "activate") {
-    await activateWorkflowVersion(selectedVersion.value.id, comment);
-    ElMessage.success("版本已启用");
-  } else {
-    await retireWorkflowVersion(selectedVersion.value.id, comment);
-    ElMessage.success("版本已退休");
+  try {
+    if (action === "publish") {
+      await publishWorkflowVersion(selectedVersion.value.id, comment);
+      ElMessage.success("版本已发布");
+    } else if (action === "inactivate") {
+      await inactivateWorkflowVersion(selectedVersion.value.id, comment);
+      ElMessage.success("版本已停用");
+    } else if (action === "activate") {
+      await activateWorkflowVersion(selectedVersion.value.id, comment);
+      ElMessage.success("版本已启用");
+    } else {
+      await retireWorkflowVersion(selectedVersion.value.id, comment);
+      ElMessage.success("版本已退休");
+    }
+  } catch (e) {
+    const error = e as AxiosError<ApiErrorResponse>;
+    if (action === "publish" && error.response?.data?.code === "NODE_CONFIG_MISMATCH") {
+      ElMessage.warning("发布失败：节点配置与 BPMN 节点不一致，请先在“节点配置”页签同步后重试");
+      activeTab.value = "nodes";
+      await loadNodes();
+      return;
+    }
+    throw e;
   }
 
   await loadDefinitions();
@@ -1234,6 +1533,52 @@ function formatDateTime(value?: string | null) {
 .node-expand-content {
   padding: 16px 20px;
   background: #f8fafc;
+}
+
+.bpmn-editor {
+  width: 100%;
+}
+
+.bpmn-editor-content {
+  width: 100%;
+}
+
+.bpmn-editor-content.is-bpmn-fullscreen {
+  position: fixed;
+  z-index: 2200;
+  margin: 0;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bpmn-editor-content.is-bpmn-fullscreen :deep(.bpmn-visual-designer) {
+  flex: 1;
+  min-height: 0;
+}
+
+.bpmn-editor-content.is-bpmn-fullscreen .source-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.bpmn-mode-toolbar {
+  margin-bottom: 0;
+}
+
+.source-panel {
+  border: 1px dashed rgba(148, 163, 184, 0.5);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+:global(body.bpmn-editor-fullscreen-lock) {
+  overflow: hidden;
 }
 
 @media (max-width: 1180px) {

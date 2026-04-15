@@ -1,5 +1,6 @@
 import axios, { AxiosError } from "axios";
 import { ElMessage } from "element-plus";
+import type { ApiErrorResponse } from "../types";
 
 const baseURL = import.meta.env.DEV ? "/api" : "/api";
 
@@ -19,7 +20,7 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ error?: string; message?: string }>) => {
+  (error: AxiosError<ApiErrorResponse>) => {
     const status = error.response?.status;
     const message =
       error.response?.data?.message ||

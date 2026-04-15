@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -76,6 +77,8 @@ class WorkflowManagementIntegrationTests extends AbstractIntegrationTestSupport 
                                 """.formatted(objectMapper.writeValueAsString(managedApprovalSingleBpmn(processKey)), processKey + "_form", formVersionId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.formVersionId").value(formVersionId));
+
+        syncNodeConfigs(adminToken, versionId);
 
         mockMvc.perform(post("/api/admin/workflow-definition-versions/{versionId}/publish", versionId)
                         .header("Authorization", authorization(adminToken))
@@ -195,6 +198,287 @@ class WorkflowManagementIntegrationTests extends AbstractIntegrationTestSupport 
                 .andExpect(jsonPath("$.error").value("workflow definition is not active"));
     }
 
+    @Test
+    void createDraft_withoutCopy_generatesDefaultBpmnSkeleton() throws Exception {
+        SysUser admin = createUser("wf-admin-skel", "Password@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
+
+        String processKey = unique("wfskel").replace('-', '_');
+        Long definitionId = json(mockMvc.perform(post("/api/admin/workflow-definitions")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "%s",
+                                  "processName": "Skeleton Workflow"
+                                }
+                                """.formatted(processKey)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bpmnXml").isString())
+                .andExpect(jsonPath("$.bpmnXml").value(containsString("<bpmn:process id=\"%s\"".formatted(processKey))))
+                .andExpect(jsonPath("$.bpmnXml").value(containsString("Activity_Approve")));
+    }
+
+    @Test
+    void saveDraft_withProcessKeyMismatch_returnsStructuredCode() throws Exception {
+        SysUser admin = createUser("wf-admin-key", "Password@123", null, "SYS_ADMIN");
+        SysUser designer = createUser("wf-des-key", "Password@123", null, "DESIGNER");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
+        String designerToken = accessToken(designer, "DESIGNER");
+
+        String processKey = unique("wfkey").replace('-', '_');
+        Long formVersionId = createFormVersionForWorkflow(designer, designerToken, processKey + "_form");
+
+        Long definitionId = json(mockMvc.perform(post("/api/admin/workflow-definitions")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "%s",
+                                  "processName": "Key Mismatch Workflow"
+                                }
+                                """.formatted(processKey)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        Long versionId = json(mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "versionLabel": "v1",
+                                  "bpmnXml": %s,
+                                  "formKey": "%s",
+                                  "formVersionId": %d,
+                                  "changeSummary": "key mismatch"
+                                }
+                                """.formatted(objectMapper.writeValueAsString(managedApprovalSingleBpmn(processKey + "_other")), processKey + "_form", formVersionId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BPMN_KEY_MISMATCH"));
+    }
+
+    @Test
+    void saveDraft_withMultipleProcesses_returnsStructuredCode() throws Exception {
+        SysUser admin = createUser("wf-admin-multi", "Password@123", null, "SYS_ADMIN");
+        SysUser designer = createUser("wf-des-multi", "Password@123", null, "DESIGNER");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
+        String designerToken = accessToken(designer, "DESIGNER");
+
+        String processKey = unique("wfmulti").replace('-', '_');
+        Long formVersionId = createFormVersionForWorkflow(designer, designerToken, processKey + "_form");
+
+        Long definitionId = json(mockMvc.perform(post("/api/admin/workflow-definitions")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "%s",
+                                  "processName": "Multi Process Workflow"
+                                }
+                                """.formatted(processKey)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        Long versionId = json(mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        String multiProcessXml = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="http://flowable.org/examples">
+                  <process id="%s" isExecutable="true">
+                    <startEvent id="start1" />
+                  </process>
+                  <process id="%s_2" isExecutable="true">
+                    <startEvent id="start2" />
+                  </process>
+                </definitions>
+                """.formatted(processKey, processKey);
+
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "versionLabel": "v1",
+                                  "bpmnXml": %s,
+                                  "formKey": "%s",
+                                  "formVersionId": %d,
+                                  "changeSummary": "multi process"
+                                }
+                                """.formatted(objectMapper.writeValueAsString(multiProcessXml), processKey + "_form", formVersionId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BPMN_PROCESS_COUNT_INVALID"));
+    }
+
+    @Test
+    void saveDraft_withoutFormVersion_returnsStructuredCode() throws Exception {
+        SysUser admin = createUser("wf-admin-form", "Password@123", null, "SYS_ADMIN");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
+
+        String processKey = unique("wfform").replace('-', '_');
+        Long definitionId = json(mockMvc.perform(post("/api/admin/workflow-definitions")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "%s",
+                                  "processName": "Form Required Workflow"
+                                }
+                                """.formatted(processKey)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        Long versionId = json(mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "versionLabel": "v1",
+                                  "bpmnXml": %s,
+                                  "changeSummary": "missing form version"
+                                }
+                                """.formatted(objectMapper.writeValueAsString(managedApprovalSingleBpmn(processKey)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("FORM_VERSION_REQUIRED"));
+    }
+
+    @Test
+    void publish_withoutNodeConfig_returnsNodeMismatchCode() throws Exception {
+        SysUser admin = createUser("wf-admin-node", "Password@123", null, "SYS_ADMIN");
+        SysUser designer = createUser("wf-des-node", "Password@123", null, "DESIGNER");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
+        String designerToken = accessToken(designer, "DESIGNER");
+
+        String processKey = unique("wfnode").replace('-', '_');
+        Long formVersionId = createFormVersionForWorkflow(designer, designerToken, processKey + "_form");
+
+        Long definitionId = json(mockMvc.perform(post("/api/admin/workflow-definitions")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "%s",
+                                  "processName": "Node Mismatch Workflow"
+                                }
+                                """.formatted(processKey)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        Long versionId = json(mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "versionLabel": "v1",
+                                  "bpmnXml": %s,
+                                  "formKey": "%s",
+                                  "formVersionId": %d,
+                                  "changeSummary": "node mismatch"
+                                }
+                                """.formatted(objectMapper.writeValueAsString(managedApprovalSingleBpmn(processKey)), processKey + "_form", formVersionId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/admin/workflow-definition-versions/{versionId}/publish", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("NODE_CONFIG_MISMATCH"));
+    }
+
+    @Test
+    void publish_withNodeConfigContainingUnknownNode_returnsNodeMismatchCode() throws Exception {
+        SysUser admin = createUser("wf-admin-node", "Password@123", null, "SYS_ADMIN");
+        SysUser designer = createUser("wf-des-node", "Password@123", null, "DESIGNER");
+        String adminToken = accessToken(admin, "SYS_ADMIN");
+        String designerToken = accessToken(designer, "DESIGNER");
+
+        String processKey = unique("wfnode").replace('-', '_');
+        Long formVersionId = createFormVersionForWorkflow(designer, designerToken, processKey + "_form");
+
+        Long definitionId = json(mockMvc.perform(post("/api/admin/workflow-definitions")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "%s",
+                                  "processName": "Node Mismatch Workflow"
+                                }
+                                """.formatted(processKey)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        Long versionId = json(mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "versionLabel": "v1",
+                                  "bpmnXml": %s,
+                                  "formKey": "%s",
+                                  "formVersionId": %d,
+                                  "changeSummary": "node mismatch"
+                                }
+                                """.formatted(objectMapper.writeValueAsString(managedApprovalSingleBpmn(processKey)), processKey + "_form", formVersionId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}/nodes", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nodes": [
+                                    {
+                                      "nodeId": "UNKNOWN_NODE",
+                                      "nodeName": "Unknown",
+                                      "nodeType": "USER_TASK"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("NODE_CONFIG_MISMATCH"));
+    }
+
     private Long createAndPublishVersion(String adminToken, Long definitionId, String processKey, String formKey,
             Long formVersionId, String label) throws Exception {
         Long versionId = json(mockMvc.perform(post("/api/admin/workflow-definitions/{definitionId}/versions", definitionId)
@@ -215,12 +499,26 @@ class WorkflowManagementIntegrationTests extends AbstractIntegrationTestSupport 
                                 }
                                 """.formatted(label, objectMapper.writeValueAsString(managedApprovalSingleBpmn(processKey)), formKey, formVersionId, label)))
                 .andExpect(status().isOk());
+        syncNodeConfigs(adminToken, versionId);
         mockMvc.perform(post("/api/admin/workflow-definition-versions/{versionId}/publish", versionId)
                         .header("Authorization", authorization(adminToken))
                         .contentType(APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk());
         return versionId;
+    }
+
+    private void syncNodeConfigs(String adminToken, Long versionId) throws Exception {
+        String nodesJson = mockMvc.perform(get("/api/admin/workflow-definition-versions/{versionId}/nodes", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        mockMvc.perform(put("/api/admin/workflow-definition-versions/{versionId}/nodes", versionId)
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"nodes\":" + nodesJson + "}"))
+                .andExpect(status().isOk());
     }
 
     private Long createFormVersionForWorkflow(SysUser designer, String designerToken, String formKey) throws Exception {
