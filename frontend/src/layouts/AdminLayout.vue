@@ -67,7 +67,12 @@ const visibleMenuItems = computed(() => {
   return MENU_ITEMS.filter((item) => item.roles.some((role) => userRoles.value.includes(role)));
 });
 
-const activePath = computed(() => route.path);
+const activePath = computed(() => {
+  if (route.path.startsWith("/admin/workflows/")) {
+    return "/admin/workflows";
+  }
+  return route.path;
+});
 const greeting = computed(() => {
   const hour = new Date().getHours();
   if (hour < 12) {

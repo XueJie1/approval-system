@@ -62,6 +62,7 @@ const routes = [
       { path: "departments", name: "admin-departments", component: () => import("../views/AdminDepartmentsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
       { path: "positions", name: "admin-positions", component: () => import("../views/AdminPositionsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
       { path: "workflows", name: "admin-workflows", component: () => import("../views/AdminWorkflowsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
+      { path: "workflows/:definitionId/versions/:versionId", name: "admin-workflow-version-detail", component: () => import("../views/AdminWorkflowVersionDetailView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
       { path: "settings", name: "admin-settings", component: () => import("../views/AdminSettingsView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } }
     ]
   }
