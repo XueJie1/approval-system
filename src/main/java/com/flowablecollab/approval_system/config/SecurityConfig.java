@@ -55,16 +55,13 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/api/auth/bootstrap-status", "/api/auth/bootstrap", "/api/auth/login", "/api/auth/login/2fa",
                                 "/api/auth/2fa/recovery/validate").permitAll()
+                        .requestMatchers("/api/admin/forms/**").hasAnyRole("DESIGNER", "ADMIN", "SYS_ADMIN")
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SYS_ADMIN")
                         .requestMatchers("/api/rbac/**").hasAnyRole("ADMIN", "SYS_ADMIN")
                         .requestMatchers(HttpMethod.POST,
                                 "/api/forms/definitions",
                                 "/api/forms/versions",
-                                "/api/forms/fields").hasRole("DESIGNER")
-                        .requestMatchers(HttpMethod.POST,
-                                "/api/forms/instances",
-                                "/api/forms/validate").hasRole("EMPLOYEE")
-                        .requestMatchers(HttpMethod.POST, "/api/workflow/requests").hasRole("EMPLOYEE")
+                                "/api/forms/fields").hasAnyRole("DESIGNER", "ADMIN", "SYS_ADMIN")
                         .requestMatchers("/api/auth/2fa/**").authenticated()
                         .requestMatchers("/api/auth/me").authenticated()
                         .anyRequest().authenticated())

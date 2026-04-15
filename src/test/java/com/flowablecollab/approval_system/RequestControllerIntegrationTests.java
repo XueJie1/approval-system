@@ -162,6 +162,46 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
     }
 
     @Test
+    void activeTemplateEndpoint_filtersByLaunchRoleCodes() throws Exception {
+        SysUser admin = createUser("template-role-admin", "Password@123", null, "ADMIN");
+        ensureRole("BACKEND_DEV");
+        SysUser backendDev = createUser("template-role-backend", "Password@123", null, "BACKEND_DEV");
+        SysUser employee = createUser("template-role-employee", "Password@123", null, "EMPLOYEE");
+        String adminToken = accessToken(admin, "ADMIN");
+        String backendDevToken = accessToken(backendDev, "BACKEND_DEV");
+        String employeeToken = accessToken(employee, "EMPLOYEE");
+        String templateKey = unique("backend_only").replace('-', '_');
+
+        mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "%s",
+                                  "templateName": "后端专用模板",
+                                  "processKey": "approvalSingle",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "launchRoleCodes": ["BACKEND_DEV"],
+                                  "sortOrder": 999,
+                                  "status": "ACTIVE"
+                                }
+                                """.formatted(templateKey)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/request-templates")
+                        .header("Authorization", authorization(backendDevToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.templateKey=='%s')].templateKey".formatted(templateKey))
+                        .value(org.hamcrest.Matchers.hasItem(templateKey)));
+
+        mockMvc.perform(get("/api/request-templates")
+                        .header("Authorization", authorization(employeeToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.templateKey=='%s')]".formatted(templateKey)).doesNotExist());
+    }
+
+    @Test
     void adminTemplateList_returnsUsageCountForTemplate() throws Exception {
         SysUser admin = createUser("template-usage-admin", "Password@123", null, "SYS_ADMIN");
         SysUser applicant = createUser("template-usage-employee", "Password@123", null, "EMPLOYEE");

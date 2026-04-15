@@ -44,6 +44,7 @@ public class WorkflowController {
     public ResponseEntity<StartProcessResponse> startProcess(@Valid @RequestBody StartProcessRequest request) {
         log.info("Starting approval process for businessKey: {}", request.getBusinessKey());
         Long applicantId = resolveApplicantId(request.getApplicantId());
+        requestTemplateService.requireLaunchPermission(request.getRequestTemplateKey(), SecurityUtils.currentRoleCodes());
 
         WorkflowService.StartRequest startRequest = new WorkflowService.StartRequest();
         startRequest.setBusinessKey(request.getBusinessKey());
@@ -89,7 +90,7 @@ public class WorkflowController {
             if (startRequest.getVariables() == null) {
                 startRequest.setVariables(new java.util.HashMap<>());
             }
-            startRequest.getVariables().putAll(request.getFormData());
+            startRequest.getVariables().putAll(formService.mapToWorkflowVariables(formVersionId, request.getFormData()));
         } else if (launchDefinition != null) {
             startRequest.setFormVersionId(launchDefinition.getFormVersionId());
         }
@@ -130,6 +131,7 @@ public class WorkflowController {
         draftRequest.setApplicantDeptId(request.getApplicantDeptId());
         draftRequest.setApplicantPostId(request.getApplicantPostId());
         draftRequest.setFormInstanceId(formInstanceId);
+        draftRequest.setFormVersionId(request.getFormVersionId());
         draftRequest.setRequestTemplateKey(request.getRequestTemplateKey());
 
         businessKey = workflowService.saveDraft(draftRequest);
@@ -145,6 +147,11 @@ public class WorkflowController {
             @Valid @RequestBody SubmitDraftRequest request) {
         BizRequest draft = workflowService.getRequestByBusinessKey(businessKey);
         ensureRequestOperatorAllowed(draft);
+        String requestTemplateKey = request.getRequestTemplateKey();
+        if (requestTemplateKey == null || requestTemplateKey.isBlank()) {
+            requestTemplateKey = draft.getRequestTemplateKey();
+        }
+        requestTemplateService.requireLaunchPermission(requestTemplateKey, SecurityUtils.currentRoleCodes());
 
         WorkflowService.StartRequest startRequest = new WorkflowService.StartRequest();
         startRequest.setTitle(request.getTitle());
@@ -152,11 +159,16 @@ public class WorkflowController {
         startRequest.setApplicantDeptId(request.getApplicantDeptId());
         startRequest.setApplicantPostId(request.getApplicantPostId());
         startRequest.setFormInstanceId(request.getFormInstanceId());
+        startRequest.setFormVersionId(draft.getFormVersionId());
         startRequest.setProcessKey(request.getProcessKey());
         Map<String, Object> variables = request.getVariables();
         if (draft.getFormInstanceId() != null) {
+            Map<String, Object> draftFormData = formService.readFormInstanceData(draft.getFormInstanceId());
+            Map<String, Object> draftVariables = draft.getFormVersionId() == null
+                    ? draftFormData
+                    : formService.mapToWorkflowVariables(draft.getFormVersionId(), draftFormData);
             variables = mergeDraftVariables(
-                    formService.readFormInstanceData(draft.getFormInstanceId()),
+                    draftVariables,
                     variables);
             startRequest.setFormInstanceId(draft.getFormInstanceId());
         }
@@ -164,9 +176,9 @@ public class WorkflowController {
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
-        startRequest.setRequestTemplateKey(request.getRequestTemplateKey());
+        startRequest.setRequestTemplateKey(requestTemplateKey);
         WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
-        RequestTemplateService.TemplateView template = resolveTemplate(request.getRequestTemplateKey());
+        RequestTemplateService.TemplateView template = resolveTemplate(requestTemplateKey);
         validateApproverEligibility(template);
         if (launchDefinition != null) {
             startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());

@@ -87,6 +87,7 @@ export interface RequestTemplateSummary {
   passRatio: string;
   flowSummary?: string | null;
   approvalConfig?: RequestTemplateApprovalConfig | null;
+  launchRoleCodes?: string[];
   allowManualApproverSelect?: boolean;
   sortOrder: number;
   status: string;
@@ -136,6 +137,7 @@ export interface RequestTemplateUpsertPayload {
   passRatio: string;
   flowSummary?: string | null;
   approvalConfig?: RequestTemplateApprovalConfig | null;
+  launchRoleCodes?: string[];
   allowManualApproverSelect?: boolean;
   sortOrder: number;
   status: string;
@@ -495,18 +497,103 @@ export interface AiConversationTurn {
 
 export interface FormField {
   id: number;
+  formVersionId?: number;
   fieldKey: string;
+  variableKey?: string | null;
   fieldType: string;
   label?: string;
   required?: number;
+  visibleRule?: string | null;
+  validateRule?: string | null;
   optionsJson?: string;
+  defaultValue?: string | null;
+  sortOrder?: number | null;
 }
 
 export interface FormVersion {
   id: number;
   formId: number;
-  versionNo: number;
+  version: number;
+  status?: string;
+  publishedBy?: number | null;
+  publishedAt?: string | null;
   schemaJson?: string;
+}
+
+export interface AdminFormDefinitionSummary {
+  id: number;
+  formKey: string;
+  formName: string;
+  status: number;
+  latestVersionId?: number | null;
+  latestVersionNo?: number | null;
+  latestVersionStatus?: string | null;
+  publishedVersionId?: number | null;
+  publishedVersionNo?: number | null;
+}
+
+export interface AdminFormVersionSummary {
+  id: number;
+  formId: number;
+  version: number;
+  schemaJson: string;
+  status: string;
+  publishedBy?: number | null;
+  publishedAt?: string | null;
+  fieldCount?: number;
+}
+
+export interface FormVersionImpact {
+  formVersionId: number;
+  formKey: string;
+  requestTemplateCount: number;
+  workflowVersionCount: number;
+  requestTemplates: Array<{
+    templateId: number;
+    templateKey: string;
+    templateName: string;
+    status: string;
+  }>;
+  workflowVersions: Array<{
+    versionId: number;
+    definitionId: number;
+    definitionName?: string | null;
+    processKey?: string | null;
+    versionNo: number;
+    status: string;
+  }>;
+}
+
+export interface FormSampleValidationResult {
+  valid: boolean;
+  validatedAt: string;
+}
+
+export interface FormAiParseResult {
+  model: string;
+  templateKey?: string | null;
+  templateName?: string | null;
+  formKey: string;
+  formVersionId: number;
+  processKey?: string | null;
+  formData: Record<string, unknown>;
+  variables: Record<string, unknown>;
+  missingRequiredFields: string[];
+  confidence: number;
+  parsedAt: string;
+}
+
+export interface AdminOpenAiSettings {
+  baseUrl: string;
+  hasApiKey: boolean;
+  apiKeyMasked?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface AdminOpenAiSettingsUpdatePayload {
+  baseUrl?: string | null;
+  apiKey?: string | null;
+  clearApiKey?: boolean;
 }
 
 export interface AiSuggestion {

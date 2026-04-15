@@ -56,7 +56,7 @@
               <el-col :span="24">
                 <div class="template-summary">
                   <div class="template-summary__title">{{ currentTemplate?.templateName ?? '暂无申请模板' }}</div>
-                  <p class="template-summary__desc">{{ currentTemplate?.description ?? '请联系管理员配置申请模板。' }}</p>
+                  <p class="template-summary__desc">{{ currentTemplate?.description ?? '当前角色暂无可发起模板，请联系管理员在“申请模板管理”中配置可发起角色。' }}</p>
                   <div class="template-summary__meta">
                     <span>默认流程：{{ currentTemplate?.flowSummary ?? '未配置' }}</span>
                     <span>表单模板：{{ currentTemplate?.formName ?? '未配置' }}</span>
@@ -183,12 +183,31 @@
 
         <el-card shadow="never" class="help-card">
           <template #header>
+            <span class="section-title">AI 填表助手</span>
+          </template>
+          <div class="help-content">
+            <el-input
+              v-model="aiCommand"
+              type="textarea"
+              :rows="4"
+              placeholder="例如：我要请假，类型年假，开始时间2026-06-01 09:00，结束时间2026-06-03 18:00，请假天数3天，原因陪伴家人"
+            />
+            <div class="action-buttons">
+              <el-button :loading="aiParsing" @click="handleAiParse">解析并预填</el-button>
+              <el-button type="primary" :loading="aiStarting" @click="handleAiParseAndStart">解析并发起</el-button>
+            </div>
+            <div v-if="aiParseHint" class="field-hint">{{ aiParseHint }}</div>
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="help-card">
+          <template #header>
             <span class="section-title">填写说明</span>
           </template>
           <div class="help-content">
             <div class="help-item">
               <strong>{{ currentTemplate?.templateName ?? '暂无申请模板' }}</strong>
-              <p>{{ currentTemplate?.description ?? '当前还没有可用的申请模板。' }}</p>
+              <p>{{ currentTemplate?.description ?? '当前角色暂无可发起模板，请联系管理员在“申请模板管理”中配置可发起角色。' }}</p>
             </div>
             <div class="help-item">
               <strong>默认审批方式</strong>
@@ -217,6 +236,7 @@ import { InfoFilled } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import type { FormField, RequestTemplateApprovalPreviewStep, RequestTemplateSummary, SaveDraftPayload, StartRequestPayload, SubmitDraftPayload } from '../types';
+import { parseAndStartByFormCommand, parseFormCommand } from '../api/ai-form-commands';
 import { fetchFormFields, latestFormVersion, validateForm } from '../api/forms';
 import { listRequestTemplates, previewRequestTemplateApproval } from '../api/request-templates';
 import { saveDraft as saveDraftApi, startRequest, submitDraft as submitDraftApi } from '../api/workflow';
@@ -238,6 +258,10 @@ const requestTemplates = ref<RequestTemplateSummary[]>([]);
 const approvalPreviewSteps = ref<RequestTemplateApprovalPreviewStep[]>([]);
 const approvalPreviewLoading = ref(false);
 const approvalPreviewError = ref('');
+const aiCommand = ref('');
+const aiParsing = ref(false);
+const aiStarting = ref(false);
+const aiParseHint = ref('');
 
 const form = reactive({
   businessKey: '',
@@ -411,7 +435,7 @@ async function loadRequestTemplates() {
     const templates = await listRequestTemplates();
     requestTemplates.value = templates;
     if (!templates.length) {
-      ElMessage.warning('当前还没有可用的申请模板');
+      ElMessage.warning('当前角色暂无可发起模板，请联系管理员配置模板可发起角色');
       return;
     }
     if (!form.templateKey || !templates.some(template => template.templateKey === form.templateKey)) {
@@ -421,6 +445,73 @@ async function loadRequestTemplates() {
   } catch (e) {
     console.error(e);
     ElMessage.error('加载申请模板失败');
+  }
+}
+
+async function handleAiParse() {
+  if (!aiCommand.value.trim()) {
+    ElMessage.warning('请输入表单指令');
+    return;
+  }
+  aiParsing.value = true;
+  aiParseHint.value = '';
+  try {
+    const parsed = await parseFormCommand({
+      command: aiCommand.value.trim(),
+      requestTemplateKey: form.templateKey || undefined,
+      formKey: form.formKey || undefined,
+      formVersionId: loadedVersionId.value ?? undefined
+    });
+    if (parsed.templateKey && parsed.templateKey !== form.templateKey && requestTemplates.value.some(item => item.templateKey === parsed.templateKey)) {
+      form.templateKey = parsed.templateKey;
+      await applyTemplate();
+    }
+    dynamicData.value = {
+      ...dynamicData.value,
+      ...parsed.formData
+    };
+    await loadApprovalPreview();
+    aiParseHint.value = parsed.missingRequiredFields.length
+      ? `已预填，仍缺少必填字段：${parsed.missingRequiredFields.join('、')}`
+      : '已完成预填，可直接提交或继续补充。';
+    ElMessage.success('AI 解析完成');
+  } catch (e) {
+    console.error(e);
+    aiParseHint.value = 'AI 解析失败，请补充后重试';
+    ElMessage.error('AI 解析失败');
+  } finally {
+    aiParsing.value = false;
+  }
+}
+
+async function handleAiParseAndStart() {
+  if (!aiCommand.value.trim()) {
+    ElMessage.warning('请输入表单指令');
+    return;
+  }
+  aiStarting.value = true;
+  aiParseHint.value = '';
+  try {
+    const result = await parseAndStartByFormCommand({
+      command: aiCommand.value.trim(),
+      title: form.title.trim() || undefined,
+      requestTemplateKey: form.templateKey || undefined,
+      formKey: form.formKey || undefined,
+      formVersionId: loadedVersionId.value ?? undefined,
+      requireAllRequiredFields: true
+    });
+    lastProcessId.value = result.processInstanceId;
+    form.businessKey = result.businessKey;
+    aiParseHint.value = 'AI 已直接发起流程';
+    ElMessage.success('AI 已发起申请');
+  } catch (e) {
+    console.error(e);
+    const error = e as AxiosError<{ error?: string }>;
+    const message = error.response?.data?.error;
+    aiParseHint.value = 'AI 发起失败，请先执行解析预填并手工补充';
+    ElMessage.error(message || 'AI 发起失败');
+  } finally {
+    aiStarting.value = false;
   }
 }
 
@@ -490,7 +581,8 @@ async function submitDraftRequest() {
     ElMessage.success('草稿已提交');
   } catch (e) {
     console.error(e);
-    ElMessage.error('提交失败');
+    const error = e as AxiosError<{ error?: string }>;
+    ElMessage.error(error.response?.data?.error || '提交失败');
   } finally {
     submitting.value = false;
   }
@@ -574,7 +666,8 @@ async function submitRequest() {
     ElMessage.success('申请已提交');
   } catch (e) {
     console.error(e);
-    ElMessage.error('提交失败');
+    const error = e as AxiosError<{ error?: string }>;
+    ElMessage.error(error.response?.data?.error || '提交失败');
   } finally {
     submitting.value = false;
   }
@@ -595,6 +688,8 @@ function resetForm() {
   loadedVersionId.value = null;
   lastProcessId.value = '';
   lastDraftBusinessKey.value = '';
+  aiCommand.value = '';
+  aiParseHint.value = '';
 }
 
 function goRequests() {

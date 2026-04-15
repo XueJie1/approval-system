@@ -273,7 +273,10 @@ public class RbacService {
     }
 
     public boolean isApproverEligible(Long userId) {
-        return userId != null && !hasRole(userId, "ADMIN") && !hasRole(userId, "SYS_ADMIN");
+        return userId != null
+                && !hasRole(userId, "ADMIN")
+                && !hasRole(userId, "SYS_ADMIN")
+                && !hasRole(userId, "DESIGNER");
     }
 
     public boolean isApproverEligible(String userIdentity) {

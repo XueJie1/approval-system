@@ -63,6 +63,11 @@
             {{ getProcessLabel(row.processKey) }}
           </template>
         </el-table-column>
+        <el-table-column label="可发起角色" min-width="180">
+          <template #default="{ row }">
+            {{ formatLaunchRoleCodes(row.launchRoleCodes) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="sortOrder" label="排序" width="90" />
         <el-table-column label="使用情况" min-width="120">
           <template #default="{ row }">
@@ -147,6 +152,26 @@
             <el-option label="启用" value="ACTIVE" />
             <el-option label="停用" value="INACTIVE" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="可发起角色" class="full-span">
+          <el-select
+            v-model="form.launchRoleCodes"
+            multiple
+            clearable
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="请选择可发起该模板的角色"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="role in launchRoleOptions"
+              :key="role.id"
+              :label="`${role.roleCode} · ${role.roleName}`"
+              :value="role.roleCode"
+            />
+          </el-select>
+          <div class="field-hint">未设置时默认仅 EMPLOYEE 可发起。</div>
         </el-form-item>
         <el-form-item label="会签模式">
           <el-select v-model="form.countersignMode" style="width: 100%">
@@ -236,8 +261,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
-import type { FormDefinitionSummary, RequestTemplateApprovalCondition, RequestTemplateApprovalRule, RequestTemplateApprovalStep, RequestTemplateSummary, RequestTemplateUpsertPayload, UserDirectoryItem, WorkflowDefinitionSummary } from '../types';
-import { createRequestTemplate, listAdminRequestTemplates, updateRequestTemplate } from '../api/admin-request-templates';
+import type { AdminRoleOption, FormDefinitionSummary, RequestTemplateApprovalCondition, RequestTemplateApprovalRule, RequestTemplateApprovalStep, RequestTemplateSummary, RequestTemplateUpsertPayload, UserDirectoryItem, WorkflowDefinitionSummary } from '../types';
+import { createRequestTemplate, listAdminRequestTemplates, listRequestTemplateLaunchRoleOptions, updateRequestTemplate } from '../api/admin-request-templates';
 import { listLaunchableWorkflowDefinitions } from '../api/admin-workflows';
 import { listFormDefinitions } from '../api/forms';
 import { listUsers } from '../api/users';
@@ -249,6 +274,7 @@ const editingId = ref<number | null>(null);
 const keyword = ref('');
 const statusFilter = ref<string | undefined>(undefined);
 const templates = ref<RequestTemplateSummary[]>([]);
+const launchRoleOptions = ref<AdminRoleOption[]>([]);
 const formDefinitions = ref<FormDefinitionSummary[]>([]);
 const workflowDefinitions = ref<WorkflowDefinitionSummary[]>([]);
 const approverOptions = ref<UserDirectoryItem[]>([]);
@@ -268,6 +294,7 @@ const form = reactive<RequestTemplateUpsertPayload>({
   passRatio: '1.0',
   flowSummary: '',
   approvalConfig: { rules: [] },
+  launchRoleCodes: ['EMPLOYEE'],
   allowManualApproverSelect: false,
   sortOrder: 0,
   status: 'ACTIVE'
@@ -295,6 +322,7 @@ const activeCount = computed(() => templates.value.filter(item => item.status ==
 const unboundFormCount = computed(() => templates.value.filter(item => !item.formKey).length);
 
 onMounted(() => {
+  loadLaunchRoleOptions();
   loadFormDefinitions();
   loadWorkflowDefinitions();
   loadApproverOptions();
@@ -316,6 +344,15 @@ async function loadFormDefinitions() {
   } catch (e) {
     console.error(e);
     ElMessage.error('加载表单定义失败');
+  }
+}
+
+async function loadLaunchRoleOptions() {
+  try {
+    launchRoleOptions.value = await listRequestTemplateLaunchRoleOptions();
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('加载角色选项失败');
   }
 }
 
@@ -354,6 +391,7 @@ function resetForm() {
   form.passRatio = '1.0';
   form.flowSummary = '';
   form.approvalConfig = { rules: [] };
+  form.launchRoleCodes = ['EMPLOYEE'];
   form.allowManualApproverSelect = false;
   approvalRules.value = [];
   form.sortOrder = 0;
@@ -379,6 +417,7 @@ function openEditDialog(row: RequestTemplateSummary) {
   form.passRatio = row.passRatio;
   form.flowSummary = row.flowSummary ?? '';
   form.approvalConfig = row.approvalConfig ?? { rules: [] };
+  form.launchRoleCodes = row.launchRoleCodes?.length ? [...row.launchRoleCodes] : ['EMPLOYEE'];
   form.allowManualApproverSelect = Boolean(row.allowManualApproverSelect);
   approvalRules.value = [...(row.approvalConfig?.rules ?? [])].map(rule => ({
     name: rule.name ?? '',
@@ -436,6 +475,15 @@ function getProcessLabel(processKey: string) {
   return `${matched.processName} · ${matched.processKey}`;
 }
 
+function formatLaunchRoleCodes(roleCodes?: string[]) {
+  const codes = roleCodes?.filter(Boolean) ?? [];
+  const normalizedCodes = codes.length ? codes : ['EMPLOYEE'];
+  return normalizedCodes.map((code) => {
+    const matched = launchRoleOptions.value.find((role) => role.roleCode === code);
+    return matched ? matched.roleName : code;
+  }).join('、');
+}
+
 async function submitForm() {
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) {
@@ -451,6 +499,9 @@ async function submitForm() {
       formKey: form.formKey?.trim() || null,
       formName: form.formName?.trim() || null,
       flowSummary: form.flowSummary?.trim() || null,
+      launchRoleCodes: (form.launchRoleCodes ?? [])
+        .map(roleCode => roleCode.trim())
+        .filter(Boolean),
       approvalConfig: {
         rules: approvalRules.value
           .filter(rule => rule.steps?.length)
@@ -500,6 +551,7 @@ async function toggleTemplateStatus(row: RequestTemplateSummary) {
       countersignMode: row.countersignMode,
       passRatio: row.passRatio,
        flowSummary: row.flowSummary ?? null,
+       launchRoleCodes: row.launchRoleCodes?.length ? [...row.launchRoleCodes] : ['EMPLOYEE'],
        approvalConfig: row.approvalConfig ?? { rules: [] },
        allowManualApproverSelect: Boolean(row.allowManualApproverSelect),
        sortOrder: row.sortOrder,

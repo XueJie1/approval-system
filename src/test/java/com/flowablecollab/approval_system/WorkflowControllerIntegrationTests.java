@@ -322,6 +322,134 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
     }
 
     @Test
+    void startProcess_withoutTemplateKey_requiresEmployeeRoleByDefault() throws Exception {
+        ensureRole("BACKEND_DEV");
+        SysUser applicant = createUser("backend-no-template", "Password@123", null, "BACKEND_DEV");
+        String applicantToken = accessToken(applicant, "BACKEND_DEV");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "No template launch",
+                                  "applicantId": %d,
+                                  "processKey": "approvalSingle",
+                                  "variables": {
+                                    "approverId": "%d"
+                                  }
+                                }
+                                """.formatted(applicant.getId(), applicant.getId())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("permission denied: launch requires EMPLOYEE role"));
+    }
+
+    @Test
+    void startProcess_allowsLaunchWhenTemplateRoleMatches() throws Exception {
+        SysUser admin = createUser("launch-role-admin", "Password@123", null, "ADMIN");
+        ensureRole("BACKEND_DEV");
+        SysUser applicant = createUser("launch-role-backend", "Password@123", null, "BACKEND_DEV");
+        SysUser approver = createUser("launch-role-approver", "Password@123", null, "EMPLOYEE");
+        String adminToken = accessToken(admin, "ADMIN");
+        String applicantToken = accessToken(applicant, "BACKEND_DEV");
+        String templateKey = unique("launch_backend").replace('-', '_');
+        String businessKey = unique("launch-role-pass");
+
+        mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "%s",
+                                  "templateName": "后端发起模板",
+                                  "processKey": "approvalSingle",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "launchRoleCodes": ["BACKEND_DEV"],
+                                  "sortOrder": 10,
+                                  "status": "ACTIVE"
+                                }
+                                """.formatted(templateKey)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "Template role launch",
+                                  "applicantId": %d,
+                                  "processKey": "approvalSingle",
+                                  "requestTemplateKey": "%s",
+                                  "variables": {
+                                    "approverId": "%s"
+                                  }
+                                }
+                                """.formatted(businessKey, applicant.getId(), templateKey, approver.getUsername())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+    }
+
+    @Test
+    void submitDraft_usesDraftTemplateKeyForLaunchPermission() throws Exception {
+        SysUser admin = createUser("draft-role-admin", "Password@123", null, "ADMIN");
+        ensureRole("BACKEND_DEV");
+        SysUser applicant = createUser("draft-role-employee", "Password@123", null, "EMPLOYEE");
+        String adminToken = accessToken(admin, "ADMIN");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String templateKey = unique("draft_backend").replace('-', '_');
+
+        mockMvc.perform(post("/api/admin/request-templates")
+                        .header("Authorization", authorization(adminToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "%s",
+                                  "templateName": "草稿权限模板",
+                                  "processKey": "approvalSingle",
+                                  "countersignMode": "ALL",
+                                  "passRatio": "1.0",
+                                  "launchRoleCodes": ["BACKEND_DEV"],
+                                  "sortOrder": 10,
+                                  "status": "ACTIVE"
+                                }
+                                """.formatted(templateKey)))
+                .andExpect(status().isOk());
+
+        String businessKey = json(mockMvc.perform(post("/api/workflow/drafts")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Draft with restricted template",
+                                  "applicantId": %d,
+                                  "requestTemplateKey": "%s"
+                                }
+                                """.formatted(applicant.getId(), templateKey)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).get("businessKey").asText();
+
+        mockMvc.perform(post("/api/workflow/drafts/{businessKey}/submit", businessKey)
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Submit restricted draft",
+                                  "applicantId": %d,
+                                  "processKey": "approvalSingle",
+                                  "variables": {
+                                    "approverId": "%s"
+                                  }
+                                }
+                                """.formatted(applicant.getId(), applicant.getUsername())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("permission denied to launch request template: " + templateKey));
+    }
+
+    @Test
     void saveDraft_andSubmitDraft_startsProcessFromDraft() throws Exception {
         SysUser applicant = createUser("draft-applicant", "Password@123", null, "EMPLOYEE");
         SysUser approver = createUser("draft-approver", "Password@123", null, "EMPLOYEE");

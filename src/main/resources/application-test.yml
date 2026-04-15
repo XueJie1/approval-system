@@ -24,3 +24,7 @@ flowable:
   rest:
     api:
       enabled: true
+
+security:
+  settings:
+    crypto-key: test-settings-crypto-key

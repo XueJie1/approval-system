@@ -30,6 +30,11 @@ public class RequestTemplateAdminController {
         return ResponseEntity.ok(requestTemplateService.listAllTemplates());
     }
 
+    @GetMapping("/launch-role-options")
+    public ResponseEntity<List<RequestTemplateService.LaunchRoleOption>> listLaunchRoleOptions() {
+        return ResponseEntity.ok(requestTemplateService.listLaunchRoleOptions());
+    }
+
     @PostMapping
     public ResponseEntity<RequestTemplateService.TemplateView> createTemplate(
             @RequestBody RequestTemplateService.TemplateUpsertRequest request) {

@@ -28,7 +28,7 @@ public class RequestTemplateController {
 
     @GetMapping
     public ResponseEntity<List<RequestTemplateService.TemplateView>> listActiveTemplates() {
-        return ResponseEntity.ok(requestTemplateService.listActiveTemplates());
+        return ResponseEntity.ok(requestTemplateService.listActiveTemplatesForRoles(SecurityUtils.currentRoleCodes()));
     }
 
     @PostMapping("/{templateKey}/approval-preview")

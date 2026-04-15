@@ -1,6 +1,7 @@
 package com.flowablecollab.approval_system.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flowablecollab.approval_system.service.settings.AiProviderSettingsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -16,6 +17,9 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class OpenAiLlmClientTests {
 
@@ -164,5 +168,45 @@ class OpenAiLlmClientTests {
         assertThatThrownBy(() -> client.suggestApproval(new LlmClient.SuggestionRequest()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("api-key is required");
+    }
+
+    @Test
+    void suggestApproval_usesPersistedRuntimeOpenAiSettingsWhenAvailable() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        ObjectMapper objectMapper = new ObjectMapper();
+        AiProviderSettingsService settingsService = mock(AiProviderSettingsService.class);
+        when(settingsService.resolveOpenAiRuntimeSettings(anyString(), anyString()))
+                .thenReturn(new AiProviderSettingsService.OpenAiRuntimeSettings("https://runtime-gateway.local/v1", "runtime-key-001"));
+
+        OpenAiLlmClient client = new OpenAiLlmClient(
+                restTemplate,
+                objectMapper,
+                "https://api.openai.com/v1",
+                "default-key",
+                "gpt-5.4-mini",
+                0.2,
+                settingsService
+        );
+
+        server.expect(once(), requestTo("https://runtime-gateway.local/v1/chat/completions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer runtime-key-001"))
+                .andRespond(withSuccess("""
+                        {
+                          "model": "gpt-5.4-mini",
+                          "choices": [
+                            {
+                              "message": {
+                                "content": "{\\"decision\\":\\"APPROVE\\",\\"recommendation\\":\\"ok\\",\\"summary\\":\\"ok\\",\\"riskWarnings\\":[],\\"anomalies\\":[],\\"supplementaryInfo\\":[],\\"approvalComment\\":\\"ok\\",\\"suggestedFormUpdates\\":{}}"
+                              }
+                            }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.Suggestion suggestion = client.suggestApproval(new LlmClient.SuggestionRequest());
+        assertThat(suggestion.getDecision()).isEqualTo("APPROVE");
+        server.verify();
     }
 }

@@ -38,6 +38,8 @@ security:
     lock-duration-minutes: 30
   audit:
     login-logs-retention-days: 90
+  settings:
+    crypto-key: ${SETTINGS_CRYPTO_KEY:approval-system-settings-crypto-key-change-this}
 
 ai:
   llm:

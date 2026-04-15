@@ -19,4 +19,6 @@ public interface WorkflowDefinitionVersionRepository extends JpaRepository<Workf
     boolean existsByDefinitionIdAndVersionNoAndIsDeleted(Long definitionId, Integer versionNo, Integer isDeleted);
 
     long countByDefinitionIdAndIsDeleted(Long definitionId, Integer isDeleted);
+
+    List<WorkflowDefinitionVersion> findByFormVersionIdAndIsDeletedOrderByUpdatedAtDesc(Long formVersionId, Integer isDeleted);
 }

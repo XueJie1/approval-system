@@ -48,19 +48,26 @@ public class FormCatalogBootstrapService {
             version.setFormId(definition.getId());
             version.setVersion(creatingVersion ? 1 : version.getVersion());
             version.setSchemaJson(seed.schemaJson());
+            version.setStatus(FormVersion.STATUS_PUBLISHED);
+            version.setPublishedBy(0L);
+            version.setPublishedAt(java.time.LocalDateTime.now());
             version = formVersionRepository.save(version);
 
             formFieldRepository.deleteByFormVersionId(version.getId());
+            int orderNo = 0;
             for (BuiltInFieldSeed fieldSeed : seed.fields()) {
                 FormField field = new FormField();
                 field.setFormVersionId(version.getId());
                 field.setFieldKey(fieldSeed.fieldKey());
+                field.setVariableKey(fieldSeed.fieldKey());
                 field.setFieldType(fieldSeed.fieldType());
                 field.setLabel(fieldSeed.label());
                 field.setRequired(fieldSeed.required() ? 1 : 0);
                 field.setVisibleRule(null);
                 field.setValidateRule(null);
                 field.setOptionsJson(fieldSeed.optionsJson());
+                field.setDefaultValue(null);
+                field.setSortOrder(orderNo++);
                 formFieldRepository.save(field);
             }
         }

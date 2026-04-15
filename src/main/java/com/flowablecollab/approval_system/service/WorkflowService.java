@@ -87,6 +87,7 @@ public class WorkflowService {
         draft.setApplicantDeptId(request.getApplicantDeptId());
         draft.setApplicantPostId(request.getApplicantPostId());
         draft.setFormInstanceId(request.getFormInstanceId());
+        draft.setFormVersionId(request.getFormVersionId());
         draft.setRequestTemplateKey(request.getRequestTemplateKey());
         draft.setStatus(REQUEST_STATUS_DRAFT);
         draft.setCurrentTaskId(null);
@@ -798,6 +799,7 @@ public class WorkflowService {
         private Long applicantDeptId;
         private Long applicantPostId;
         private Long formInstanceId;
+        private Long formVersionId;
         private String requestTemplateKey;
     }
 

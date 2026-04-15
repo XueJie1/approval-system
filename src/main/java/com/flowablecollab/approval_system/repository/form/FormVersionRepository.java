@@ -9,5 +9,7 @@ import java.util.Optional;
 public interface FormVersionRepository extends JpaRepository<FormVersion, Long> {
     Optional<FormVersion> findTopByFormIdOrderByVersionDesc(Long formId);
 
+    Optional<FormVersion> findTopByFormIdAndStatusOrderByVersionDesc(Long formId, String status);
+
     List<FormVersion> findByFormIdOrderByVersionDesc(Long formId);
 }

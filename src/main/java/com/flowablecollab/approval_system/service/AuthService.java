@@ -46,6 +46,8 @@ public class AuthService {
                 .orElseGet(() -> rbacService.createRole("ADMIN", "Business Administrator"));
         SysRole sysAdminRole = sysRoleRepository.findByRoleCode("SYS_ADMIN")
                 .orElseGet(() -> rbacService.createRole("SYS_ADMIN", "System Administrator"));
+        SysRole designerRole = sysRoleRepository.findByRoleCode("DESIGNER")
+                .orElseGet(() -> rbacService.createRole("DESIGNER", "Form Designer"));
 
         SysUser user = sysUserRepository.findByUsername(username.trim())
                 .orElseGet(() -> rbacService.createUser(username.trim(), password, null, 1));
@@ -55,6 +57,9 @@ public class AuthService {
         }
         if (!sysUserRoleRepository.existsByUserIdAndRoleId(user.getId(), sysAdminRole.getId())) {
             rbacService.assignRole(user.getId(), sysAdminRole.getId());
+        }
+        if (!sysUserRoleRepository.existsByUserIdAndRoleId(user.getId(), designerRole.getId())) {
+            rbacService.assignRole(user.getId(), designerRole.getId());
         }
 
         // Log bootstrap success

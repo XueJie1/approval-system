@@ -10,6 +10,8 @@ import java.util.List;
 public interface FormFieldRepository extends JpaRepository<FormField, Long> {
     List<FormField> findByFormVersionId(Long formVersionId);
 
+    List<FormField> findByFormVersionIdOrderBySortOrderAscIdAsc(Long formVersionId);
+
     @Modifying
     @Transactional
     void deleteByFormVersionId(Long formVersionId);

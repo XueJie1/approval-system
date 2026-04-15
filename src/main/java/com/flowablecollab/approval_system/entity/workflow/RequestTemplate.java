@@ -54,6 +54,9 @@ public class RequestTemplate {
     @Column(name = "approval_config_json", columnDefinition = "TEXT")
     private String approvalConfigJson;
 
+    @Column(name = "launch_role_codes_json", columnDefinition = "TEXT")
+    private String launchRoleCodesJson;
+
     @Column(name = "allow_manual_approver_select", nullable = false)
     private Integer allowManualApproverSelect;
 
@@ -196,6 +199,14 @@ public class RequestTemplate {
 
     public void setApprovalConfigJson(String approvalConfigJson) {
         this.approvalConfigJson = approvalConfigJson;
+    }
+
+    public String getLaunchRoleCodesJson() {
+        return launchRoleCodesJson;
+    }
+
+    public void setLaunchRoleCodesJson(String launchRoleCodesJson) {
+        this.launchRoleCodesJson = launchRoleCodesJson;
     }
 
     public Integer getAllowManualApproverSelect() {

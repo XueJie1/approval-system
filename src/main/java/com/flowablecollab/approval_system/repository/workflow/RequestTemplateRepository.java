@@ -15,4 +15,6 @@ public interface RequestTemplateRepository extends JpaRepository<RequestTemplate
     Optional<RequestTemplate> findByTemplateKey(String templateKey);
 
     boolean existsByTemplateKey(String templateKey);
+
+    List<RequestTemplate> findByFormKeyOrderBySortOrderAscIdAsc(String formKey);
 }

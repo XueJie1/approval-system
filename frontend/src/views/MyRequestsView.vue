@@ -91,10 +91,10 @@
           </div>
         </section>
 
-        <section v-if="relatedTasks.length > 0" class="detail-section">
+        <section v-if="selectedRelatedTasks.length > 0" class="detail-section">
           <div class="section-label">任务列表</div>
           <div class="task-list">
-            <div v-for="task in relatedTasks" :key="task.taskId" class="task-item">
+            <div v-for="task in selectedRelatedTasks" :key="task.taskId" class="task-item">
               <div class="task-name">{{ task.taskName }}</div>
               <div class="task-meta">
                 <span>办理人：{{ task.assignee || '待分配' }}</span>
@@ -105,10 +105,10 @@
 
         <section class="detail-section">
           <div class="section-label">审批日志</div>
-          <div v-if="relatedLogs.length === 0" class="empty-hint">暂无审批日志</div>
+          <div v-if="selectedRelatedLogs.length === 0" class="empty-hint">暂无审批日志</div>
           <el-timeline v-else>
             <el-timeline-item
-              v-for="log in relatedLogs"
+              v-for="log in selectedRelatedLogs"
               :key="log.id"
               :timestamp="formatTime(log.createdAt)"
               placement="top"
@@ -123,10 +123,10 @@
           </el-timeline>
         </section>
 
-        <section v-if="relatedAiSuggestions.length > 0" class="detail-section">
+        <section v-if="selectedRelatedAiSuggestions.length > 0" class="detail-section">
           <div class="section-label">AI 建议记录</div>
           <div class="ai-records">
-            <div v-for="ai in relatedAiSuggestions" :key="ai.recordId" class="ai-record">
+            <div v-for="ai in selectedRelatedAiSuggestions" :key="ai.recordId" class="ai-record">
               <div class="ai-header">
                 <el-tag :type="ai.decision === 'APPROVE' ? 'success' : 'danger'" size="small">
                   {{ ai.decision === 'APPROVE' ? '建议通过' : '建议拒绝' }}
@@ -218,6 +218,50 @@ const filteredRequests = computed(() => {
     return allRequests.value;
   }
   return allRequests.value.filter(r => r.status === statusFilter.value);
+});
+
+const selectedRelatedTasks = computed(() => {
+  const processInstanceId = selectedRequest.value?.processInstanceId;
+  if (!processInstanceId) {
+    return [] as TaskInfo[];
+  }
+  return relatedTasks.value.filter(task => task.processInstanceId === processInstanceId);
+});
+
+const selectedRelatedLogs = computed(() => {
+  const request = selectedRequest.value;
+  if (!request) {
+    return [] as RequestLog[];
+  }
+  return relatedLogs.value
+    .filter((log) => {
+      if (log.businessKey !== request.businessKey) {
+        return false;
+      }
+      if (!request.processInstanceId) {
+        return true;
+      }
+      return !log.processInstanceId || log.processInstanceId === request.processInstanceId;
+    })
+    .sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''));
+});
+
+const selectedRelatedAiSuggestions = computed(() => {
+  const request = selectedRequest.value;
+  if (!request) {
+    return [] as AiSuggestion[];
+  }
+  return relatedAiSuggestions.value
+    .filter((item) => {
+      if (item.businessKey !== request.businessKey) {
+        return false;
+      }
+      if (!request.processInstanceId) {
+        return true;
+      }
+      return !item.processInstanceId || item.processInstanceId === request.processInstanceId;
+    })
+    .sort((a, b) => Date.parse(b.generatedAt || '') - Date.parse(a.generatedAt || ''));
 });
 
 onMounted(() => {

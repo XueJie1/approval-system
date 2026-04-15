@@ -4,6 +4,12 @@ ALTER TABLE biz_request ADD COLUMN IF NOT EXISTS form_version_id BIGINT NULL;
 ALTER TABLE biz_request ADD COLUMN IF NOT EXISTS request_template_key VARCHAR(64) NULL;
 ALTER TABLE sys_user ADD COLUMN IF NOT EXISTS manager_user_id BIGINT NULL;
 ALTER TABLE sys_dept ADD COLUMN IF NOT EXISTS leader_user_id BIGINT NULL;
+ALTER TABLE form_version ADD COLUMN IF NOT EXISTS status VARCHAR(32) NULL;
+ALTER TABLE form_version ADD COLUMN IF NOT EXISTS published_by BIGINT NULL;
+ALTER TABLE form_version ADD COLUMN IF NOT EXISTS published_at DATETIME NULL;
+ALTER TABLE form_field ADD COLUMN IF NOT EXISTS variable_key VARCHAR(64) NULL;
+ALTER TABLE form_field ADD COLUMN IF NOT EXISTS default_value TEXT NULL;
+ALTER TABLE form_field ADD COLUMN IF NOT EXISTS sort_order INT NULL;
 
 CREATE TABLE IF NOT EXISTS workflow_definition (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -91,6 +97,7 @@ CREATE TABLE IF NOT EXISTS request_template (
     pass_ratio VARCHAR(16) NOT NULL,
     flow_summary VARCHAR(512) NULL,
     approval_config_json TEXT NULL,
+    launch_role_codes_json TEXT NULL,
     allow_manual_approver_select TINYINT(1) NOT NULL DEFAULT 0,
     sort_order INT NOT NULL DEFAULT 0,
     status VARCHAR(32) NOT NULL,
@@ -100,7 +107,18 @@ CREATE TABLE IF NOT EXISTS request_template (
     updated_at DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS sys_setting (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(128) NOT NULL,
+    setting_value TEXT NULL,
+    encrypted TINYINT NOT NULL DEFAULT 0,
+    updated_by BIGINT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
 ALTER TABLE request_template ADD COLUMN IF NOT EXISTS approval_config_json TEXT NULL;
+ALTER TABLE request_template ADD COLUMN IF NOT EXISTS launch_role_codes_json TEXT NULL;
 ALTER TABLE request_template ADD COLUMN IF NOT EXISTS allow_manual_approver_select TINYINT(1) NOT NULL DEFAULT 0;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_workflow_definition_process_key ON workflow_definition(process_key);
@@ -128,6 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_wf_publish_log_operated_at ON workflow_publish_lo
 CREATE UNIQUE INDEX IF NOT EXISTS uk_request_template_key ON request_template(template_key);
 CREATE INDEX IF NOT EXISTS idx_request_template_status ON request_template(status);
 CREATE INDEX IF NOT EXISTS idx_request_template_sort_order ON request_template(sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_sys_setting_key ON sys_setting(setting_key);
 
 CREATE INDEX IF NOT EXISTS idx_biz_request_workflow_definition ON biz_request(workflow_definition_id);
 CREATE INDEX IF NOT EXISTS idx_biz_request_workflow_definition_version ON biz_request(workflow_definition_version_id);

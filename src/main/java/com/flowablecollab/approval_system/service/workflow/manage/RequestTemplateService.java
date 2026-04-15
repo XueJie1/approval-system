@@ -1,30 +1,48 @@
 package com.flowablecollab.approval_system.service.workflow.manage;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flowablecollab.approval_system.entity.workflow.RequestTemplate;
+import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.exception.ResourceConflictException;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
+import com.flowablecollab.approval_system.repository.rbac.SysRoleRepository;
 import com.flowablecollab.approval_system.repository.workflow.RequestTemplateRepository;
 import com.flowablecollab.approval_system.service.RequestTemplateApprovalResolverService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class RequestTemplateService {
 
     private static final long SYSTEM_OPERATOR_ID = 0L;
+    private static final List<String> DEFAULT_LAUNCH_ROLE_CODES = List.of("EMPLOYEE");
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
+    };
 
     private final RequestTemplateRepository requestTemplateRepository;
     private final BizRequestRepository bizRequestRepository;
     private final RequestTemplateApprovalResolverService requestTemplateApprovalResolverService;
+    private final SysRoleRepository sysRoleRepository;
+    private final ObjectMapper objectMapper;
 
     public RequestTemplateService(RequestTemplateRepository requestTemplateRepository,
                                   BizRequestRepository bizRequestRepository,
-                                  RequestTemplateApprovalResolverService requestTemplateApprovalResolverService) {
+                                  RequestTemplateApprovalResolverService requestTemplateApprovalResolverService,
+                                  SysRoleRepository sysRoleRepository,
+                                  ObjectMapper objectMapper) {
         this.requestTemplateRepository = requestTemplateRepository;
         this.bizRequestRepository = bizRequestRepository;
         this.requestTemplateApprovalResolverService = requestTemplateApprovalResolverService;
+        this.sysRoleRepository = sysRoleRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -36,11 +54,47 @@ public class RequestTemplateService {
     }
 
     @Transactional(readOnly = true)
+    public List<TemplateView> listActiveTemplatesForRoles(Collection<String> roleCodes) {
+        Set<String> normalizedRoleCodes = normalizeRoleCodes(roleCodes);
+        return listActiveTemplates().stream()
+                .filter(template -> isLaunchAllowed(template.getLaunchRoleCodes(), normalizedRoleCodes))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<TemplateView> listAllTemplates() {
         return requestTemplateRepository.findAllByOrderBySortOrderAscIdAsc()
                 .stream()
                 .map(this::toView)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LaunchRoleOption> listLaunchRoleOptions() {
+        return sysRoleRepository.findAllByOrderByRoleCodeAsc().stream()
+                .filter(role -> role.getStatus() == null || role.getStatus() == 1)
+                .map(role -> new LaunchRoleOption(role.getId(), role.getRoleCode(), role.getRoleName()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public void requireLaunchPermission(String templateKey, Collection<String> roleCodes) {
+        Set<String> normalizedRoleCodes = normalizeRoleCodes(roleCodes);
+        if (templateKey == null || templateKey.isBlank()) {
+            if (isLaunchAllowed(DEFAULT_LAUNCH_ROLE_CODES, normalizedRoleCodes)) {
+                return;
+            }
+            throw new ForbiddenOperationException("permission denied: launch requires EMPLOYEE role");
+        }
+        RequestTemplate entity = requestTemplateRepository.findByTemplateKey(templateKey)
+                .orElseThrow(() -> new IllegalArgumentException("request template not found: " + templateKey));
+        if (!RequestTemplate.STATUS_ACTIVE.equals(entity.getStatus())) {
+            throw new IllegalArgumentException("request template is inactive: " + templateKey);
+        }
+        List<String> launchRoleCodes = readLaunchRoleCodes(entity.getLaunchRoleCodesJson());
+        if (!isLaunchAllowed(launchRoleCodes, normalizedRoleCodes)) {
+            throw new ForbiddenOperationException("permission denied to launch request template: " + templateKey);
+        }
     }
 
     @Transactional
@@ -82,6 +136,7 @@ public class RequestTemplateService {
             RequestTemplate entity = requestTemplateRepository.findByTemplateKey(seed.templateKey())
                     .orElseGet(RequestTemplate::new);
             String existingApprovalConfigJson = entity.getApprovalConfigJson();
+            String existingLaunchRoleCodesJson = entity.getLaunchRoleCodesJson();
             entity.setTemplateKey(seed.templateKey());
             entity.setTemplateName(seed.templateName());
             entity.setCategory(seed.category());
@@ -95,6 +150,9 @@ public class RequestTemplateService {
             entity.setApprovalConfigJson(existingApprovalConfigJson == null || existingApprovalConfigJson.isBlank()
                     ? defaultApprovalConfigJson(seed.templateKey())
                     : existingApprovalConfigJson);
+            entity.setLaunchRoleCodesJson(existingLaunchRoleCodesJson == null || existingLaunchRoleCodesJson.isBlank()
+                    ? writeLaunchRoleCodes(DEFAULT_LAUNCH_ROLE_CODES)
+                    : writeLaunchRoleCodes(readLaunchRoleCodes(existingLaunchRoleCodesJson)));
             entity.setAllowManualApproverSelect(seed.allowManualApproverSelect());
             entity.setSortOrder(seed.sortOrder());
             entity.setStatus(RequestTemplate.STATUS_ACTIVE);
@@ -140,6 +198,7 @@ public class RequestTemplateService {
                 : request.getPassRatio().trim());
         entity.setFlowSummary(blankToNull(request.getFlowSummary()));
         entity.setApprovalConfigJson(normalizeApprovalConfig(request.getApprovalConfig()));
+        entity.setLaunchRoleCodesJson(writeLaunchRoleCodes(request.getLaunchRoleCodes()));
         entity.setAllowManualApproverSelect(Boolean.TRUE.equals(request.getAllowManualApproverSelect()) ? 1 : 0);
         entity.setSortOrder(request.getSortOrder() == null ? 0 : request.getSortOrder());
         entity.setStatus(request.getStatus().trim());
@@ -174,6 +233,54 @@ public class RequestTemplateService {
         return requestTemplateApprovalResolverService.writeApprovalConfig(approvalConfig);
     }
 
+    private boolean isLaunchAllowed(Collection<String> templateLaunchRoles, Set<String> currentRoleCodes) {
+        if (currentRoleCodes == null || currentRoleCodes.isEmpty()) {
+            return false;
+        }
+        Set<String> requiredRoles = new LinkedHashSet<>(normalizeRoleCodes(templateLaunchRoles));
+        if (requiredRoles.isEmpty()) {
+            requiredRoles.addAll(DEFAULT_LAUNCH_ROLE_CODES);
+        }
+        return requiredRoles.stream().anyMatch(currentRoleCodes::contains);
+    }
+
+    private Set<String> normalizeRoleCodes(Collection<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return Set.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String roleCode : roleCodes) {
+            if (roleCode == null || roleCode.isBlank()) {
+                continue;
+            }
+            normalized.add(roleCode.trim().toUpperCase(Locale.ROOT));
+        }
+        return normalized;
+    }
+
+    private String writeLaunchRoleCodes(Collection<String> launchRoleCodes) {
+        List<String> normalized = normalizeRoleCodes(launchRoleCodes).stream().toList();
+        List<String> target = normalized.isEmpty() ? DEFAULT_LAUNCH_ROLE_CODES : normalized;
+        try {
+            return objectMapper.writeValueAsString(target);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("failed to serialize launchRoleCodes", ex);
+        }
+    }
+
+    private List<String> readLaunchRoleCodes(String launchRoleCodesJson) {
+        if (launchRoleCodesJson == null || launchRoleCodesJson.isBlank()) {
+            return DEFAULT_LAUNCH_ROLE_CODES;
+        }
+        try {
+            List<String> parsed = objectMapper.readValue(launchRoleCodesJson, STRING_LIST_TYPE);
+            List<String> normalized = normalizeRoleCodes(parsed).stream().toList();
+            return normalized.isEmpty() ? DEFAULT_LAUNCH_ROLE_CODES : normalized;
+        } catch (Exception ignored) {
+            return DEFAULT_LAUNCH_ROLE_CODES;
+        }
+    }
+
     private TemplateView toView(RequestTemplate entity) {
         TemplateView view = new TemplateView();
         view.setId(entity.getId());
@@ -188,6 +295,7 @@ public class RequestTemplateService {
         view.setPassRatio(entity.getPassRatio());
         view.setFlowSummary(entity.getFlowSummary());
         view.setApprovalConfig(requestTemplateApprovalResolverService.readApprovalConfig(entity.getApprovalConfigJson()));
+        view.setLaunchRoleCodes(readLaunchRoleCodes(entity.getLaunchRoleCodesJson()));
         view.setAllowManualApproverSelect(entity.getAllowManualApproverSelect() != null && entity.getAllowManualApproverSelect() == 1);
         view.setSortOrder(entity.getSortOrder());
         view.setStatus(entity.getStatus());
@@ -212,6 +320,9 @@ public class RequestTemplateService {
             Integer allowManualApproverSelect) {
     }
 
+    public record LaunchRoleOption(Long id, String roleCode, String roleName) {
+    }
+
     public static class TemplateView {
         private Long id;
         private String templateKey;
@@ -225,6 +336,7 @@ public class RequestTemplateService {
         private String passRatio;
         private String flowSummary;
         private RequestTemplateApprovalConfig approvalConfig;
+        private List<String> launchRoleCodes;
         private Boolean allowManualApproverSelect;
         private Integer sortOrder;
         private String status;
@@ -256,6 +368,8 @@ public class RequestTemplateService {
         public void setFlowSummary(String flowSummary) { this.flowSummary = flowSummary; }
         public RequestTemplateApprovalConfig getApprovalConfig() { return approvalConfig; }
         public void setApprovalConfig(RequestTemplateApprovalConfig approvalConfig) { this.approvalConfig = approvalConfig; }
+        public List<String> getLaunchRoleCodes() { return launchRoleCodes; }
+        public void setLaunchRoleCodes(List<String> launchRoleCodes) { this.launchRoleCodes = launchRoleCodes; }
         public Boolean getAllowManualApproverSelect() { return allowManualApproverSelect; }
         public void setAllowManualApproverSelect(Boolean allowManualApproverSelect) { this.allowManualApproverSelect = allowManualApproverSelect; }
         public Integer getSortOrder() { return sortOrder; }
@@ -282,6 +396,7 @@ public class RequestTemplateService {
         private String passRatio;
         private String flowSummary;
         private RequestTemplateApprovalConfig approvalConfig;
+        private List<String> launchRoleCodes;
         private Boolean allowManualApproverSelect;
         private Integer sortOrder;
         private String status;
@@ -308,6 +423,8 @@ public class RequestTemplateService {
         public void setFlowSummary(String flowSummary) { this.flowSummary = flowSummary; }
         public RequestTemplateApprovalConfig getApprovalConfig() { return approvalConfig; }
         public void setApprovalConfig(RequestTemplateApprovalConfig approvalConfig) { this.approvalConfig = approvalConfig; }
+        public List<String> getLaunchRoleCodes() { return launchRoleCodes; }
+        public void setLaunchRoleCodes(List<String> launchRoleCodes) { this.launchRoleCodes = launchRoleCodes; }
         public Boolean getAllowManualApproverSelect() { return allowManualApproverSelect; }
         public void setAllowManualApproverSelect(Boolean allowManualApproverSelect) { this.allowManualApproverSelect = allowManualApproverSelect; }
         public Integer getSortOrder() { return sortOrder; }

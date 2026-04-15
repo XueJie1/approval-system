@@ -18,6 +18,9 @@ public class FormField {
     @Column(name = "field_key", length = 64, nullable = false)
     private String fieldKey;
 
+    @Column(name = "variable_key", length = 64)
+    private String variableKey;
+
     @Column(name = "field_type", length = 32, nullable = false)
     private String fieldType;
 
@@ -38,4 +41,11 @@ public class FormField {
     @Lob
     @Column(name = "options_json", columnDefinition = "TEXT")
     private String optionsJson;
+
+    @Lob
+    @Column(name = "default_value", columnDefinition = "TEXT")
+    private String defaultValue;
+
+    @Column(name = "sort_order")
+    private Integer sortOrder;
 }

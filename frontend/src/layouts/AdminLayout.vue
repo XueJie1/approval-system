@@ -47,7 +47,8 @@ interface AdminMenuItem {
 }
 
 const MENU_ITEMS: AdminMenuItem[] = [
-  { path: "/admin/home", label: "欢迎页", roles: ["ADMIN", "SYS_ADMIN"] },
+  { path: "/admin/home", label: "欢迎页", roles: ["DESIGNER", "ADMIN", "SYS_ADMIN"] },
+  { path: "/admin/forms", label: "表单管理", roles: ["DESIGNER", "ADMIN", "SYS_ADMIN"] },
   { path: "/admin/request-templates", label: "申请模板", roles: ["ADMIN", "SYS_ADMIN"] },
   { path: "/admin/users", label: "用户管理", roles: ["SYS_ADMIN"] },
   { path: "/admin/roles", label: "角色管理", roles: ["SYS_ADMIN"] },

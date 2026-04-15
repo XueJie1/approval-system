@@ -27,16 +27,23 @@ public final class SecurityUtils {
     }
 
     public static boolean hasAnyRole(String... roles) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthUserPrincipal principal)) {
+        Set<String> userRoles = currentRoleCodes();
+        if (userRoles.isEmpty()) {
             return false;
         }
-        Set<String> userRoles = principal.getRoles();
         for (String role : roles) {
             if (userRoles.contains(role)) {
                 return true;
             }
         }
         return false;
+    }
+
+    public static Set<String> currentRoleCodes() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthUserPrincipal principal)) {
+            return Set.of();
+        }
+        return principal.getRoles() == null ? Set.of() : principal.getRoles();
     }
 }

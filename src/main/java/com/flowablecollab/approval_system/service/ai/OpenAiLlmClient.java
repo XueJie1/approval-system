@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flowablecollab.approval_system.service.settings.AiProviderSettingsService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,6 +34,7 @@ public class OpenAiLlmClient implements LlmClient {
     private final String apiKey;
     private final String model;
     private final double temperature;
+    private final AiProviderSettingsService aiProviderSettingsService;
 
     @Autowired
     public OpenAiLlmClient(
@@ -42,7 +45,8 @@ public class OpenAiLlmClient implements LlmClient {
             @Value("${ai.llm.openai.model:gpt-5.4-mini}") String model,
             @Value("${ai.llm.openai.temperature:0.2}") double temperature,
             @Value("${ai.llm.openai.connect-timeout-seconds:10}") long connectTimeoutSeconds,
-            @Value("${ai.llm.openai.read-timeout-seconds:30}") long readTimeoutSeconds) {
+            @Value("${ai.llm.openai.read-timeout-seconds:30}") long readTimeoutSeconds,
+            ObjectProvider<AiProviderSettingsService> aiProviderSettingsServiceProvider) {
         this(
                 restTemplateBuilder
                         .setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
@@ -52,7 +56,8 @@ public class OpenAiLlmClient implements LlmClient {
                 baseUrl,
                 apiKey,
                 model,
-                temperature
+                temperature,
+                aiProviderSettingsServiceProvider.getIfAvailable()
         );
     }
 
@@ -63,12 +68,24 @@ public class OpenAiLlmClient implements LlmClient {
             String apiKey,
             String model,
             double temperature) {
+        this(restTemplate, objectMapper, baseUrl, apiKey, model, temperature, null);
+    }
+
+    OpenAiLlmClient(
+            RestTemplate restTemplate,
+            ObjectMapper objectMapper,
+            String baseUrl,
+            String apiKey,
+            String model,
+            double temperature,
+            AiProviderSettingsService aiProviderSettingsService) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl;
         this.apiKey = apiKey;
         this.model = model;
         this.temperature = temperature;
+        this.aiProviderSettingsService = aiProviderSettingsService;
     }
 
     @Override
@@ -114,10 +131,12 @@ public class OpenAiLlmClient implements LlmClient {
     }
 
     private ChatResult executeChat(List<Map<String, Object>> messages) {
-        if (apiKey == null || apiKey.isBlank()) {
+        AiProviderSettingsService.OpenAiRuntimeSettings runtimeSettings = resolveRuntimeSettings();
+        String resolvedApiKey = runtimeSettings.apiKey();
+        if (resolvedApiKey == null || resolvedApiKey.isBlank()) {
             throw new IllegalStateException("OpenAI api-key is required when ai.llm.provider=openai");
         }
-        String endpoint = normalizeBaseUrl(baseUrl) + "/chat/completions";
+        String endpoint = normalizeBaseUrl(runtimeSettings.baseUrl()) + "/chat/completions";
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
@@ -126,7 +145,7 @@ public class OpenAiLlmClient implements LlmClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(apiKey);
+        headers.setBearerAuth(resolvedApiKey);
 
         ResponseEntity<String> response;
         try {
@@ -254,6 +273,13 @@ public class OpenAiLlmClient implements LlmClient {
             return value.substring(0, value.length() - 1);
         }
         return value;
+    }
+
+    private AiProviderSettingsService.OpenAiRuntimeSettings resolveRuntimeSettings() {
+        if (aiProviderSettingsService == null) {
+            return new AiProviderSettingsService.OpenAiRuntimeSettings(baseUrl, apiKey);
+        }
+        return aiProviderSettingsService.resolveOpenAiRuntimeSettings(baseUrl, apiKey);
     }
 
     private record ChatResult(String content, String model) {

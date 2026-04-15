@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 
 const BUSINESS_ADMIN_ROLES = ["ADMIN", "SYS_ADMIN"] as const;
+const FORM_DESIGNER_ROLES = ["DESIGNER", "ADMIN", "SYS_ADMIN"] as const;
 const TECH_ADMIN_ROLES = ["SYS_ADMIN"] as const;
 
 type AppRole = (typeof BUSINESS_ADMIN_ROLES)[number];
@@ -14,6 +15,10 @@ function isBusinessAdmin(userRoles: string[]) {
   return hasAnyRole(userRoles, BUSINESS_ADMIN_ROLES);
 }
 
+function isFormDesigner(userRoles: string[]) {
+  return hasAnyRole(userRoles, FORM_DESIGNER_ROLES);
+}
+
 function isTechAdmin(userRoles: string[]) {
   return hasAnyRole(userRoles, TECH_ADMIN_ROLES);
 }
@@ -21,6 +26,9 @@ function isTechAdmin(userRoles: string[]) {
 function determineAdminDefaultPath(userRoles: string[]) {
   if (isTechAdmin(userRoles)) {
     return "/admin/home";
+  }
+  if (isFormDesigner(userRoles)) {
+    return "/admin/forms";
   }
   if (isBusinessAdmin(userRoles)) {
     return "/admin/request-templates";
@@ -52,10 +60,11 @@ const routes = [
   {
     path: "/admin",
     component: () => import("../layouts/AdminLayout.vue"),
-    meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] },
+    meta: { requiresAuth: true, roles: [...FORM_DESIGNER_ROLES] },
     children: [
-      { path: "", name: "admin-root", component: () => import("../views/AdminWelcomeView.vue"), meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] } },
-      { path: "home", name: "admin-home", component: () => import("../views/AdminWelcomeView.vue"), meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] } },
+      { path: "", name: "admin-root", component: () => import("../views/AdminWelcomeView.vue"), meta: { requiresAuth: true, roles: [...FORM_DESIGNER_ROLES] } },
+      { path: "home", name: "admin-home", component: () => import("../views/AdminWelcomeView.vue"), meta: { requiresAuth: true, roles: [...FORM_DESIGNER_ROLES] } },
+      { path: "forms", name: "admin-forms", component: () => import("../views/AdminFormsView.vue"), meta: { requiresAuth: true, roles: [...FORM_DESIGNER_ROLES] } },
       { path: "users", name: "admin-users", component: () => import("../views/AdminUsersView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
       { path: "roles", name: "admin-roles", component: () => import("../views/AdminRolesView.vue"), meta: { requiresAuth: true, roles: [...TECH_ADMIN_ROLES] } },
       { path: "request-templates", name: "admin-request-templates", component: () => import("../views/AdminRequestTemplatesView.vue"), meta: { requiresAuth: true, roles: [...BUSINESS_ADMIN_ROLES] } },
@@ -113,7 +122,7 @@ router.beforeEach(async (to) => {
 
 function determineRedirectPath(auth: ReturnType<typeof useAuthStore>): string {
   const userRoles = auth.currentUser?.roles ?? [];
-  if (isBusinessAdmin(userRoles)) {
+  if (isBusinessAdmin(userRoles) || isFormDesigner(userRoles)) {
     return determineAdminDefaultPath(userRoles);
   }
   return "/user";
