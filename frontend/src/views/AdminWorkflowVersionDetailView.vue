@@ -1314,7 +1314,7 @@ function formatDateTime(value?: string | null) {
 
 .bpmn-editor-content.is-bpmn-fullscreen {
   position: fixed;
-  z-index: 2200;
+  z-index: 1800;
   margin: 0;
   padding: 16px;
   background: #fff;
