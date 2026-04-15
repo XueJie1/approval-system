@@ -168,6 +168,16 @@
                         :class="{ 'is-bpmn-fullscreen': bpmnFullscreen }"
                         :style="bpmnFullscreenStyle"
                       >
+                        <el-button
+                          v-if="bpmnFullscreen"
+                          class="bpmn-fullscreen-close"
+                          circle
+                          plain
+                          @click="confirmCloseBpmnFullscreen"
+                        >
+                          <el-icon><Close /></el-icon>
+                        </el-button>
+
                         <BpmnVisualDesigner
                           v-if="bpmnEditMode === 'visual'"
                           :xml="versionForm.bpmnXml"
@@ -371,7 +381,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import type { AxiosError } from "axios";
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus";
-import { ArrowLeft, ArrowDown, Plus } from "@element-plus/icons-vue";
+import { ArrowLeft, ArrowDown, Plus, Close } from "@element-plus/icons-vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import BpmnVisualDesigner from "../components/workflow/BpmnVisualDesigner.vue";
@@ -455,6 +465,7 @@ const designerReloadToken = ref(0);
 const bpmnImportError = ref<{ message: string; details?: string } | null>(null);
 const bpmnFullscreen = ref(false);
 const bpmnFullscreenStyle = ref<Record<string, string>>({});
+const bpmnXmlBeforeFullscreen = ref("");
 const bpmnBaselineXml = ref("");
 const bpmnDirty = ref(false);
 const pendingDesignerInitSync = ref(false);
@@ -781,6 +792,7 @@ function enterBpmnFullscreen() {
   if (bpmnEditMode.value !== "visual") {
     bpmnEditMode.value = "visual";
   }
+  bpmnXmlBeforeFullscreen.value = versionForm.bpmnXml;
   bpmnFullscreen.value = true;
   document.body.classList.add("bpmn-editor-fullscreen-lock");
   nextTick(() => {
@@ -797,6 +809,27 @@ function exitBpmnFullscreen() {
   bpmnFullscreenStyle.value = {};
   window.removeEventListener("resize", updateBpmnFullscreenRect);
   document.body.classList.remove("bpmn-editor-fullscreen-lock");
+}
+
+async function confirmCloseBpmnFullscreen() {
+  if (!bpmnFullscreen.value) {
+    return;
+  }
+  try {
+    await ElMessageBox.confirm("确定要退出吗？未保存的更改将被丢弃", "退出全屏", {
+      confirmButtonText: "确定退出",
+      cancelButtonText: "继续编辑",
+      type: "warning"
+    });
+  } catch {
+    return;
+  }
+  if (versionForm.bpmnXml !== bpmnXmlBeforeFullscreen.value) {
+    versionForm.bpmnXml = bpmnXmlBeforeFullscreen.value;
+    designerReloadToken.value += 1;
+    bpmnImportError.value = null;
+  }
+  exitBpmnFullscreen();
 }
 
 function toggleBpmnFullscreen() {
@@ -1290,6 +1323,13 @@ function formatDateTime(value?: string | null) {
   display: flex;
   flex-direction: column;
   overflow: auto;
+}
+
+.bpmn-fullscreen-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
 }
 
 .bpmn-editor-content.is-bpmn-fullscreen :deep(.bpmn-visual-designer) {
