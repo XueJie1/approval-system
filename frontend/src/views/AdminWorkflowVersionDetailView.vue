@@ -164,7 +164,6 @@
                       </div>
 
                       <div
-                        ref="bpmnEditorRef"
                         class="bpmn-editor-content"
                         :class="{ 'is-bpmn-fullscreen': bpmnFullscreen }"
                         :style="bpmnFullscreenStyle"
@@ -454,7 +453,6 @@ const bpmnEditMode = ref<"visual" | "source">("visual");
 const sourcePanelExpanded = ref(false);
 const designerReloadToken = ref(0);
 const bpmnImportError = ref<{ message: string; details?: string } | null>(null);
-const bpmnEditorRef = ref<HTMLElement | null>(null);
 const bpmnFullscreen = ref(false);
 const bpmnFullscreenStyle = ref<Record<string, string>>({});
 const bpmnBaselineXml = ref("");
@@ -768,17 +766,14 @@ function updateBpmnFullscreenRect() {
   if (!bpmnFullscreen.value) {
     return;
   }
-  const editorEl = bpmnEditorRef.value;
-  const viewEl = editorEl?.closest(".view") as HTMLElement | null;
-  if (!viewEl) {
-    return;
-  }
-  const rect = viewEl.getBoundingClientRect();
+  const margin = 12;
+  const width = Math.max(window.innerWidth - margin * 2, 320);
+  const height = Math.max(window.innerHeight - margin * 2, 320);
   bpmnFullscreenStyle.value = {
-    left: `${Math.round(rect.left)}px`,
-    top: `${Math.round(rect.top)}px`,
-    width: `${Math.round(rect.width)}px`,
-    height: `${Math.round(rect.height)}px`
+    left: `${margin}px`,
+    top: `${margin}px`,
+    width: `${Math.round(width)}px`,
+    height: `${Math.round(height)}px`
   };
 }
 
@@ -1294,7 +1289,7 @@ function formatDateTime(value?: string | null) {
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .bpmn-editor-content.is-bpmn-fullscreen :deep(.bpmn-visual-designer) {
