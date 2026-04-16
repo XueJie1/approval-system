@@ -104,4 +104,58 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("permission denied to launch request template: " + templateKey));
     }
+
+    @Test
+    void parse_leaveDays_withDateRangeAndChineseDays_shouldNotParseYearAsDays() throws Exception {
+        SysUser employee = createUser("employee-ai-days", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/ai/form-commands/parse")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formKey": "leave_request",
+                                  "command": "我要请假，开始时间2026-05-01 09:00:00，结束时间2026-05-02 18:00:00，请两天事假，请假原因家中有事"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formData.days").value(2.0));
+    }
+
+    @Test
+    void parse_travelBudget_withDateRangeAndBudget_shouldNotParseYearAsBudget() throws Exception {
+        SysUser employee = createUser("employee-ai-budget", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/ai/form-commands/parse")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formKey": "travel_request",
+                                  "command": "2026-07-01 09:00:00到2026-07-03 18:00:00去上海出差，预计预算3000元，出差事由客户拜访"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formData.budget").value(3000.0));
+    }
+
+    @Test
+    void parse_travelBudget_withoutBudget_shouldKeepBudgetEmptyInsteadOfYear() throws Exception {
+        SysUser employee = createUser("employee-ai-no-budget", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/ai/form-commands/parse")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formKey": "travel_request",
+                                  "command": "2026-08-01 09:00:00到2026-08-03 18:00:00去深圳出差，出差事由客户会议"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formData.budget").doesNotExist());
+    }
 }

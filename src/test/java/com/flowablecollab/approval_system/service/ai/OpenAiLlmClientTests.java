@@ -176,8 +176,8 @@ class OpenAiLlmClientTests {
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
         ObjectMapper objectMapper = new ObjectMapper();
         AiProviderSettingsService settingsService = mock(AiProviderSettingsService.class);
-        when(settingsService.resolveOpenAiRuntimeSettings(anyString(), anyString()))
-                .thenReturn(new AiProviderSettingsService.OpenAiRuntimeSettings("https://runtime-gateway.local/v1", "runtime-key-001"));
+        when(settingsService.resolveOpenAiRuntimeSettings(anyString(), anyString(), anyString()))
+                .thenReturn(new AiProviderSettingsService.OpenAiRuntimeSettings("https://runtime-gateway.local/v1", "runtime-key-001", "gpt-5.4-mini"));
 
         OpenAiLlmClient client = new OpenAiLlmClient(
                 restTemplate,

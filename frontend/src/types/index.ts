@@ -587,13 +587,26 @@ export interface AdminOpenAiSettings {
   baseUrl: string;
   hasApiKey: boolean;
   apiKeyMasked?: string | null;
+  model: string;
   updatedAt?: string | null;
 }
 
 export interface AdminOpenAiSettingsUpdatePayload {
   baseUrl?: string | null;
   apiKey?: string | null;
+  model?: string | null;
   clearApiKey?: boolean;
+}
+
+export interface AdminOpenAiModelListPayload {
+  baseUrl?: string | null;
+  apiKey?: string | null;
+}
+
+export interface AdminOpenAiModelListResult {
+  baseUrl: string;
+  selectedModel: string;
+  models: string[];
 }
 
 export interface AiSuggestion {

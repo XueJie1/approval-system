@@ -50,3 +50,8 @@ export async function validateRecoveryCode(payload: { code: string }) {
   const { data } = await http.post<ActionResult>("/auth/2fa/recovery/validate", payload);
   return data;
 }
+
+export async function changePassword(payload: { currentPassword: string; newPassword: string }) {
+  const { data } = await http.post<ActionResult>("/auth/password/change", payload);
+  return data;
+}

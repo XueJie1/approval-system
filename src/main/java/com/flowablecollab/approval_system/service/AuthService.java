@@ -7,6 +7,7 @@ import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.repository.rbac.SysRoleRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRoleRepository;
+import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.security.JwtService;
 import com.flowablecollab.approval_system.security.TotpService;
 import com.flowablecollab.approval_system.service.LoginLogService;
@@ -265,6 +266,32 @@ public class AuthService {
         profile.setTwoFactorEnabled(isTwoFactorEnabled(user));
         profile.setHasRecoveryCodes(user.getRecoveryCodes() != null && !user.getRecoveryCodes().isBlank());
         return profile;
+    }
+
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        if (SecurityUtils.hasAnyRole("ADMIN", "SYS_ADMIN")) {
+            throw new ForbiddenOperationException("admin users must reset password in admin console");
+        }
+        if (currentPassword == null || currentPassword.isBlank()) {
+            throw new IllegalArgumentException("currentPassword is required");
+        }
+        if (newPassword == null || newPassword.length() < 8 || newPassword.length() > 128) {
+            throw new IllegalArgumentException("password length must be between 8 and 128");
+        }
+        if (currentPassword.equals(newPassword)) {
+            throw new IllegalArgumentException("new password must be different from current password");
+        }
+
+        SysUser user = sysUserRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("user not found"));
+        if (user.getPassword() == null || !BCrypt.checkpw(currentPassword, user.getPassword())) {
+            throw new IllegalArgumentException("current password is incorrect");
+        }
+
+        user.setPassword(BCrypt.hashpw(newPassword, BCrypt.gensalt()));
+        user.setLoginFailures(0);
+        user.setLockedUntil(null);
+        sysUserRepository.save(user);
     }
 
     private LoginResult issueAccessToken(SysUser user) {

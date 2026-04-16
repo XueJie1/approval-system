@@ -32,7 +32,7 @@ public class OpenAiLlmClient implements LlmClient {
     private final ObjectMapper objectMapper;
     private final String baseUrl;
     private final String apiKey;
-    private final String model;
+    private final String fallbackModel;
     private final double temperature;
     private final AiProviderSettingsService aiProviderSettingsService;
 
@@ -42,7 +42,7 @@ public class OpenAiLlmClient implements LlmClient {
             ObjectMapper objectMapper,
             @Value("${ai.llm.openai.base-url:https://api.openai.com/v1}") String baseUrl,
             @Value("${ai.llm.openai.api-key:}") String apiKey,
-            @Value("${ai.llm.openai.model:gpt-5.4-mini}") String model,
+            @Value("${ai.llm.openai.model:gpt-5.4-mini}") String fallbackModel,
             @Value("${ai.llm.openai.temperature:0.2}") double temperature,
             @Value("${ai.llm.openai.connect-timeout-seconds:10}") long connectTimeoutSeconds,
             @Value("${ai.llm.openai.read-timeout-seconds:30}") long readTimeoutSeconds,
@@ -55,7 +55,7 @@ public class OpenAiLlmClient implements LlmClient {
                 objectMapper,
                 baseUrl,
                 apiKey,
-                model,
+                fallbackModel,
                 temperature,
                 aiProviderSettingsServiceProvider.getIfAvailable()
         );
@@ -66,9 +66,9 @@ public class OpenAiLlmClient implements LlmClient {
             ObjectMapper objectMapper,
             String baseUrl,
             String apiKey,
-            String model,
+            String fallbackModel,
             double temperature) {
-        this(restTemplate, objectMapper, baseUrl, apiKey, model, temperature, null);
+        this(restTemplate, objectMapper, baseUrl, apiKey, fallbackModel, temperature, null);
     }
 
     OpenAiLlmClient(
@@ -76,14 +76,14 @@ public class OpenAiLlmClient implements LlmClient {
             ObjectMapper objectMapper,
             String baseUrl,
             String apiKey,
-            String model,
+            String fallbackModel,
             double temperature,
             AiProviderSettingsService aiProviderSettingsService) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl;
         this.apiKey = apiKey;
-        this.model = model;
+        this.fallbackModel = fallbackModel;
         this.temperature = temperature;
         this.aiProviderSettingsService = aiProviderSettingsService;
     }
@@ -133,13 +133,14 @@ public class OpenAiLlmClient implements LlmClient {
     private ChatResult executeChat(List<Map<String, Object>> messages) {
         AiProviderSettingsService.OpenAiRuntimeSettings runtimeSettings = resolveRuntimeSettings();
         String resolvedApiKey = runtimeSettings.apiKey();
+        String resolvedModel = runtimeSettings.model();
         if (resolvedApiKey == null || resolvedApiKey.isBlank()) {
             throw new IllegalStateException("OpenAI api-key is required when ai.llm.provider=openai");
         }
         String endpoint = normalizeBaseUrl(runtimeSettings.baseUrl()) + "/chat/completions";
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", model);
+        payload.put("model", resolvedModel);
         payload.put("temperature", temperature);
         payload.put("messages", messages);
 
@@ -154,14 +155,14 @@ public class OpenAiLlmClient implements LlmClient {
             throw new IllegalStateException("OpenAI request failed", ex);
         }
 
-        return parseChatResult(response.getBody());
+        return parseChatResult(response.getBody(), resolvedModel);
     }
 
-    private ChatResult parseChatResult(String rawBody) {
+    private ChatResult parseChatResult(String rawBody, String defaultModel) {
         try {
             JsonNode root = objectMapper.readTree(rawBody);
             String content = root.path("choices").path(0).path("message").path("content").asText("");
-            return new ChatResult(content, root.path("model").asText(model));
+            return new ChatResult(content, root.path("model").asText(defaultModel));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to parse OpenAI response", ex);
         }
@@ -277,9 +278,9 @@ public class OpenAiLlmClient implements LlmClient {
 
     private AiProviderSettingsService.OpenAiRuntimeSettings resolveRuntimeSettings() {
         if (aiProviderSettingsService == null) {
-            return new AiProviderSettingsService.OpenAiRuntimeSettings(baseUrl, apiKey);
+            return new AiProviderSettingsService.OpenAiRuntimeSettings(baseUrl, apiKey, fallbackModel);
         }
-        return aiProviderSettingsService.resolveOpenAiRuntimeSettings(baseUrl, apiKey);
+        return aiProviderSettingsService.resolveOpenAiRuntimeSettings(baseUrl, apiKey, fallbackModel);
     }
 
     private record ChatResult(String content, String model) {

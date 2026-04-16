@@ -3,7 +3,7 @@
     <div class="heading">
       <div>
         <h2 class="page-title">系统设置</h2>
-        <p class="page-subtitle">配置 AI 连接参数（Base URL、API Key）并安全持久化</p>
+        <p class="page-subtitle">配置 AI 连接参数（Base URL、API Key、模型）并安全持久化</p>
       </div>
       <div class="heading-actions">
         <el-button :loading="loading" @click="loadSettings">刷新</el-button>
@@ -45,6 +45,24 @@
           <div class="form-hint">留空将回退到系统默认地址。</div>
         </el-form-item>
 
+        <el-form-item label="模型" prop="model">
+          <div class="model-row">
+            <el-select
+              v-model="form.model"
+              class="model-select"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="请选择或输入模型"
+              :disabled="saving"
+            >
+              <el-option v-for="modelItem in modelOptions" :key="modelItem" :label="modelItem" :value="modelItem" />
+            </el-select>
+            <el-button :loading="modelsLoading" :disabled="saving" @click="loadModels()">刷新模型列表</el-button>
+          </div>
+          <div class="form-hint">从 [Base URL]/models 拉取并列举可用模型。</div>
+        </el-form-item>
+
         <el-form-item label="API Key">
           <el-input
             v-model="form.apiKey"
@@ -75,19 +93,22 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import type { AdminOpenAiSettings } from "../types";
-import { getAdminOpenAiSettings, updateAdminOpenAiSettings } from "../api/admin-settings";
-import { buildOpenAiSettingsUpdatePayload, normalizeBaseUrl } from "../utils/admin-settings";
+import { getAdminOpenAiSettings, listAdminOpenAiModels, updateAdminOpenAiSettings } from "../api/admin-settings";
+import { buildOpenAiSettingsUpdatePayload, normalizeBaseUrl, normalizeModel } from "../utils/admin-settings";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
 const loading = ref(false);
 const saving = ref(false);
+const modelsLoading = ref(false);
 const settings = ref<AdminOpenAiSettings | null>(null);
 const formRef = ref<FormInstance>();
+const modelOptions = ref<string[]>([]);
 
 const form = reactive({
   baseUrl: "",
   apiKey: "",
+  model: "gpt-5.4-mini",
   clearApiKey: false
 });
 
@@ -129,7 +150,9 @@ async function loadSettings() {
     settings.value = data;
     form.baseUrl = data.baseUrl ?? "";
     form.apiKey = "";
+    form.model = data.model ?? "gpt-5.4-mini";
     form.clearApiKey = false;
+    await loadModels(true);
   } finally {
     loading.value = false;
   }
@@ -161,7 +184,9 @@ async function saveSettings() {
     settings.value = data;
     form.baseUrl = data.baseUrl ?? "";
     form.apiKey = "";
+    form.model = data.model ?? form.model;
     form.clearApiKey = false;
+    await loadModels(true);
     ElMessage.success("系统设置已保存");
   } finally {
     saving.value = false;
@@ -170,6 +195,34 @@ async function saveSettings() {
 
 function useDefaultBaseUrl() {
   form.baseUrl = DEFAULT_OPENAI_BASE_URL;
+}
+
+async function loadModels(silent = false) {
+  modelsLoading.value = true;
+  try {
+    const data = await listAdminOpenAiModels({
+      baseUrl: normalizeBaseUrl(form.baseUrl),
+      apiKey: form.apiKey.trim() || null
+    });
+    const selectedModel = normalizeModel(form.model);
+    const merged = [...data.models];
+    if (selectedModel && !merged.includes(selectedModel)) {
+      merged.unshift(selectedModel);
+    }
+    modelOptions.value = merged;
+    if (!selectedModel && data.selectedModel) {
+      form.model = data.selectedModel;
+    }
+    if (!silent) {
+      ElMessage.success(`已加载 ${data.models.length} 个模型`);
+    }
+  } catch (error) {
+    if (!silent) {
+      throw error;
+    }
+  } finally {
+    modelsLoading.value = false;
+  }
 }
 
 function formatDateTime(value?: string | null) {
@@ -252,6 +305,15 @@ function formatDateTime(value?: string | null) {
   margin-top: 6px;
   font-size: 12px;
   color: #909399;
+}
+
+.model-row {
+  display: flex;
+  gap: 8px;
+}
+
+.model-select {
+  flex: 1;
 }
 
 .full-span {

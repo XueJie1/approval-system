@@ -13,13 +13,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,6 +30,16 @@ import java.util.regex.Pattern;
 public class FormCommandAiService {
 
     private static final String MODEL_NAME = "heuristic-form-parser-v1";
+    private static final Pattern FIRST_NUMBER_PATTERN = Pattern.compile("-?\\d+(?:\\.\\d+)?");
+    private static final Pattern NUMBER_WITH_DAY_UNIT_PATTERN = Pattern.compile("(-?\\d+(?:\\.\\d+)?)\\s*(?:天|day|days)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CHINESE_DAY_PATTERN = Pattern.compile("([零〇一二两三四五六七八九十百半]+)\\s*天");
+    private static final Pattern AMOUNT_BY_KEYWORD_PATTERN = Pattern.compile(
+            "(?:金额|预算|费用|报销|总计|price|cost|amount|budget)\\D{0,8}([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern CURRENCY_PREFIX_PATTERN = Pattern.compile("[¥￥$]\\s*([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)");
+    private static final Pattern CURRENCY_SUFFIX_PATTERN = Pattern.compile("([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)\\s*(?:元|块|人民币|rmb|cny)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CHINESE_DATE_PATTERN = Pattern.compile("\\d{4}年\\d{1,2}月\\d{1,2}日?");
+    private static final Pattern CHINESE_YEAR_MONTH_PATTERN = Pattern.compile("\\d{4}年\\d{1,2}月");
 
     private final FormService formService;
     private final WorkflowService workflowService;
@@ -249,7 +259,7 @@ public class FormCommandAiService {
         String explicit = extractByAliases(command, aliases(field));
 
         return switch (type) {
-            case "number" -> parseNumberValue(field, command, explicit);
+            case "number" -> parseNumberValue(field, command, explicit, dateTokens);
             case "date", "datetime" -> parseTemporalValue(field, command, explicit, dateTokens, "datetime".equals(type));
             case "select" -> parseSelectValue(field, command, explicit);
             case "table" -> parseTableValue(explicit);
@@ -257,26 +267,19 @@ public class FormCommandAiService {
         };
     }
 
-    private Object parseNumberValue(FormField field, String command, String explicit) {
+    private Object parseNumberValue(FormField field, String command, String explicit, List<String> dateTokens) {
         Double explicitNumber = parseFirstNumber(explicit);
         if (explicitNumber != null) {
             return explicitNumber;
         }
         String indicator = (field.getFieldKey() + " " + safe(field.getLabel())).toLowerCase(Locale.ROOT);
-        if (indicator.contains("days") || indicator.contains("天")) {
-            Matcher matcher = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*天").matcher(command);
-            if (matcher.find()) {
-                return parseFirstNumber(matcher.group(1));
-            }
+        if (isDurationField(indicator)) {
+            return parseDurationNumber(command, dateTokens);
         }
-        if (indicator.contains("amount") || indicator.contains("budget") || indicator.contains("金额") || indicator.contains("费用")) {
-            Matcher matcher = Pattern.compile("(?:金额|预算|费用|报销|总计|amount|budget)\\D{0,3}(\\d+(?:\\.\\d+)?)", Pattern.CASE_INSENSITIVE)
-                    .matcher(command);
-            if (matcher.find()) {
-                return parseFirstNumber(matcher.group(1));
-            }
+        if (isAmountField(indicator)) {
+            return parseAmountNumber(command);
         }
-        return parseFirstNumber(command);
+        return parseFirstNumber(stripDateTokens(command, dateTokens));
     }
 
     private Object parseTemporalValue(FormField field,
@@ -352,7 +355,7 @@ public class FormCommandAiService {
         if (text == null || text.isBlank()) {
             return null;
         }
-        Matcher matcher = Pattern.compile("-?\\d+(?:\\.\\d+)?").matcher(text);
+        Matcher matcher = FIRST_NUMBER_PATTERN.matcher(text);
         if (!matcher.find()) {
             return null;
         }
@@ -370,6 +373,174 @@ public class FormCommandAiService {
             tokens.add(matcher.group());
         }
         return tokens;
+    }
+
+    private boolean isDurationField(String indicator) {
+        return indicator.contains("days")
+                || indicator.contains("day")
+                || indicator.contains("duration")
+                || indicator.contains("天")
+                || indicator.contains("时长");
+    }
+
+    private boolean isAmountField(String indicator) {
+        return indicator.contains("amount")
+                || indicator.contains("budget")
+                || indicator.contains("price")
+                || indicator.contains("cost")
+                || indicator.contains("金额")
+                || indicator.contains("费用")
+                || indicator.contains("预算")
+                || indicator.contains("报销");
+    }
+
+    private Double parseDurationNumber(String command, List<String> dateTokens) {
+        Matcher numericDays = NUMBER_WITH_DAY_UNIT_PATTERN.matcher(command);
+        if (numericDays.find()) {
+            return parseFirstNumber(numericDays.group(1));
+        }
+
+        Matcher chineseDays = CHINESE_DAY_PATTERN.matcher(command);
+        if (chineseDays.find()) {
+            Double chineseNumber = parseChineseNumber(chineseDays.group(1));
+            if (chineseNumber != null) {
+                return chineseNumber;
+            }
+        }
+
+        Double fromDateRange = parseDurationFromDateRange(dateTokens);
+        if (fromDateRange != null) {
+            return fromDateRange;
+        }
+        return null;
+    }
+
+    private Double parseAmountNumber(String command) {
+        Double keywordAmount = extractCapturedNumber(command, AMOUNT_BY_KEYWORD_PATTERN);
+        if (keywordAmount != null) {
+            return keywordAmount;
+        }
+        Double prefixedAmount = extractCapturedNumber(command, CURRENCY_PREFIX_PATTERN);
+        if (prefixedAmount != null) {
+            return prefixedAmount;
+        }
+        return extractCapturedNumber(command, CURRENCY_SUFFIX_PATTERN);
+    }
+
+    private Double extractCapturedNumber(String text, Pattern pattern) {
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        return parseFirstNumber(matcher.group(1).replace(",", ""));
+    }
+
+    private Double parseDurationFromDateRange(List<String> dateTokens) {
+        if (dateTokens == null || dateTokens.size() < 2) {
+            return null;
+        }
+        LocalDate start = parseDateOnly(dateTokens.get(0));
+        LocalDate end = parseDateOnly(dateTokens.get(dateTokens.size() - 1));
+        if (start == null || end == null || end.isBefore(start)) {
+            return null;
+        }
+        long daysInclusive = end.toEpochDay() - start.toEpochDay() + 1;
+        return (double) daysInclusive;
+    }
+
+    private LocalDate parseDateOnly(String token) {
+        String normalized = normalizeDateToken(token, false);
+        if (normalized == null) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(normalized);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String stripDateTokens(String text, List<String> dateTokens) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        String cleaned = text;
+        if (dateTokens != null) {
+            for (String dateToken : dateTokens) {
+                if (dateToken != null && !dateToken.isBlank()) {
+                    cleaned = cleaned.replace(dateToken, " ");
+                }
+            }
+        }
+        cleaned = CHINESE_DATE_PATTERN.matcher(cleaned).replaceAll(" ");
+        cleaned = CHINESE_YEAR_MONTH_PATTERN.matcher(cleaned).replaceAll(" ");
+        return cleaned;
+    }
+
+    private Double parseChineseNumber(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        String normalized = token.trim();
+        if ("半".equals(normalized)) {
+            return 0.5d;
+        }
+        if (normalized.contains("百")) {
+            String[] parts = normalized.split("百", 2);
+            Integer hundred = parseChineseDigit(parts[0].isBlank() ? "一" : parts[0]);
+            Integer tail = parts.length < 2 || parts[1].isBlank() ? 0 : parseChineseInteger(parts[1]);
+            if (hundred == null || tail == null) {
+                return null;
+            }
+            return (double) (hundred * 100 + tail);
+        }
+        Integer integer = parseChineseInteger(normalized);
+        return integer == null ? null : integer.doubleValue();
+    }
+
+    private Integer parseChineseInteger(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        if (token.contains("十")) {
+            String[] parts = token.split("十", 2);
+            int tens;
+            if (parts.length > 0 && !parts[0].isBlank()) {
+                Integer parsed = parseChineseDigit(parts[0]);
+                if (parsed == null) {
+                    return null;
+                }
+                tens = parsed;
+            } else {
+                tens = 1;
+            }
+            int units = 0;
+            if (parts.length == 2 && !parts[1].isBlank()) {
+                Integer parsed = parseChineseDigit(parts[1]);
+                if (parsed == null) {
+                    return null;
+                }
+                units = parsed;
+            }
+            return tens * 10 + units;
+        }
+        return parseChineseDigit(token);
+    }
+
+    private Integer parseChineseDigit(String token) {
+        return switch (token) {
+            case "零", "〇" -> 0;
+            case "一" -> 1;
+            case "二", "两" -> 2;
+            case "三" -> 3;
+            case "四" -> 4;
+            case "五" -> 5;
+            case "六" -> 6;
+            case "七" -> 7;
+            case "八" -> 8;
+            case "九" -> 9;
+            default -> null;
+        };
     }
 
     private String normalizeDateToken(String token, boolean withTime) {

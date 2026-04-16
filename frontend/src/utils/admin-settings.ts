@@ -3,6 +3,7 @@ import type { AdminOpenAiSettingsUpdatePayload } from "../types";
 export interface OpenAiSettingsFormState {
   baseUrl: string;
   apiKey: string;
+  model: string;
   clearApiKey: boolean;
 }
 
@@ -11,7 +12,8 @@ export function buildOpenAiSettingsUpdatePayload(form: OpenAiSettingsFormState):
   const normalizedApiKey = normalizeOptionalText(form.apiKey);
 
   const payload: AdminOpenAiSettingsUpdatePayload = {
-    baseUrl: normalizedBaseUrl
+    baseUrl: normalizedBaseUrl,
+    model: normalizeModel(form.model)
   };
 
   if (form.clearApiKey) {
@@ -32,6 +34,10 @@ export function normalizeBaseUrl(value: string): string | null {
     return null;
   }
   return normalized.replace(/\/+$/, "");
+}
+
+export function normalizeModel(value: string): string | null {
+  return normalizeOptionalText(value);
 }
 
 function normalizeOptionalText(value: string): string | null {

@@ -6,6 +6,7 @@ import com.flowablecollab.approval_system.service.RbacService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -84,6 +85,13 @@ public class AuthController {
         return ResponseEntity.ok(ActionResponse.ok("Recovery code validated successfully"));
     }
 
+    @PostMapping("/password/change")
+    public ResponseEntity<ActionResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        Long currentUserId = requireCurrentUserId();
+        authService.changePassword(currentUserId, request.getCurrentPassword(), request.getNewPassword());
+        return ResponseEntity.ok(ActionResponse.ok("Password changed"));
+    }
+
     private Long requireCurrentUserId() {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
@@ -129,6 +137,16 @@ public class AuthController {
     public static class ValidateRecoveryCodeRequest {
         @NotBlank(message = "code is required")
         private String code;
+    }
+
+    @Data
+    public static class ChangePasswordRequest {
+        @NotBlank(message = "currentPassword is required")
+        private String currentPassword;
+
+        @NotBlank(message = "newPassword is required")
+        @Size(min = 8, max = 128, message = "password length must be between 8 and 128")
+        private String newPassword;
     }
 
     @Data

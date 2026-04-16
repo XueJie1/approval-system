@@ -1,13 +1,26 @@
 package com.flowablecollab.approval_system.service.settings;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flowablecollab.approval_system.entity.settings.SystemSetting;
 import com.flowablecollab.approval_system.repository.settings.SystemSettingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,9 +33,12 @@ public class AiProviderSettingsService {
 
     public static final String OPENAI_BASE_URL_KEY = "ai.llm.openai.base-url";
     public static final String OPENAI_API_KEY_KEY = "ai.llm.openai.api-key";
+    public static final String OPENAI_MODEL_KEY = "ai.llm.openai.model";
 
     private final SystemSettingRepository systemSettingRepository;
     private final SettingsCryptoService settingsCryptoService;
+    private final RestTemplateBuilder restTemplateBuilder;
+    private final ObjectMapper objectMapper;
 
     @Value("${ai.llm.openai.base-url:https://api.openai.com/v1}")
     private String defaultOpenAiBaseUrl;
@@ -30,10 +46,19 @@ public class AiProviderSettingsService {
     @Value("${ai.llm.openai.api-key:}")
     private String defaultOpenAiApiKey;
 
+    @Value("${ai.llm.openai.model:gpt-5.4-mini}")
+    private String defaultOpenAiModel;
+
+    @Value("${ai.llm.openai.connect-timeout-seconds:10}")
+    private long connectTimeoutSeconds;
+
+    @Value("${ai.llm.openai.read-timeout-seconds:30}")
+    private long readTimeoutSeconds;
+
     @Transactional(readOnly = true)
-    public OpenAiRuntimeSettings resolveOpenAiRuntimeSettings(String fallbackBaseUrl, String fallbackApiKey) {
+    public OpenAiRuntimeSettings resolveOpenAiRuntimeSettings(String fallbackBaseUrl, String fallbackApiKey, String fallbackModel) {
         Map<String, SystemSetting> settingMap = systemSettingRepository
-                .findBySettingKeyIn(List.of(OPENAI_BASE_URL_KEY, OPENAI_API_KEY_KEY))
+                .findBySettingKeyIn(List.of(OPENAI_BASE_URL_KEY, OPENAI_API_KEY_KEY, OPENAI_MODEL_KEY))
                 .stream()
                 .collect(Collectors.toMap(SystemSetting::getSettingKey, Function.identity()));
 
@@ -53,17 +78,26 @@ public class AiProviderSettingsService {
             apiKey = defaultOpenAiApiKey;
         }
 
-        return new OpenAiRuntimeSettings(baseUrl, normalizeApiKey(apiKey));
+        String model = normalizeModel(resolveSettingValue(settingMap.get(OPENAI_MODEL_KEY)));
+        if (model == null || model.isBlank()) {
+            model = normalizeModel(fallbackModel);
+        }
+        if (model == null || model.isBlank()) {
+            model = normalizeModel(defaultOpenAiModel);
+        }
+
+        return new OpenAiRuntimeSettings(baseUrl, normalizeApiKey(apiKey), model);
     }
 
     @Transactional(readOnly = true)
     public OpenAiAdminSettingsView getOpenAiAdminSettings() {
-        OpenAiRuntimeSettings runtimeSettings = resolveOpenAiRuntimeSettings(defaultOpenAiBaseUrl, defaultOpenAiApiKey);
+        OpenAiRuntimeSettings runtimeSettings = resolveOpenAiRuntimeSettings(defaultOpenAiBaseUrl, defaultOpenAiApiKey, defaultOpenAiModel);
         String apiKey = runtimeSettings.apiKey();
         return new OpenAiAdminSettingsView(
                 runtimeSettings.baseUrl(),
                 apiKey != null && !apiKey.isBlank(),
                 maskSecret(apiKey),
+                runtimeSettings.model(),
                 loadLatestUpdatedAt());
     }
 
@@ -90,7 +124,61 @@ public class AiProviderSettingsService {
             }
         }
 
+        if (update.model() != null) {
+            String normalizedModel = normalizeModel(update.model());
+            if (normalizedModel == null || normalizedModel.isBlank()) {
+                systemSettingRepository.deleteBySettingKey(OPENAI_MODEL_KEY);
+            } else {
+                upsertSetting(OPENAI_MODEL_KEY, normalizedModel, false, operatorId);
+            }
+        }
+
         return getOpenAiAdminSettings();
+    }
+
+    @Transactional(readOnly = true)
+    public OpenAiModelListView listOpenAiModels(OpenAiModelListQuery query) {
+        OpenAiRuntimeSettings runtimeSettings = resolveOpenAiRuntimeSettings(defaultOpenAiBaseUrl, defaultOpenAiApiKey, defaultOpenAiModel);
+        String baseUrl = normalizeBaseUrl(query == null ? null : query.baseUrl());
+        if (baseUrl == null || baseUrl.isBlank()) {
+            baseUrl = runtimeSettings.baseUrl();
+        }
+
+        String apiKey = normalizeApiKey(query == null ? null : query.apiKey());
+        if (apiKey == null || apiKey.isBlank()) {
+            apiKey = runtimeSettings.apiKey();
+        }
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalArgumentException("OpenAI api-key is required");
+        }
+
+        String endpoint = baseUrl + "/models";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(apiKey);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        ResponseEntity<String> response;
+        String effectiveBaseUrl = baseUrl;
+        try {
+            response = fetchModelsResponse(endpoint, request);
+        } catch (RestClientException firstEx) {
+            String fallbackEndpoint = toHttpEndpointForLocalhost(endpoint);
+            if (fallbackEndpoint != null) {
+                try {
+                    response = fetchModelsResponse(fallbackEndpoint, request);
+                    effectiveBaseUrl = normalizeBaseUrlFromEndpoint(fallbackEndpoint);
+                } catch (RestClientException secondEx) {
+                    throw new IllegalArgumentException(buildModelFetchError(endpoint, secondEx));
+                }
+            } else {
+                throw new IllegalArgumentException(buildModelFetchError(endpoint, firstEx));
+            }
+        }
+
+        List<String> models = parseModelIds(response.getBody());
+        return new OpenAiModelListView(effectiveBaseUrl, runtimeSettings.model(), models);
     }
 
     private void upsertSetting(String key, String value, boolean encrypted, Long operatorId) {
@@ -152,8 +240,16 @@ public class AiProviderSettingsService {
         return value.isBlank() ? null : value;
     }
 
+    private String normalizeModel(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String value = raw.trim();
+        return value.isBlank() ? null : value;
+    }
+
     private LocalDateTime loadLatestUpdatedAt() {
-        return systemSettingRepository.findBySettingKeyIn(List.of(OPENAI_BASE_URL_KEY, OPENAI_API_KEY_KEY))
+        return systemSettingRepository.findBySettingKeyIn(List.of(OPENAI_BASE_URL_KEY, OPENAI_API_KEY_KEY, OPENAI_MODEL_KEY))
                 .stream()
                 .map(SystemSetting::getUpdatedAt)
                 .filter(Objects::nonNull)
@@ -161,16 +257,106 @@ public class AiProviderSettingsService {
                 .orElse(null);
     }
 
-    public record OpenAiRuntimeSettings(String baseUrl, String apiKey) {
+    private RestTemplate createRestTemplate() {
+        return restTemplateBuilder
+                .setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
+                .setReadTimeout(Duration.ofSeconds(readTimeoutSeconds))
+                .build();
     }
 
-    public record OpenAiAdminSettingsUpdate(String baseUrl, String apiKey, Boolean clearApiKey) {
+    private ResponseEntity<String> fetchModelsResponse(String endpoint, HttpEntity<Void> request) {
+        return createRestTemplate().exchange(endpoint, HttpMethod.GET, request, String.class);
+    }
+
+    private String toHttpEndpointForLocalhost(String endpoint) {
+        try {
+            URI uri = URI.create(endpoint);
+            if (!"https".equalsIgnoreCase(uri.getScheme())) {
+                return null;
+            }
+            String host = uri.getHost();
+            if (host == null) {
+                return null;
+            }
+            if (!"localhost".equalsIgnoreCase(host) && !"127.0.0.1".equals(host)) {
+                return null;
+            }
+            URI fallback = new URI(
+                    "http",
+                    uri.getUserInfo(),
+                    host,
+                    uri.getPort(),
+                    uri.getPath(),
+                    uri.getQuery(),
+                    uri.getFragment());
+            return fallback.toString();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String normalizeBaseUrlFromEndpoint(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return endpoint;
+        }
+        int index = endpoint.lastIndexOf("/models");
+        if (index <= 0) {
+            return endpoint;
+        }
+        return normalizeBaseUrl(endpoint.substring(0, index));
+    }
+
+    private String buildModelFetchError(String endpoint, RestClientException ex) {
+        String reason = ex.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = ex.getClass().getSimpleName();
+        }
+        return "failed to load models from OpenAI provider: " + reason + " (endpoint: " + endpoint + ")";
+    }
+
+    private List<String> parseModelIds(String rawBody) {
+        if (rawBody == null || rawBody.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(rawBody);
+            JsonNode dataNode = root.path("data");
+            if (!dataNode.isArray()) {
+                return List.of();
+            }
+            List<String> models = new ArrayList<>();
+            for (JsonNode node : dataNode) {
+                String modelId = normalizeModel(node.path("id").asText(null));
+                if (modelId != null && !modelId.isBlank()) {
+                    models.add(modelId);
+                }
+            }
+            return models.stream().distinct().sorted().toList();
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("failed to parse models from provider response");
+        }
+    }
+
+    public record OpenAiRuntimeSettings(String baseUrl, String apiKey, String model) {
+    }
+
+    public record OpenAiAdminSettingsUpdate(String baseUrl, String apiKey, String model, Boolean clearApiKey) {
+    }
+
+    public record OpenAiModelListQuery(String baseUrl, String apiKey) {
+    }
+
+    public record OpenAiModelListView(
+            String baseUrl,
+            String selectedModel,
+            List<String> models) {
     }
 
     public record OpenAiAdminSettingsView(
             String baseUrl,
             boolean hasApiKey,
             String apiKeyMasked,
+            String model,
             LocalDateTime updatedAt) {
     }
 }

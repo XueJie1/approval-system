@@ -140,4 +140,63 @@ class AuthControllerIntegrationTests extends AbstractIntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("2FA disabled"));
     }
+
+    @Test
+    void nonAdminUser_canChangeOwnPassword() throws Exception {
+        SysUser employee = createUser("change-pass-user", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/auth/password/change")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "Password@123",
+                                  "newPassword": "Password@456"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password changed"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "%s",
+                                  "password": "Password@123"
+                                }
+                                """.formatted(employee.getUsername())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid username or password"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "%s",
+                                  "password": "Password@456"
+                                }
+                                """.formatted(employee.getUsername())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(jsonPath("$.twoFactorRequired").value(false));
+    }
+
+    @Test
+    void adminUser_cannotChangePasswordInProfile() throws Exception {
+        SysUser admin = createUser("change-pass-admin", "Password@123", null, "ADMIN");
+        String token = accessToken(admin, "ADMIN");
+
+        mockMvc.perform(post("/api/auth/password/change")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "Password@123",
+                                  "newPassword": "Password@456"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("admin users must reset password in admin console"));
+    }
 }

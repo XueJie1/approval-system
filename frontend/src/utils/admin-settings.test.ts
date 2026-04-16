@@ -6,11 +6,13 @@ describe("admin-settings utils", () => {
     const payload = buildOpenAiSettingsUpdatePayload({
       baseUrl: " https://api.openai.com/v1/ ",
       apiKey: "   ",
+      model: " gpt-5.4-mini ",
       clearApiKey: false
     });
 
     expect(payload).toEqual({
-      baseUrl: "https://api.openai.com/v1"
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-5.4-mini"
     });
   });
 
@@ -18,11 +20,13 @@ describe("admin-settings utils", () => {
     const payload = buildOpenAiSettingsUpdatePayload({
       baseUrl: "https://proxy.example.com/v1",
       apiKey: "sk-test-1",
+      model: "gpt-5.4",
       clearApiKey: true
     });
 
     expect(payload).toEqual({
       baseUrl: "https://proxy.example.com/v1",
+      model: "gpt-5.4",
       clearApiKey: true
     });
   });
