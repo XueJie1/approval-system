@@ -336,7 +336,9 @@ function buildFormData() {
 }
 
 async function loadDynamicForm() {
-  if (!form.formKey.trim()) {
+  const boundFormVersionId = currentTemplate.value?.formVersionId ?? null;
+  const normalizedFormKey = form.formKey.trim();
+  if (!boundFormVersionId && !normalizedFormKey) {
     loadedVersionId.value = null;
     dynamicFields.value = [];
     dynamicData.value = {};
@@ -348,9 +350,14 @@ async function loadDynamicForm() {
     loadedVersionId.value = null;
     dynamicFields.value = [];
     dynamicData.value = {};
-    const version = await latestFormVersion(form.formKey.trim());
-    loadedVersionId.value = version.id;
-    dynamicFields.value = await fetchFormFields(version.id);
+    if (boundFormVersionId) {
+      loadedVersionId.value = boundFormVersionId;
+      dynamicFields.value = await fetchFormFields(boundFormVersionId);
+    } else {
+      const version = await latestFormVersion(normalizedFormKey);
+      loadedVersionId.value = version.id;
+      dynamicFields.value = await fetchFormFields(version.id);
+    }
     ElMessage.success('表单模板已加载');
   } catch (e) {
     console.error(e);
@@ -359,7 +366,7 @@ async function loadDynamicForm() {
     dynamicData.value = {};
     const error = e as AxiosError<{ error?: string }>;
     if (error.response?.status === 404) {
-      ElMessage.warning('该申请类型暂未配置可用表单');
+      ElMessage.warning(boundFormVersionId ? '流程当前发布版本未绑定可用表单' : '该申请类型暂未配置可用表单');
       return;
     }
     ElMessage.error('加载表单模板失败');

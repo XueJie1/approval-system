@@ -3,7 +3,7 @@
     <div class="heading">
       <div>
         <h2 class="page-title">申请模板管理</h2>
-        <p class="page-subtitle">维护申请模板名称、说明、表单绑定、默认流程、状态和排序</p>
+        <p class="page-subtitle">维护申请模板名称、说明、默认流程、状态和排序（表单由流程当前发布版本决定）</p>
       </div>
       <div class="heading-actions">
         <el-button :loading="loading" @click="loadTemplates">刷新</el-button>
@@ -26,7 +26,7 @@
       </el-col>
       <el-col :xs="24" :sm="8">
         <div class="metric page-card">
-          <div class="metric-label">未配置表单</div>
+          <div class="metric-label">流程未绑定表单</div>
           <div class="metric-value">{{ unboundFormCount }}</div>
         </div>
       </el-col>
@@ -112,29 +112,13 @@
         <el-form-item label="排序">
           <el-input-number v-model="form.sortOrder" :min="0" :max="9999" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="表单绑定" class="full-span">
-          <el-select
-            v-model="selectedFormDefinitionId"
-            clearable
-            filterable
-            placeholder="请选择已有表单定义"
-            style="width: 100%"
-            @change="handleFormBindingChange"
-          >
-            <el-option
-              v-for="item in formDefinitions"
-              :key="item.id"
-              :label="`${item.formName} · ${item.formKey}`"
-              :value="item.id"
-            />
-          </el-select>
-          <div class="field-hint">选择后会自动回填表单名称和表单 Key</div>
-        </el-form-item>
-        <el-form-item label="表单名称">
-          <el-input v-model="form.formName" maxlength="128" show-word-limit readonly />
-        </el-form-item>
-        <el-form-item label="表单 Key">
-          <el-input v-model="form.formKey" maxlength="64" show-word-limit readonly placeholder="请选择表单定义后自动回填" />
+        <el-form-item label="表单绑定规则" class="full-span">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="模板不直接绑定表单。实际表单来自“默认流程”的当前发布版本绑定。"
+          />
         </el-form-item>
         <el-form-item label="默认流程" prop="processKey">
           <el-select v-model="form.processKey" filterable style="width: 100%" placeholder="请选择已有流程定义">
@@ -261,10 +245,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
-import type { AdminRoleOption, FormDefinitionSummary, RequestTemplateApprovalCondition, RequestTemplateApprovalRule, RequestTemplateApprovalStep, RequestTemplateSummary, RequestTemplateUpsertPayload, UserDirectoryItem, WorkflowDefinitionSummary } from '../types';
+import type { AdminRoleOption, RequestTemplateApprovalCondition, RequestTemplateApprovalRule, RequestTemplateApprovalStep, RequestTemplateSummary, RequestTemplateUpsertPayload, UserDirectoryItem, WorkflowDefinitionSummary } from '../types';
 import { createRequestTemplate, listAdminRequestTemplates, listRequestTemplateLaunchRoleOptions, updateRequestTemplate } from '../api/admin-request-templates';
 import { listLaunchableWorkflowDefinitions } from '../api/admin-workflows';
-import { listFormDefinitions } from '../api/forms';
 import { listUsers } from '../api/users';
 
 const loading = ref(false);
@@ -275,10 +258,8 @@ const keyword = ref('');
 const statusFilter = ref<string | undefined>(undefined);
 const templates = ref<RequestTemplateSummary[]>([]);
 const launchRoleOptions = ref<AdminRoleOption[]>([]);
-const formDefinitions = ref<FormDefinitionSummary[]>([]);
 const workflowDefinitions = ref<WorkflowDefinitionSummary[]>([]);
 const approverOptions = ref<UserDirectoryItem[]>([]);
-const selectedFormDefinitionId = ref<number | null>(null);
 const formRef = ref<FormInstance>();
 const approvalRules = ref<RequestTemplateApprovalRule[]>([]);
 
@@ -319,11 +300,10 @@ const filteredTemplates = computed(() => {
 });
 
 const activeCount = computed(() => templates.value.filter(item => item.status === 'ACTIVE').length);
-const unboundFormCount = computed(() => templates.value.filter(item => !item.formKey).length);
+const unboundFormCount = computed(() => templates.value.filter(item => !item.formVersionId).length);
 
 onMounted(() => {
   loadLaunchRoleOptions();
-  loadFormDefinitions();
   loadWorkflowDefinitions();
   loadApproverOptions();
   loadTemplates();
@@ -335,15 +315,6 @@ async function loadApproverOptions() {
   } catch (e) {
     console.error(e);
     ElMessage.error('加载审批人列表失败');
-  }
-}
-
-async function loadFormDefinitions() {
-  try {
-    formDefinitions.value = await listFormDefinitions();
-  } catch (e) {
-    console.error(e);
-    ElMessage.error('加载表单定义失败');
   }
 }
 
@@ -385,7 +356,6 @@ function resetForm() {
   form.description = '';
   form.formKey = '';
   form.formName = '';
-  selectedFormDefinitionId.value = null;
   form.processKey = 'approvalSequential';
   form.countersignMode = 'ALL';
   form.passRatio = '1.0';
@@ -411,7 +381,6 @@ function openEditDialog(row: RequestTemplateSummary) {
   form.description = row.description ?? '';
   form.formKey = row.formKey ?? '';
   form.formName = row.formName ?? '';
-  selectedFormDefinitionId.value = formDefinitions.value.find(item => item.formKey === row.formKey)?.id ?? null;
   form.processKey = row.processKey;
   form.countersignMode = row.countersignMode;
   form.passRatio = row.passRatio;
@@ -453,20 +422,6 @@ function removeApprovalStep(ruleIndex: number, stepIndex: number) {
   approvalRules.value[ruleIndex]?.steps.splice(stepIndex, 1);
 }
 
-function handleFormBindingChange(value: number | null) {
-  if (!value) {
-    form.formKey = '';
-    form.formName = '';
-    return;
-  }
-  const selected = formDefinitions.value.find(item => item.id === value);
-  if (!selected) {
-    return;
-  }
-  form.formKey = selected.formKey;
-  form.formName = selected.formName;
-}
-
 function getProcessLabel(processKey: string) {
   const matched = workflowDefinitions.value.find(item => item.processKey === processKey);
   if (!matched) {
@@ -496,8 +451,8 @@ async function submitForm() {
       ...form,
       category: form.category?.trim() || null,
       description: form.description?.trim() || null,
-      formKey: form.formKey?.trim() || null,
-      formName: form.formName?.trim() || null,
+      formKey: null,
+      formName: null,
       flowSummary: form.flowSummary?.trim() || null,
       launchRoleCodes: (form.launchRoleCodes ?? [])
         .map(roleCode => roleCode.trim())
@@ -545,8 +500,8 @@ async function toggleTemplateStatus(row: RequestTemplateSummary) {
       templateName: row.templateName,
       category: row.category ?? null,
       description: row.description ?? null,
-      formKey: row.formKey ?? null,
-      formName: row.formName ?? null,
+      formKey: null,
+      formName: null,
       processKey: row.processKey,
       countersignMode: row.countersignMode,
       passRatio: row.passRatio,

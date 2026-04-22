@@ -53,14 +53,15 @@ public class WorkflowController {
         startRequest.setApplicantDeptId(request.getApplicantDeptId());
         startRequest.setApplicantPostId(request.getApplicantPostId());
         startRequest.setFormInstanceId(request.getFormInstanceId());
-        startRequest.setProcessKey(request.getProcessKey());
         startRequest.setVariables(request.getVariables());
         startRequest.setCountersignUsers(request.getCountersignUsers());
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
         startRequest.setRequestTemplateKey(request.getRequestTemplateKey());
-        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
         RequestTemplateService.TemplateView template = resolveTemplate(request.getRequestTemplateKey());
+        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey(), template);
+        String resolvedProcessKey = launchDefinition != null ? launchDefinition.getProcessKey() : resolveProcessKey(request.getProcessKey(), template);
+        startRequest.setProcessKey(resolvedProcessKey);
         validateApproverEligibility(template);
         if (launchDefinition != null) {
             startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
@@ -69,14 +70,24 @@ public class WorkflowController {
         }
         validateApproverEligibility(request.getVariables(), request.getCountersignUsers());
 
-        if (request.getFormKey() != null && request.getFormData() != null) {
+        if (request.getFormData() != null) {
             Long formVersionId = request.getFormVersionId();
-            if (formVersionId == null && launchDefinition != null && launchDefinition.getFormVersionId() != null) {
+            if (launchDefinition != null && launchDefinition.getFormVersionId() != null) {
+                if (formVersionId != null && !launchDefinition.getFormVersionId().equals(formVersionId)) {
+                    throw new IllegalArgumentException("formVersionId must match selected workflow launch version");
+                }
+                if (request.getFormKey() != null && !request.getFormKey().isBlank()
+                        && launchDefinition.getFormKey() != null && !launchDefinition.getFormKey().isBlank()
+                        && !request.getFormKey().equals(launchDefinition.getFormKey())) {
+                    throw new IllegalArgumentException("formKey must match selected workflow launch version");
+                }
                 formVersionId = launchDefinition.getFormVersionId();
-            } else if (formVersionId == null) {
+            } else if (formVersionId == null && request.getFormKey() != null && !request.getFormKey().isBlank()) {
                 formVersionId = formService.getLatestVersion(request.getFormKey()).getId();
-            } else {
+            } else if (formVersionId != null) {
                 formService.getVersion(formVersionId);
+            } else {
+                throw new IllegalArgumentException("formVersionId is required when workflow launch version does not bind a form");
             }
             String businessKey = request.getBusinessKey();
             if (businessKey == null || businessKey.isBlank()) {
@@ -177,8 +188,9 @@ public class WorkflowController {
         startRequest.setCountersignMode(request.getCountersignMode());
         startRequest.setPassRatio(request.getPassRatio());
         startRequest.setRequestTemplateKey(requestTemplateKey);
-        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey());
         RequestTemplateService.TemplateView template = resolveTemplate(requestTemplateKey);
+        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinition(request.getProcessKey(), template);
+        startRequest.setProcessKey(launchDefinition != null ? launchDefinition.getProcessKey() : resolveProcessKey(request.getProcessKey(), template));
         validateApproverEligibility(template);
         if (launchDefinition != null) {
             startRequest.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
@@ -542,8 +554,20 @@ public class WorkflowController {
                 .orElseThrow(() -> new IllegalArgumentException("request template not found: " + templateKey));
     }
 
-    private WorkflowManageDtos.WorkflowLaunchDefinition resolveLaunchDefinition(String processKey) {
-        String normalizedProcessKey = (processKey == null || processKey.isBlank()) ? "approvalWorkflow" : processKey;
+    private String resolveProcessKey(String processKey, RequestTemplateService.TemplateView template) {
+        if (template != null && template.getProcessKey() != null && !template.getProcessKey().isBlank()) {
+            return template.getProcessKey();
+        }
+        if (processKey != null && !processKey.isBlank()) {
+            return processKey;
+        }
+        return "approvalWorkflow";
+    }
+
+    private WorkflowManageDtos.WorkflowLaunchDefinition resolveLaunchDefinition(
+            String processKey,
+            RequestTemplateService.TemplateView template) {
+        String normalizedProcessKey = resolveProcessKey(processKey, template);
         return workflowLaunchResolverService.resolveCurrentLaunchDefinition(normalizedProcessKey);
     }
 

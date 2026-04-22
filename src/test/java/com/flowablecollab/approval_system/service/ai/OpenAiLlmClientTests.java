@@ -116,6 +116,46 @@ class OpenAiLlmClientTests {
     }
 
     @Test
+    void suggestApproval_supportsArrayStructuredMessageContent() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        OpenAiLlmClient client = new OpenAiLlmClient(
+                restTemplate,
+                objectMapper,
+                "https://api.openai.com/v1",
+                "test-key",
+                "gpt-5.4-mini",
+                0.2
+        );
+
+        server.expect(once(), requestTo("https://api.openai.com/v1/chat/completions"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "model": "gpt-5.4-mini",
+                          "choices": [
+                            {
+                              "message": {
+                                "content": [
+                                  {"type":"text","text":"{\\"decision\\":\\"APPROVE\\",\\"recommendation\\":\\"信息完整\\",\\"summary\\":\\"信息完整\\",\\"riskWarnings\\":[],\\"anomalies\\":[],\\"supplementaryInfo\\":[],\\"approvalComment\\":\\"建议通过\\",\\"suggestedFormUpdates\\":{}}"}
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.Suggestion suggestion = client.suggestApproval(new LlmClient.SuggestionRequest());
+
+        assertThat(suggestion.getDecision()).isEqualTo("APPROVE");
+        assertThat(suggestion.getRecommendation()).isEqualTo("信息完整");
+        assertThat(suggestion.getSummary()).isEqualTo("信息完整");
+        server.verify();
+    }
+
+    @Test
     void answerFollowUp_parsesStructuredAnswer() {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();

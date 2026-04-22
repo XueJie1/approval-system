@@ -779,6 +779,8 @@ public class WorkflowService {
         info.setTaskName(task.getName());
         info.setProcessInstanceId(task.getProcessInstanceId());
         info.setAssignee(task.getAssignee());
+        info.setOwner(task.getOwner());
+        info.setDelegationState(task.getDelegationState() == null ? null : task.getDelegationState().name());
         info.setCreateTime(task.getCreateTime());
         return info;
     }
@@ -809,6 +811,8 @@ public class WorkflowService {
         private String taskName;
         private String processInstanceId;
         private String assignee;
+        private String owner;
+        private String delegationState;
         private Date createTime;
     }
 

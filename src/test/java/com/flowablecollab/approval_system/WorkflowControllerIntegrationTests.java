@@ -886,6 +886,14 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
         Task delegated = taskService.createTaskQuery().taskId(task.getId()).singleResult();
         assertThat(delegated.getAssignee()).isEqualTo(delegateUser.getUsername());
 
+        mockMvc.perform(get("/api/workflow/tasks")
+                        .header("Authorization", authorization(delegateToken))
+                        .param("assignee", delegateUser.getUsername()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].assignee").value(delegateUser.getUsername()))
+                .andExpect(jsonPath("$[0].owner").value(approver.getUsername()))
+                .andExpect(jsonPath("$[0].delegationState").value("PENDING"));
+
         mockMvc.perform(post("/api/workflow/tasks/{taskId}/resolve", task.getId())
                         .header("Authorization", authorization(delegateToken))
                         .contentType(APPLICATION_JSON)
@@ -900,6 +908,14 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
 
         Task resolved = taskService.createTaskQuery().taskId(task.getId()).singleResult();
         assertThat(resolved.getAssignee()).isEqualTo(approver.getUsername());
+
+        mockMvc.perform(get("/api/workflow/tasks")
+                        .header("Authorization", authorization(approverToken))
+                        .param("assignee", approver.getUsername()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].assignee").value(approver.getUsername()))
+                .andExpect(jsonPath("$[0].owner").value(approver.getUsername()))
+                .andExpect(jsonPath("$[0].delegationState").value("RESOLVED"));
 
         mockMvc.perform(post("/api/workflow/tasks/{taskId}/reassign", task.getId())
                         .header("Authorization", authorization(approverToken))

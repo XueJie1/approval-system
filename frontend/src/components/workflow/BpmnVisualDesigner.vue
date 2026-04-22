@@ -11,21 +11,35 @@
         <el-button :disabled="disabled || !modelReady || !canRedo" @click="redo">重做</el-button>
       </el-button-group>
       <span class="zoom-text">{{ Math.round(zoomLevel * 100) }}%</span>
-      <el-tag v-if="selectedGatewayElement" size="small" type="info">已选中排他网关：{{ gatewayForm.name || gatewayForm.id }}</el-tag>
+      <el-tag v-if="selectedGatewayElement" size="small" type="info">
+        已选中节点：{{ gatewayForm.name || gatewayForm.id }}（{{ selectedElementTypeLabel }}）
+      </el-tag>
     </div>
 
-    <div class="designer-body">
+    <div class="designer-body" :class="{ 'is-panel-hidden': !propertiesPanelVisible }">
       <div ref="canvasRef" class="designer-canvas"></div>
+      <el-button
+        v-if="!propertiesPanelVisible"
+        class="panel-toggle-fab"
+        circle
+        type="primary"
+        @click="togglePropertiesPanel"
+      >
+        <el-icon><Menu /></el-icon>
+      </el-button>
 
-      <aside class="gateway-panel">
+      <aside v-if="propertiesPanelVisible" class="gateway-panel">
         <div class="gateway-panel__head">
-          <div class="gateway-panel__title">网关配置</div>
-          <el-tag size="small" type="warning">仅排他网关</el-tag>
+          <div class="gateway-panel__title">节点属性</div>
+          <div class="panel-head-actions">
+            <el-tag size="small" type="success">可编辑全部节点</el-tag>
+            <el-button link type="primary" @click="togglePropertiesPanel">隐藏</el-button>
+          </div>
         </div>
 
         <el-empty
           v-if="!selectedGatewayElement"
-          description="点击画布中的排他网关（Exclusive Gateway）后，在此处编辑配置"
+          description="点击画布中的节点后，在此处编辑属性"
           :image-size="120"
         />
 
@@ -42,31 +56,33 @@
                   <el-input v-model="gatewayForm.name" :disabled="gatewayReadonly" maxlength="120" />
                 </el-form-item>
                 <div class="gateway-actions">
-                  <el-button type="primary" :disabled="gatewayReadonly" @click="applyGatewayBasics">应用常规</el-button>
+                  <el-button type="primary" :disabled="gatewayReadonly" @click="applyGatewayBasics">应用节点信息</el-button>
                 </div>
               </el-form>
 
-              <div class="gateway-section-title">分支条件（纯文本表达式）</div>
-              <el-empty v-if="!gatewayConditions.length" description="当前网关没有出线" :image-size="80" />
-              <div v-else class="condition-list">
-                <div v-for="item in gatewayConditions" :key="item.id" class="condition-item">
-                  <div class="condition-item__meta">
-                    <strong>{{ item.id }}</strong>
-                    <span v-if="item.targetName">→ {{ item.targetName }}</span>
+              <template v-if="isExclusiveGatewaySelected">
+                <div class="gateway-section-title">分支条件（纯文本表达式）</div>
+                <el-empty v-if="!gatewayConditions.length" description="当前网关没有出线" :image-size="80" />
+                <div v-else class="condition-list">
+                  <div v-for="item in gatewayConditions" :key="item.id" class="condition-item">
+                    <div class="condition-item__meta">
+                      <strong>{{ item.id }}</strong>
+                      <span v-if="item.targetName">→ {{ item.targetName }}</span>
+                    </div>
+                    <el-input
+                      v-model="item.expression"
+                      :disabled="gatewayReadonly"
+                      type="textarea"
+                      :rows="2"
+                      placeholder="例如 ${amount > 1000}"
+                    />
+                    <el-radio v-model="gatewayDefaultFlowId" :disabled="gatewayReadonly" :label="item.id">设为默认分支</el-radio>
                   </div>
-                  <el-input
-                    v-model="item.expression"
-                    :disabled="gatewayReadonly"
-                    type="textarea"
-                    :rows="2"
-                    placeholder="例如 ${amount > 1000}"
-                  />
-                  <el-radio v-model="gatewayDefaultFlowId" :disabled="gatewayReadonly" :label="item.id">设为默认分支</el-radio>
+                  <div class="gateway-actions">
+                    <el-button type="primary" :disabled="gatewayReadonly" @click="applyGatewayConditions">应用分支条件</el-button>
+                  </div>
                 </div>
-                <div class="gateway-actions">
-                  <el-button type="primary" :disabled="gatewayReadonly" @click="applyGatewayConditions">应用分支条件</el-button>
-                </div>
-              </div>
+              </template>
             </el-tab-pane>
 
             <el-tab-pane label="执行监听器" name="listeners">
@@ -268,6 +284,8 @@
 <script>
 import BpmnModeler from "bpmn-js/lib/Modeler";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { Menu } from "@element-plus/icons-vue";
+import { markRaw } from "vue";
 import flowableModdle from "./bpmn/flowable-moddle.json";
 
 const BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL";
@@ -346,6 +364,9 @@ const DEFAULT_XML = (processId = "Process_1", processName = "流程") => `<?xml 
 
 export default {
   name: "BpmnVisualDesigner",
+  components: {
+    Menu
+  },
   props: {
     xml: {
       type: String,
@@ -387,6 +408,7 @@ export default {
       suppressXmlEvent: false,
       modelReady: false,
       resizeObserver: null,
+      propertiesPanelVisible: true,
       selectedGatewayElement: null,
       gatewayPanelTab: "general",
       gatewayForm: {
@@ -434,6 +456,15 @@ export default {
   computed: {
     gatewayReadonly() {
       return this.disabled || !this.canEdit;
+    },
+    selectedElementType() {
+      return this.selectedGatewayElement?.businessObject?.$type || "";
+    },
+    selectedElementTypeLabel() {
+      return this.formatElementTypeLabel(this.selectedElementType);
+    },
+    isExclusiveGatewaySelected() {
+      return this.selectedElementType === "bpmn:ExclusiveGateway";
     },
     listenerExpressionLabel() {
       if (this.listenerForm.listenerType === "classListener") {
@@ -489,6 +520,36 @@ export default {
     }
   },
   methods: {
+    togglePropertiesPanel() {
+      this.propertiesPanelVisible = !this.propertiesPanelVisible;
+    },
+    isEditableFlowNode(element) {
+      const businessObject = element?.businessObject;
+      if (!businessObject || typeof businessObject.$instanceOf !== "function") {
+        return false;
+      }
+      return businessObject.$instanceOf("bpmn:FlowNode");
+    },
+    formatElementTypeLabel(type) {
+      if (!type) {
+        return "";
+      }
+      const mapping = {
+        "bpmn:StartEvent": "开始事件",
+        "bpmn:EndEvent": "结束事件",
+        "bpmn:UserTask": "用户任务",
+        "bpmn:ServiceTask": "服务任务",
+        "bpmn:ScriptTask": "脚本任务",
+        "bpmn:Task": "任务",
+        "bpmn:ExclusiveGateway": "排他网关",
+        "bpmn:ParallelGateway": "并行网关",
+        "bpmn:InclusiveGateway": "包容网关",
+        "bpmn:EventBasedGateway": "事件网关",
+        "bpmn:SubProcess": "子流程",
+        "bpmn:CallActivity": "调用活动"
+      };
+      return mapping[type] || type.replace("bpmn:", "");
+    },
     initModeler() {
       if (this.modeler) {
         return;
@@ -600,11 +661,25 @@ export default {
       }
       const canvas = this.modeler.get("canvas");
       canvas.resized();
-      canvas.zoom("fit-viewport", "auto");
-      const viewbox = canvas.viewbox();
-      if (viewbox && typeof viewbox.scale === "number") {
-        this.zoomLevel = Math.floor(viewbox.scale * 100) / 100;
+      const rect = this.$refs.canvasRef?.getBoundingClientRect?.();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        return;
       }
+      try {
+        canvas.zoom("fit-viewport", "auto");
+      } catch (_error) {
+        try {
+          canvas.zoom(1);
+        } catch {
+          return;
+        }
+      }
+      const viewbox = canvas.viewbox();
+      if (viewbox && Number.isFinite(viewbox.scale)) {
+        this.zoomLevel = Math.floor(viewbox.scale * 100) / 100;
+        return;
+      }
+      this.zoomLevel = 1;
     },
     observeCanvasResize() {
       if (typeof ResizeObserver !== "function" || !this.$refs.canvasRef) {
@@ -619,11 +694,11 @@ export default {
       this.resizeObserver.observe(this.$refs.canvasRef);
     },
     handleSelectionChanged(element) {
-      if (!element || element.businessObject?.$type !== "bpmn:ExclusiveGateway") {
+      if (!this.isEditableFlowNode(element)) {
         this.clearGatewaySelection();
         return;
       }
-      this.selectedGatewayElement = element;
+      this.selectedGatewayElement = markRaw(element);
       this.syncGatewayPanelFromSelection();
     },
     clearGatewaySelection() {
@@ -650,8 +725,8 @@ export default {
         name: businessObject.name || "",
         documentation: this.extractDocumentation(businessObject)
       };
-      this.gatewayConditions = this.extractGatewayConditions();
-      this.gatewayDefaultFlowId = businessObject.default?.id || "";
+      this.gatewayConditions = this.isExclusiveGatewaySelected ? this.extractGatewayConditions() : [];
+      this.gatewayDefaultFlowId = this.isExclusiveGatewaySelected ? (businessObject.default?.id || "") : "";
       this.gatewayListeners = this.extractExecutionListeners(businessObject);
       this.gatewayProperties = this.extractExtensionProperties(businessObject);
     },
@@ -662,7 +737,7 @@ export default {
       return doc?.text || "";
     },
     extractGatewayConditions() {
-      if (!this.selectedGatewayElement) {
+      if (!this.selectedGatewayElement || !this.isExclusiveGatewaySelected) {
         return [];
       }
       const outgoing = Array.isArray(this.selectedGatewayElement.outgoing) ? this.selectedGatewayElement.outgoing : [];
@@ -750,7 +825,7 @@ export default {
       }
       const nextId = this.gatewayForm.id.trim();
       if (!nextId) {
-        ElMessage.warning("网关 ID 不能为空");
+        ElMessage.warning("节点 ID 不能为空");
         return;
       }
       try {
@@ -760,11 +835,15 @@ export default {
           name: this.gatewayForm.name.trim() || null
         });
       } catch (error) {
-        ElMessage.error(this.toImportError("应用网关基础信息失败", error).details);
+        ElMessage.error(this.toImportError("应用节点基础信息失败", error).details);
       }
     },
     applyGatewayConditions() {
       if (!this.selectedGatewayElement || this.gatewayReadonly) {
+        return;
+      }
+      if (!this.isExclusiveGatewaySelected) {
+        ElMessage.warning("仅排他网关支持分支条件");
         return;
       }
       try {
@@ -795,7 +874,7 @@ export default {
           default: defaultFlow
         });
 
-        ElMessage.success("网关分支条件已更新");
+        ElMessage.success("分支条件已更新");
       } catch (error) {
         ElMessage.error(this.toImportError("应用分支条件失败", error).details);
       }
@@ -813,9 +892,9 @@ export default {
         this.modeler.get("modeling").updateProperties(this.selectedGatewayElement, {
           documentation
         });
-        ElMessage.success("网关备注已更新");
+        ElMessage.success("节点备注已更新");
       } catch (error) {
-        ElMessage.error(this.toImportError("应用网关备注失败", error).details);
+        ElMessage.error(this.toImportError("应用节点备注失败", error).details);
       }
     },
     listenerTypeLabel(type) {
@@ -1103,7 +1182,7 @@ export default {
           extensionElements
         });
       } catch (error) {
-        ElMessage.error(this.toImportError("更新网关扩展属性失败", error).details);
+        ElMessage.error(this.toImportError("更新节点扩展属性失败", error).details);
       }
     },
     normalizeXmlForImport(xml) {
@@ -1449,6 +1528,11 @@ export default {
   grid-template-columns: minmax(0, 1fr) 380px;
   gap: 12px;
   align-items: stretch;
+  position: relative;
+}
+
+.designer-body.is-panel-hidden {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .bpmn-visual-designer.is-fullscreen .designer-body {
@@ -1494,10 +1578,25 @@ export default {
   margin-bottom: 8px;
 }
 
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .gateway-panel__title {
   font-size: 14px;
   font-weight: 600;
   color: #1f2937;
+}
+
+.panel-toggle-fab {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
 }
 
 .gateway-alert {
@@ -1585,6 +1684,12 @@ export default {
 @media (max-width: 1360px) {
   .designer-body {
     grid-template-columns: 1fr;
+  }
+
+  .panel-toggle-fab {
+    right: 10px;
+    top: 12px;
+    transform: none;
   }
 
   .gateway-panel {

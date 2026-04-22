@@ -82,7 +82,10 @@ export interface RequestTemplateSummary {
   description?: string | null;
   formKey?: string | null;
   formName?: string | null;
+  formVersionId?: number | null;
   processKey: string;
+  workflowDefinitionId?: number | null;
+  workflowDefinitionVersionId?: number | null;
   countersignMode: string;
   passRatio: string;
   flowSummary?: string | null;
@@ -448,6 +451,8 @@ export interface TaskInfo {
   taskName: string;
   processInstanceId: string;
   assignee?: string;
+  owner?: string;
+  delegationState?: string;
   createTime?: string;
 }
 

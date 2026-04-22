@@ -411,7 +411,7 @@ import {
   saveWorkflowNodeConfigs,
   updateWorkflowVersion
 } from "../api/admin-workflows";
-import { fetchFormFields, listFormDefinitions, listFormVersions } from "../api/forms";
+import { listAdminFormDefinitions, listAdminFormVersionFields, listAdminFormVersions } from "../api/admin-forms";
 
 const approvalTypes = ["APPROVE", "COUNTERSIGN", "ORSIGN", "SEQUENTIAL"];
 const assigneeStrategies = ["USER", "ROLE", "POST", "DEPT_MANAGER", "INITIATOR_SUPERVISOR", "FORM_FIELD"];
@@ -472,7 +472,7 @@ const pendingDesignerInitSync = ref(false);
 const suppressBpmnDirtyTracking = ref(false);
 
 const versionRules: FormRules = {
-  formVersionId: [{ required: true, message: "请输入表单版本 ID", trigger: "blur" }],
+  formVersionId: [{ required: true, message: "请选择表单版本", trigger: "change" }],
   bpmnXml: [{ required: true, message: "请输入 BPMN XML", trigger: "blur" }]
 };
 
@@ -874,10 +874,28 @@ async function syncSelectedForm(formKey?: string, formVersionId?: number) {
   if (!formDefinitions.value.length) {
     await loadFormDefinitions();
   }
-  const matchedDefinition = formDefinitions.value.find((item) => item.formKey === formKey)
+  let matchedDefinition = formDefinitions.value.find((item) => item.formKey === formKey)
     || formDefinitions.value.find((item) => (formVersionsByDefinition.value[item.id] || []).some((version) => version.id === formVersionId));
+  if (!matchedDefinition && formVersionId) {
+    for (const definition of formDefinitions.value) {
+      await ensureFormVersionsLoaded(definition.id);
+      const containsVersion = (formVersionsByDefinition.value[definition.id] || []).some((version) => version.id === formVersionId);
+      if (!containsVersion) {
+        continue;
+      }
+      matchedDefinition = definition;
+      break;
+    }
+  }
   if (!matchedDefinition) {
     selectedFormDefinitionId.value = undefined;
+    if (isDraftVersion.value && formDefinitions.value.length) {
+      const defaultDefinition = formDefinitions.value[0];
+      if (defaultDefinition) {
+        selectedFormDefinitionId.value = defaultDefinition.id;
+        await handleFormDefinitionChange(defaultDefinition.id);
+      }
+    }
     return;
   }
   selectedFormDefinitionId.value = matchedDefinition.id;
@@ -888,14 +906,14 @@ async function syncSelectedForm(formKey?: string, formVersionId?: number) {
 }
 
 async function loadFormDefinitions() {
-  formDefinitions.value = await listFormDefinitions();
+  formDefinitions.value = await listAdminFormDefinitions();
 }
 
 async function ensureFormVersionsLoaded(formId: number) {
   if (formVersionsByDefinition.value[formId]) {
     return;
   }
-  const versions = await listFormVersions(formId);
+  const versions = await listAdminFormVersions(formId);
   formVersionsByDefinition.value = {
     ...formVersionsByDefinition.value,
     [formId]: versions
@@ -933,7 +951,7 @@ async function handleFormVersionChange(versionId?: number) {
 }
 
 async function loadFormFields(formVersionId: number) {
-  formFields.value = await fetchFormFields(formVersionId);
+  formFields.value = await listAdminFormVersionFields(formVersionId);
 }
 
 function openCreateVersion() {
@@ -972,7 +990,12 @@ async function saveVersionDraft() {
   if (!selectedVersion.value || !canEditVisual.value) {
     return;
   }
-  await versionFormRef.value?.validate();
+  try {
+    await versionFormRef.value?.validate();
+  } catch (error) {
+    ElMessage.warning(resolveFormValidateMessage(error) || "请完善必填信息后再保存");
+    return;
+  }
   if (!validateProcessKeyMatchForDraftSave()) {
     return;
   }
@@ -1146,6 +1169,22 @@ function parseRouteParamToNumber(param: unknown) {
     return null;
   }
   return value;
+}
+
+function resolveFormValidateMessage(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+  for (const fieldErrors of Object.values(error as Record<string, unknown>)) {
+    if (!Array.isArray(fieldErrors) || fieldErrors.length === 0) {
+      continue;
+    }
+    const firstError = fieldErrors[0];
+    if (firstError && typeof firstError === "object" && typeof (firstError as { message?: unknown }).message === "string") {
+      return (firstError as { message: string }).message;
+    }
+  }
+  return "";
 }
 
 function definitionStatusType(status: string) {

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +41,14 @@ public class FormCommandAiService {
     private static final Pattern CURRENCY_SUFFIX_PATTERN = Pattern.compile("([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)\\s*(?:元|块|人民币|rmb|cny)", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHINESE_DATE_PATTERN = Pattern.compile("\\d{4}年\\d{1,2}月\\d{1,2}日?");
     private static final Pattern CHINESE_YEAR_MONTH_PATTERN = Pattern.compile("\\d{4}年\\d{1,2}月");
+    private static final Pattern DATE_TOKEN_PATTERN = Pattern.compile(
+            "\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}(?:[ T]\\d{1,2}:\\d{2}(?::\\d{2})?)?"
+                    + "|\\d{4}年\\d{1,2}月\\d{1,2}日?(?:\\s*\\d{1,2}(?:[:：时点]\\d{1,2})?(?:[:：]\\d{1,2})?)?"
+    );
+    private static final Pattern ISO_DATE_TIME_PATTERN = Pattern.compile(
+            "(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})(?:[ T](\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?");
+    private static final Pattern CHINESE_DATE_TIME_PATTERN = Pattern.compile(
+            "(\\d{4})年(\\d{1,2})月(\\d{1,2})日?(?:\\s*(\\d{1,2})(?:[:：时点](\\d{1,2}))?(?:[:：](\\d{1,2}))?)?");
 
     private final FormService formService;
     private final WorkflowService workflowService;
@@ -58,13 +67,18 @@ public class FormCommandAiService {
         if ((formKey == null || formKey.isBlank()) && template != null) {
             formKey = template.getFormKey();
         }
-        if (formKey == null || formKey.isBlank()) {
-            throw new IllegalArgumentException("formKey is required or cannot be inferred from command");
-        }
-
         Long formVersionId = request.getFormVersionId();
+        if (formVersionId == null && template != null && template.getFormVersionId() != null) {
+            formVersionId = template.getFormVersionId();
+        }
         if (formVersionId == null) {
+            if (formKey == null || formKey.isBlank()) {
+                throw new IllegalArgumentException("formKey is required or cannot be inferred from command");
+            }
             formVersionId = formService.getLatestVersion(formKey).getId();
+        }
+        if (formKey == null || formKey.isBlank()) {
+            formKey = formService.resolveBoundFormVersion(formVersionId).getFormDefinition().getFormKey();
         }
 
         List<FormField> fields = formService.getFields(formVersionId);
@@ -117,9 +131,14 @@ public class FormCommandAiService {
 
     @Transactional
     public StartFromCommandResult parseAndStart(StartFromCommandRequest request, Long requesterId) {
+        String explicitTemplateKey = request.getRequestTemplateKey();
+        if (explicitTemplateKey != null && !explicitTemplateKey.isBlank()) {
+            requestTemplateService.requireLaunchPermission(explicitTemplateKey, SecurityUtils.currentRoleCodes());
+        }
+
         ParseRequest parseRequest = new ParseRequest();
         parseRequest.setCommand(request.getCommand());
-        parseRequest.setRequestTemplateKey(request.getRequestTemplateKey());
+        parseRequest.setRequestTemplateKey(explicitTemplateKey);
         parseRequest.setFormKey(request.getFormKey());
         parseRequest.setFormVersionId(request.getFormVersionId());
 
@@ -134,7 +153,10 @@ public class FormCommandAiService {
             throw new IllegalArgumentException("applicantId is required");
         }
         String requestTemplateKey = resolveRequestTemplateKey(request, parseResult);
-        requestTemplateService.requireLaunchPermission(requestTemplateKey, SecurityUtils.currentRoleCodes());
+        if (requestTemplateKey != null && !requestTemplateKey.isBlank()
+                && (explicitTemplateKey == null || explicitTemplateKey.isBlank() || !explicitTemplateKey.equals(requestTemplateKey))) {
+            requestTemplateService.requireLaunchPermission(requestTemplateKey, SecurityUtils.currentRoleCodes());
+        }
 
         String businessKey = request.getBusinessKey();
         if (businessKey == null || businessKey.isBlank()) {
@@ -368,7 +390,7 @@ public class FormCommandAiService {
 
     private List<String> findDateTokens(String command) {
         List<String> tokens = new ArrayList<>();
-        Matcher matcher = Pattern.compile("\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}(?:\\s+\\d{1,2}:\\d{2}(?::\\d{2})?)?").matcher(command);
+        Matcher matcher = DATE_TOKEN_PATTERN.matcher(command);
         while (matcher.find()) {
             tokens.add(matcher.group());
         }
@@ -547,24 +569,66 @@ public class FormCommandAiService {
         if (token == null || token.isBlank()) {
             return null;
         }
-        Matcher matcher = Pattern.compile("(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?").matcher(token.trim());
+        String normalized = tryNormalizeDateToken(token.trim(), withTime, ISO_DATE_TIME_PATTERN);
+        if (normalized != null) {
+            return normalized;
+        }
+        return tryNormalizeDateToken(token.trim(), withTime, CHINESE_DATE_TIME_PATTERN);
+    }
+
+    private String tryNormalizeDateToken(String token, boolean withTime, Pattern pattern) {
+        Matcher matcher = pattern.matcher(token);
         if (!matcher.find()) {
             return null;
         }
-        int month = Integer.parseInt(matcher.group(2));
-        int day = Integer.parseInt(matcher.group(3));
-        String normalizedDate = "%s-%02d-%02d".formatted(matcher.group(1), month, day);
+        Integer year = parseIntegerGroup(matcher, 1);
+        Integer month = parseIntegerGroup(matcher, 2);
+        Integer day = parseIntegerGroup(matcher, 3);
+        if (year == null || month == null || day == null) {
+            return null;
+        }
+        LocalDate date;
+        try {
+            date = LocalDate.of(year, month, day);
+        } catch (Exception ignored) {
+            return null;
+        }
         if (!withTime) {
-            return normalizedDate;
+            return date.toString();
         }
-        String hour = matcher.group(4);
-        String minute = matcher.group(5);
-        String second = matcher.group(6);
-        if (hour == null || minute == null) {
-            return normalizedDate + " 00:00:00";
+        Integer hour = parseIntegerGroup(matcher, 4);
+        Integer minute = parseIntegerGroup(matcher, 5);
+        Integer second = parseIntegerGroup(matcher, 6);
+        if (hour == null) {
+            return date + " 00:00:00";
         }
-        String normalizedSecond = second == null ? "00" : "%02d".formatted(Integer.parseInt(second));
-        return normalizedDate + " %02d:%02d:%s".formatted(Integer.parseInt(hour), Integer.parseInt(minute), normalizedSecond);
+        if (minute == null) {
+            minute = 0;
+        }
+        if (second == null) {
+            second = 0;
+        }
+        try {
+            LocalTime time = LocalTime.of(hour, minute, second);
+            return date + " %02d:%02d:%02d".formatted(time.getHour(), time.getMinute(), time.getSecond());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Integer parseIntegerGroup(Matcher matcher, int group) {
+        if (matcher.groupCount() < group) {
+            return null;
+        }
+        String raw = matcher.group(group);
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String normalizeString(String value) {

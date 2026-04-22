@@ -42,6 +42,8 @@
         </div>
         <div class="task-status">
           <el-tag v-if="!task.assignee" type="warning" size="small">待认领</el-tag>
+          <el-tag v-else-if="task.delegationState === 'PENDING' && isCurrentIdentity(task.assignee)" type="warning" size="small">待委派处理</el-tag>
+          <el-tag v-else-if="task.delegationState === 'RESOLVED' && isCurrentIdentity(task.owner)" type="success" size="small">待最终确认</el-tag>
           <el-tag v-else type="info" size="small">待处理</el-tag>
         </div>
       </div>
@@ -71,8 +73,16 @@
               <span class="info-value">{{ selectedTask.assignee || '待认领' }}</span>
             </div>
             <div class="info-item">
+              <span class="info-label">任务所有者</span>
+              <span class="info-value">{{ selectedTask.owner || '-' }}</span>
+            </div>
+            <div class="info-item">
               <span class="info-label">创建时间</span>
               <span class="info-value">{{ formatTime(selectedTask.createTime) }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">委派状态</span>
+              <span class="info-value">{{ delegationStateLabel(selectedTask.delegationState) }}</span>
             </div>
           </div>
         </section>
@@ -89,7 +99,49 @@
             </el-button>
           </div>
 
+          <div v-else-if="canResolveDelegatedTask(selectedTask)" class="action-form">
+            <el-alert type="warning" :closable="false" show-icon title="该任务已委派给你，请先执行“委派处理”，任务会返回原委派人做最终确认。" />
+            <el-form label-position="top">
+              <el-form-item label="处理结论" required>
+                <el-radio-group v-model="action.approvalResult" size="large">
+                  <el-radio-button label="APPROVE">
+                    <el-icon><Select /></el-icon> 同意
+                  </el-radio-button>
+                  <el-radio-button label="REJECT">
+                    <el-icon><CloseBold /></el-icon> 拒绝
+                  </el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+
+              <el-form-item label="处理意见" required>
+                <el-input
+                  v-model="action.comment"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="请输入委派处理意见"
+                />
+              </el-form-item>
+
+              <el-button
+                type="warning"
+                size="large"
+                :loading="actionLoading"
+                :disabled="!action.comment.trim()"
+                @click="handleResolveTask"
+              >
+                委派处理
+              </el-button>
+            </el-form>
+          </div>
+
           <div v-else class="action-form">
+            <el-alert
+              v-if="canCompleteDelegatedTask(selectedTask)"
+              type="success"
+              :closable="false"
+              show-icon
+              title="被委派人已处理完成，请你提交最终审批结果。"
+            />
             <el-form label-position="top">
               <el-form-item label="审批决定" required>
                 <el-radio-group v-model="action.approvalResult" size="large">
@@ -118,13 +170,13 @@
                 :disabled="!action.comment.trim()"
                 @click="completeTask"
               >
-                提交审批
+                {{ canCompleteDelegatedTask(selectedTask) ? '提交最终审批' : '提交审批' }}
               </el-button>
             </el-form>
           </div>
         </section>
 
-        <section class="detail-section">
+        <section v-if="selectedTask.assignee && !canResolveDelegatedTask(selectedTask)" class="detail-section">
           <div class="section-label">更多操作</div>
           <div class="more-actions">
             <el-collapse>
@@ -281,6 +333,7 @@ import {
   claimTask as claimTaskApi,
   completeTask as completeTaskApi,
   delegateTask as delegateTaskApi,
+  resolveTask as resolveTaskApi,
   reassignTask as reassignTaskApi,
   returnToPrevious,
   returnToTarget,
@@ -355,6 +408,39 @@ function currentUserId() {
   return String(auth.currentUser?.userId ?? '');
 }
 
+function currentUsername() {
+  return auth.currentUser?.username ?? '';
+}
+
+function isCurrentIdentity(identity?: string) {
+  if (!identity || !identity.trim()) {
+    return false;
+  }
+  const normalized = identity.trim();
+  return normalized === currentUserId() || normalized === currentUsername();
+}
+
+function canResolveDelegatedTask(task: TaskInfo) {
+  return task.delegationState === 'PENDING' && isCurrentIdentity(task.assignee);
+}
+
+function canCompleteDelegatedTask(task: TaskInfo) {
+  return task.delegationState === 'RESOLVED' && isCurrentIdentity(task.owner);
+}
+
+function delegationStateLabel(state?: string) {
+  if (!state) {
+    return '无';
+  }
+  if (state === 'PENDING') {
+    return '委派处理中';
+  }
+  if (state === 'RESOLVED') {
+    return '已委派处理';
+  }
+  return state;
+}
+
 async function claimTask() {
   if (!selectedTask.value) return;
   actionLoading.value = true;
@@ -389,6 +475,26 @@ async function completeTask() {
   } catch (e) {
     console.error(e);
     ElMessage.error('审批提交失败');
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function handleResolveTask() {
+  if (!selectedTask.value || !action.comment.trim()) return;
+  actionLoading.value = true;
+  try {
+    await resolveTaskApi(selectedTask.value.taskId, {
+      userId: currentUserId(),
+      approvalResult: action.approvalResult,
+      comment: action.comment.trim()
+    });
+    ElMessage.success('委派处理已提交，任务已返回委派人');
+    detailDrawer.open = false;
+    await reload();
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('委派处理失败');
   } finally {
     actionLoading.value = false;
   }

@@ -161,11 +161,50 @@ public class OpenAiLlmClient implements LlmClient {
     private ChatResult parseChatResult(String rawBody, String defaultModel) {
         try {
             JsonNode root = objectMapper.readTree(rawBody);
-            String content = root.path("choices").path(0).path("message").path("content").asText("");
+            String content = extractAssistantContent(root);
             return new ChatResult(content, root.path("model").asText(defaultModel));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to parse OpenAI response", ex);
         }
+    }
+
+    private String extractAssistantContent(JsonNode root) {
+        JsonNode contentNode = root.path("choices").path(0).path("message").path("content");
+        if (contentNode.isTextual()) {
+            return contentNode.asText("");
+        }
+        if (contentNode.isArray()) {
+            StringBuilder merged = new StringBuilder();
+            for (JsonNode item : contentNode) {
+                String text = null;
+                if (item.isTextual()) {
+                    text = item.asText();
+                } else if (item.isObject()) {
+                    if (item.path("text").isTextual()) {
+                        text = item.path("text").asText();
+                    } else if (item.path("content").isTextual()) {
+                        text = item.path("content").asText();
+                    } else if (item.path("value").isTextual()) {
+                        text = item.path("value").asText();
+                    }
+                }
+                if (text != null && !text.isBlank()) {
+                    if (merged.length() > 0) {
+                        merged.append('\n');
+                    }
+                    merged.append(text.trim());
+                }
+            }
+            if (merged.length() > 0) {
+                return merged.toString();
+            }
+        }
+
+        String fallback = root.path("choices").path(0).path("text").asText("");
+        if (!fallback.isBlank()) {
+            return fallback;
+        }
+        return root.path("output_text").asText("");
     }
 
     private JsonNode parseJsonNode(String text) {

@@ -158,4 +158,44 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.formData.budget").doesNotExist());
     }
+
+    @Test
+    void parse_leaveRequest_withChineseDateTime_shouldExtractDateFields() throws Exception {
+        SysUser employee = createUser("employee-ai-chinese-date", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/ai/form-commands/parse")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formKey": "leave_request",
+                                  "command": "请假类型年假，开始时间2026年9月1日 9:00，结束时间2026年9月2日18:30，请假天数2天，请假原因家庭事务"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formData.startDate").value("2026-09-01 09:00:00"))
+                .andExpect(jsonPath("$.formData.endDate").value("2026-09-02 18:30:00"))
+                .andExpect(jsonPath("$.formData.days").value(2.0));
+    }
+
+    @Test
+    void parse_expenseRequest_withChineseDate_shouldExtractOccurredOn() throws Exception {
+        SysUser employee = createUser("employee-ai-expense-date", "Password@123", null, "EMPLOYEE");
+        String token = accessToken(employee, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/ai/form-commands/parse")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formKey": "expense_request",
+                                  "command": "费用类型餐饮，报销金额800元，发生日期2026年10月3日，报销事由团队聚餐"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formData.expenseType").value("餐饮"))
+                .andExpect(jsonPath("$.formData.amount").value(800.0))
+                .andExpect(jsonPath("$.formData.occurredOn").value("2026-10-03"));
+    }
 }

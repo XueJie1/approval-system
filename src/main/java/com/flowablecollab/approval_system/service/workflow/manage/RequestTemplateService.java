@@ -10,6 +10,7 @@ import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysRoleRepository;
 import com.flowablecollab.approval_system.repository.workflow.RequestTemplateRepository;
 import com.flowablecollab.approval_system.service.RequestTemplateApprovalResolverService;
+import com.flowablecollab.approval_system.service.FormService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,17 +33,23 @@ public class RequestTemplateService {
     private final RequestTemplateApprovalResolverService requestTemplateApprovalResolverService;
     private final SysRoleRepository sysRoleRepository;
     private final ObjectMapper objectMapper;
+    private final WorkflowLaunchResolverService workflowLaunchResolverService;
+    private final FormService formService;
 
     public RequestTemplateService(RequestTemplateRepository requestTemplateRepository,
                                   BizRequestRepository bizRequestRepository,
                                   RequestTemplateApprovalResolverService requestTemplateApprovalResolverService,
                                   SysRoleRepository sysRoleRepository,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  WorkflowLaunchResolverService workflowLaunchResolverService,
+                                  FormService formService) {
         this.requestTemplateRepository = requestTemplateRepository;
         this.bizRequestRepository = bizRequestRepository;
         this.requestTemplateApprovalResolverService = requestTemplateApprovalResolverService;
         this.sysRoleRepository = sysRoleRepository;
         this.objectMapper = objectMapper;
+        this.workflowLaunchResolverService = workflowLaunchResolverService;
+        this.formService = formService;
     }
 
     @Transactional(readOnly = true)
@@ -187,8 +194,9 @@ public class RequestTemplateService {
         entity.setTemplateName(request.getTemplateName().trim());
         entity.setCategory(blankToNull(request.getCategory()));
         entity.setDescription(blankToNull(request.getDescription()));
-        entity.setFormKey(blankToNull(request.getFormKey()));
-        entity.setFormName(blankToNull(request.getFormName()));
+        // 方案A：模板不再直接绑定表单，表单由流程当前发布版本决定
+        entity.setFormKey(null);
+        entity.setFormName(null);
         entity.setProcessKey(request.getProcessKey().trim());
         entity.setCountersignMode(request.getCountersignMode() == null || request.getCountersignMode().isBlank()
                 ? "ALL"
@@ -288,9 +296,27 @@ public class RequestTemplateService {
         view.setTemplateName(entity.getTemplateName());
         view.setCategory(entity.getCategory());
         view.setDescription(entity.getDescription());
+        view.setProcessKey(entity.getProcessKey());
         view.setFormKey(entity.getFormKey());
         view.setFormName(entity.getFormName());
-        view.setProcessKey(entity.getProcessKey());
+        WorkflowManageDtos.WorkflowLaunchDefinition launchDefinition = resolveLaunchDefinitionSafe(entity.getProcessKey());
+        if (launchDefinition != null) {
+            view.setWorkflowDefinitionId(launchDefinition.getDefinitionId());
+            view.setWorkflowDefinitionVersionId(launchDefinition.getVersionId());
+            view.setFormVersionId(launchDefinition.getFormVersionId());
+            if (launchDefinition.getFormKey() != null && !launchDefinition.getFormKey().isBlank()) {
+                view.setFormKey(launchDefinition.getFormKey());
+            }
+            if (launchDefinition.getFormVersionId() != null) {
+                try {
+                    FormService.BoundFormVersion boundForm = formService.resolveBoundFormVersion(launchDefinition.getFormVersionId());
+                    view.setFormKey(boundForm.getFormDefinition().getFormKey());
+                    view.setFormName(boundForm.getFormDefinition().getFormName());
+                } catch (Exception ignored) {
+                    // 保留历史字段回退值，避免列表因单个模板配置异常不可用
+                }
+            }
+        }
         view.setCountersignMode(entity.getCountersignMode());
         view.setPassRatio(entity.getPassRatio());
         view.setFlowSummary(entity.getFlowSummary());
@@ -303,6 +329,17 @@ public class RequestTemplateService {
         view.setCreatedAt(entity.getCreatedAt());
         view.setUpdatedAt(entity.getUpdatedAt());
         return view;
+    }
+
+    private WorkflowManageDtos.WorkflowLaunchDefinition resolveLaunchDefinitionSafe(String processKey) {
+        if (processKey == null || processKey.isBlank()) {
+            return null;
+        }
+        try {
+            return workflowLaunchResolverService.resolveCurrentLaunchDefinition(processKey);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     public record TemplateSeed(
@@ -331,7 +368,10 @@ public class RequestTemplateService {
         private String description;
         private String formKey;
         private String formName;
+        private Long formVersionId;
         private String processKey;
+        private Long workflowDefinitionId;
+        private Long workflowDefinitionVersionId;
         private String countersignMode;
         private String passRatio;
         private String flowSummary;
@@ -358,8 +398,14 @@ public class RequestTemplateService {
         public void setFormKey(String formKey) { this.formKey = formKey; }
         public String getFormName() { return formName; }
         public void setFormName(String formName) { this.formName = formName; }
+        public Long getFormVersionId() { return formVersionId; }
+        public void setFormVersionId(Long formVersionId) { this.formVersionId = formVersionId; }
         public String getProcessKey() { return processKey; }
         public void setProcessKey(String processKey) { this.processKey = processKey; }
+        public Long getWorkflowDefinitionId() { return workflowDefinitionId; }
+        public void setWorkflowDefinitionId(Long workflowDefinitionId) { this.workflowDefinitionId = workflowDefinitionId; }
+        public Long getWorkflowDefinitionVersionId() { return workflowDefinitionVersionId; }
+        public void setWorkflowDefinitionVersionId(Long workflowDefinitionVersionId) { this.workflowDefinitionVersionId = workflowDefinitionVersionId; }
         public String getCountersignMode() { return countersignMode; }
         public void setCountersignMode(String countersignMode) { this.countersignMode = countersignMode; }
         public String getPassRatio() { return passRatio; }
