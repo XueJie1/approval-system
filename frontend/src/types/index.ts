@@ -454,6 +454,7 @@ export interface TaskInfo {
   owner?: string;
   delegationState?: string;
   createTime?: string;
+  requestTitle?: string;
 }
 
 export interface BizRequest {
@@ -484,6 +485,7 @@ export interface RequestLog {
   action: string;
   comment?: string;
   createdAt: string;
+  operatorName?: string;
 }
 
 export interface ProcessInfo {

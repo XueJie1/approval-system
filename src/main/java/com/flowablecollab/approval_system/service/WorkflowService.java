@@ -782,6 +782,8 @@ public class WorkflowService {
         info.setOwner(task.getOwner());
         info.setDelegationState(task.getDelegationState() == null ? null : task.getDelegationState().name());
         info.setCreateTime(task.getCreateTime());
+        bizRequestRepository.findByProcessInstanceId(task.getProcessInstanceId())
+                .ifPresent(request -> info.setRequestTitle(request.getTitle()));
         return info;
     }
 
@@ -814,6 +816,7 @@ public class WorkflowService {
         private String owner;
         private String delegationState;
         private Date createTime;
+        private String requestTitle;
     }
 
     @Data

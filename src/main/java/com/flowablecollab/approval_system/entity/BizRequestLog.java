@@ -35,6 +35,9 @@ public class BizRequestLog {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Transient
+    private String operatorName;
+
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();

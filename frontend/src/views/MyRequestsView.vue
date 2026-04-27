@@ -117,6 +117,7 @@
                 <div class="log-action">
                   <el-tag size="small" :type="getActionTagType(log.action)">{{ log.action }}</el-tag>
                 </div>
+                <div class="log-operator">{{ log.operatorName || '未知用户' }}</div>
                 <div v-if="log.comment" class="log-comment">{{ log.comment }}</div>
               </div>
             </el-timeline-item>
@@ -569,6 +570,12 @@ async function cancelProcess() {
 .log-item {
   display: grid;
   gap: 4px;
+}
+
+.log-operator {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .log-comment {

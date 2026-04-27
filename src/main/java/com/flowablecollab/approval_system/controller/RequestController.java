@@ -2,9 +2,11 @@ package com.flowablecollab.approval_system.controller;
 
 import com.flowablecollab.approval_system.entity.BizRequest;
 import com.flowablecollab.approval_system.entity.BizRequestLog;
+import com.flowablecollab.approval_system.entity.rbac.SysUser;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
+import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.RbacService;
 import com.flowablecollab.approval_system.service.TaskAiSuggestionService;
@@ -15,7 +17,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/requests")
@@ -27,6 +31,7 @@ public class RequestController {
     private final WorkflowService workflowService;
     private final RbacService rbacService;
     private final TaskAiSuggestionService taskAiSuggestionService;
+    private final SysUserRepository sysUserRepository;
 
     @GetMapping
     public ResponseEntity<List<BizRequest>> listRequests(
@@ -84,7 +89,19 @@ public class RequestController {
                 .map(BizRequest::getBusinessKey)
                 .filter(key -> key != null && !key.isBlank())
                 .toList();
-        return ResponseEntity.ok(bizRequestLogRepository.findByBusinessKeyIn(businessKeys));
+        List<BizRequestLog> logs = bizRequestLogRepository.findByBusinessKeyIn(businessKeys);
+        attachOperatorNames(logs);
+        return ResponseEntity.ok(logs);
+    }
+
+    private void attachOperatorNames(List<BizRequestLog> logs) {
+        Set<Long> userIds = logs.stream()
+                .map(BizRequestLog::getOperatorId)
+                .collect(Collectors.toSet());
+        if (userIds.isEmpty()) return;
+        Map<Long, String> userMap = sysUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(SysUser::getId, SysUser::getUsername));
+        logs.forEach(log -> log.setOperatorName(userMap.get(log.getOperatorId())));
     }
 
     @GetMapping("/processes")

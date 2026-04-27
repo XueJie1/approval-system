@@ -24,7 +24,7 @@
         @click="selectTask(task)"
       >
         <div class="task-main">
-          <div class="task-title">{{ task.taskName || '审批任务' }}</div>
+          <div class="task-title">{{ task.requestTitle || task.taskName || '审批任务' }}</div>
           <div class="task-meta">
             <span class="meta-item">
               <el-icon><Document /></el-icon>
@@ -51,7 +51,7 @@
 
     <el-drawer
       v-model="detailDrawer.open"
-      :title="selectedTask?.taskName || '任务详情'"
+      :title="selectedTask?.requestTitle || selectedTask?.taskName || '任务详情'"
       direction="rtl"
       size="560px"
       :close-on-click-modal="false"
