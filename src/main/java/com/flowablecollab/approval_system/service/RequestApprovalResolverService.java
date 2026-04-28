@@ -37,6 +37,20 @@ public class RequestApprovalResolverService {
     public Resolution resolveByTemplateConfig(Long applicantId,
                                               Map<String, Object> variables,
                                               RequestTemplateApprovalConfig config) {
+        ResolutionDetail detail = resolveDetail(applicantId, variables, config);
+        return new Resolution(detail.approverIds(), detail.strategy());
+    }
+
+    public PreviewResolution previewByTemplateConfig(Long applicantId,
+                                                     Map<String, Object> variables,
+                                                     RequestTemplateApprovalConfig config) {
+        ResolutionDetail detail = resolveDetail(applicantId, variables, config);
+        return new PreviewResolution(detail.approverIds(), detail.stepRuleNames());
+    }
+
+    private ResolutionDetail resolveDetail(Long applicantId,
+                                           Map<String, Object> variables,
+                                           RequestTemplateApprovalConfig config) {
         if (applicantId == null) {
             throw new IllegalArgumentException("applicantId is required");
         }
@@ -51,6 +65,7 @@ public class RequestApprovalResolverService {
                 : null;
 
         ArrayList<String> approverIds = new ArrayList<>();
+        ArrayList<String> stepRuleNames = new ArrayList<>();
         String strategy = null;
         for (RequestTemplateApprovalConfig.ApprovalRule rule : config.getRules()) {
             if (!matchesConditions(rule, variables) || rule.getSteps() == null || rule.getSteps().isEmpty()) {
@@ -69,22 +84,18 @@ public class RequestApprovalResolverService {
                     default -> throw new IllegalArgumentException("unsupported approval step type: " + step.getType());
                 };
                 if (resolvedUserId != null && !Objects.equals(resolvedUserId, applicantId)) {
-                    addApproverIfAbsent(approverIds, resolvedUserId);
+                    addApproverIfAbsent(approverIds, stepRuleNames, resolvedUserId, rule.getName());
                 }
             }
         }
 
         if (!approverIds.isEmpty()) {
-            return new Resolution(List.copyOf(approverIds), strategy == null || strategy.isBlank() ? "TEMPLATE_CONFIG" : strategy);
+            return new ResolutionDetail(
+                    List.copyOf(approverIds),
+                    List.copyOf(stepRuleNames),
+                    strategy == null || strategy.isBlank() ? "TEMPLATE_CONFIG" : strategy);
         }
         throw new IllegalArgumentException("approver is not configured for applicant");
-    }
-
-    public PreviewResolution previewByTemplateConfig(Long applicantId,
-                                                     Map<String, Object> variables,
-                                                     RequestTemplateApprovalConfig config) {
-        Resolution resolution = resolveByTemplateConfig(applicantId, variables, config);
-        return new PreviewResolution(resolution.approverIds(), resolution.strategy());
     }
 
     private boolean matchesConditions(RequestTemplateApprovalConfig.ApprovalRule rule, Map<String, Object> variables) {
@@ -168,19 +179,23 @@ public class RequestApprovalResolverService {
         return step;
     }
 
-    private void addApproverIfAbsent(List<String> approverIds, Long approverId) {
+    private void addApproverIfAbsent(List<String> approverIds, List<String> stepRuleNames, Long approverId, String ruleName) {
         if (approverId == null) {
             return;
         }
         String normalized = String.valueOf(approverId);
         if (!approverIds.contains(normalized)) {
             approverIds.add(normalized);
+            stepRuleNames.add(ruleName == null || ruleName.isBlank() ? "自动审批" : ruleName);
         }
     }
 
     public record Resolution(List<String> approverIds, String strategy) {
     }
 
-    public record PreviewResolution(List<String> approverIds, String matchedRule) {
+    public record PreviewResolution(List<String> approverIds, List<String> stepRuleNames) {
+    }
+
+    private record ResolutionDetail(List<String> approverIds, List<String> stepRuleNames, String strategy) {
     }
 }

@@ -174,7 +174,7 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
                                   "requestTemplateKey": "leave",
                                   "processKey": "approvalSequential",
                                   "variables": {
-                                    "days": 4
+                                    "leaveType": "事假"
                                   }
                                 }
                                 """.formatted(businessKey, applicant.getId(), dept.getId())))
@@ -262,6 +262,83 @@ class WorkflowControllerIntegrationTests extends AbstractIntegrationTestSupport 
         Task task = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).singleResult();
         assertThat(task).isNotNull();
         assertThat(task.getAssignee()).isEqualTo(String.valueOf(fixedApprover.getId()));
+    }
+
+    @Test
+    void purchaseRequest_usesBasicApprovalWhenAmountIsNotAbove10000() throws Exception {
+        SysUser deptLeader = createUser("purchase-basic-dept-leader", "Password@123", null, "EMPLOYEE");
+        SysDept dept = createDept("PURCHASE_BASIC", "Purchase Basic Dept");
+        dept.setLeaderUserId(deptLeader.getId());
+        dept = sysDeptRepository.save(dept);
+
+        SysUser applicant = createUser("purchase-basic-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String businessKey = unique("purchase-basic");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "采购申请",
+                                  "applicantId": %d,
+                                  "applicantDeptId": %d,
+                                  "requestTemplateKey": "purchase",
+                                  "processKey": "approvalCountersign",
+                                  "variables": {
+                                    "amount": 10000
+                                  }
+                                }
+                                """.formatted(businessKey, applicant.getId(), dept.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+
+        List<Task> tasks = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).list();
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks.get(0).getAssignee()).isEqualTo(String.valueOf(deptLeader.getId()));
+    }
+
+    @Test
+    void purchaseRequest_addsParentDepartmentLeaderWhenAmountAbove10000() throws Exception {
+        SysUser parentLeader = createUser("purchase-parent-leader", "Password@123", null, "EMPLOYEE");
+        SysDept parentDept = createDept("PURCHASE_PARENT", "Purchase Parent Dept");
+        parentDept.setLeaderUserId(parentLeader.getId());
+        parentDept = sysDeptRepository.save(parentDept);
+
+        SysUser deptLeader = createUser("purchase-dept-leader", "Password@123", null, "EMPLOYEE");
+        SysDept dept = createDept("PURCHASE_CHILD", "Purchase Child Dept");
+        dept.setParentId(parentDept.getId());
+        dept.setLeaderUserId(deptLeader.getId());
+        dept = sysDeptRepository.save(dept);
+
+        SysUser applicant = createUser("purchase-above-10000-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        String applicantToken = accessToken(applicant, "EMPLOYEE");
+        String businessKey = unique("purchase-above-10000");
+
+        mockMvc.perform(post("/api/workflow/requests")
+                        .header("Authorization", authorization(applicantToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessKey": "%s",
+                                  "title": "采购申请",
+                                  "applicantId": %d,
+                                  "applicantDeptId": %d,
+                                  "requestTemplateKey": "purchase",
+                                  "processKey": "approvalCountersign",
+                                  "variables": {
+                                    "amount": 10001
+                                  }
+                                }
+                                """.formatted(businessKey, applicant.getId(), dept.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processInstanceId").isString());
+
+        List<Task> tasks = taskService.createTaskQuery().processInstanceBusinessKey(businessKey).list();
+        assertThat(tasks).hasSize(2);
+        assertThat(tasks).extracting(Task::getAssignee)
+                .containsExactlyInAnyOrder(String.valueOf(deptLeader.getId()), String.valueOf(parentLeader.getId()));
     }
 
     @Test

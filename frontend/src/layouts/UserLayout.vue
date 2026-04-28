@@ -10,6 +10,7 @@
         <el-menu-item index="/user/start">发起申请</el-menu-item>
         <el-menu-item index="/user/tasks">我的待办</el-menu-item>
         <el-menu-item index="/user/requests">我的申请</el-menu-item>
+        <el-menu-item index="/user/approved">我的审批</el-menu-item>
         <el-menu-item index="/user/profile">个人设置</el-menu-item>
       </el-menu>
     </aside>

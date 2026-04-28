@@ -112,6 +112,27 @@ public class OpenAiLlmClient implements LlmClient {
     }
 
     @Override
+    public FormCommandResult parseFormCommand(FormCommandParseRequest request) {
+        ChatResult chatResult = executeChat(List.of(
+                Map.of("role", "system", "content", buildFormCommandSystemPrompt()),
+                Map.of("role", "user", "content", buildFormCommandUserPrompt(request))
+        ));
+
+        JsonNode resultNode = parseJsonNode(chatResult.content());
+        JsonNode formDataNode = resultNode.path("formData");
+        Map<String, Object> formData = formDataNode.isObject()
+                ? objectMapper.convertValue(formDataNode, new TypeReference<Map<String, Object>>() {})
+                : Map.of();
+
+        FormCommandResult result = new FormCommandResult();
+        result.setFormData(formData);
+        result.setConfidence(resultNode.path("confidence").asDouble(0.0));
+        result.setReasoning(resultNode.path("reasoning").asText(""));
+        result.setModel(chatResult.model());
+        return result;
+    }
+
+    @Override
     public FollowUpAnswer answerFollowUp(FollowUpRequest request) {
         ChatResult chatResult = executeChat(List.of(
                 Map.of("role", "system", "content", buildFollowUpSystemPrompt()),
@@ -258,6 +279,43 @@ public class OpenAiLlmClient implements LlmClient {
     private String buildFollowUpSystemPrompt() {
         return "You are an approval assistant answering follow-up questions about an existing approval suggestion. "
                 + "Return strict JSON only with key: answer.";
+    }
+
+    private String buildFormCommandSystemPrompt() {
+        return """
+                You are a precise form-filling assistant. Given a user's natural language command \
+                and a list of form fields with their types, extract structured field values.
+
+                Rules:
+                1. Extract the value for each field from the command if present.
+                2. For date/datetime fields: normalize to "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS" format.
+                3. For number fields: return the numeric value (not the unit text). If a number is written in Chinese (e.g. 两天), convert to digits (2).
+                4. For select fields: match the command against available options (label or value), return the matched option value.
+                5. For string fields: extract the relevant phrase, remove surrounding noise.
+                6. If a field cannot be found in the command, do NOT include it in formData.
+                7. Assign a confidence score (0.0 to 1.0) reflecting how well the command matches the fields.
+
+                Return strict JSON only with keys: formData (object of fieldKey->value), confidence (number), reasoning (brief string).
+                """;
+    }
+
+    private String buildFormCommandUserPrompt(FormCommandParseRequest request) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("command", request.getCommand());
+        payload.put("fields", request.getFields().stream()
+                .map(f -> {
+                    Map<String, Object> field = new LinkedHashMap<>();
+                    field.put("fieldKey", f.getFieldKey());
+                    field.put("fieldType", f.getFieldType());
+                    field.put("label", f.getLabel());
+                    field.put("required", f.isRequired());
+                    if (f.getOptions() != null && !f.getOptions().isEmpty()) {
+                        field.put("options", f.getOptions());
+                    }
+                    return field;
+                })
+                .toList());
+        return toJson(payload);
     }
 
     private String buildSuggestionUserPrompt(SuggestionRequest request) {

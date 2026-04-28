@@ -11,6 +11,8 @@ public interface LlmClient {
 
     FollowUpAnswer answerFollowUp(FollowUpRequest request);
 
+    FormCommandResult parseFormCommand(FormCommandParseRequest request);
+
     @Data
     class SuggestionRequest {
         private String taskId;
@@ -80,5 +82,28 @@ public interface LlmClient {
         private Integer rejectedCount;
         private Double averageAmount;
         private String averageProcessingTime;
+    }
+
+    @Data
+    class FormCommandParseRequest {
+        private String command;
+        private List<FieldDefinition> fields;
+    }
+
+    @Data
+    class FieldDefinition {
+        private String fieldKey;
+        private String fieldType;
+        private String label;
+        private boolean required;
+        private List<String> options;
+    }
+
+    @Data
+    class FormCommandResult {
+        private Map<String, Object> formData;
+        private Double confidence;
+        private String reasoning;
+        private String model;
     }
 }

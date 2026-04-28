@@ -1,6 +1,7 @@
 package com.flowablecollab.approval_system;
 
 import com.flowablecollab.approval_system.entity.rbac.SysRole;
+import com.flowablecollab.approval_system.entity.rbac.SysDept;
 import com.flowablecollab.approval_system.entity.rbac.SysUser;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +13,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
+
+    private SysDept createDept(String code, String name) {
+        SysDept dept = new SysDept();
+        dept.setDeptCode(code);
+        dept.setDeptName(name);
+        return sysDeptRepository.save(dept);
+    }
 
     @Test
     void selfScope_onlySeesOwnRequestsTasksLogsAndProcesses() throws Exception {
@@ -309,6 +317,66 @@ class RequestControllerIntegrationTests extends AbstractIntegrationTestSupport {
                 .andExpect(jsonPath("$.allowManualApproverSelect").value(true))
                 .andExpect(jsonPath("$.approvalConfig.rules[0].steps[0].type").value("SPECIFIC_USER"))
                 .andExpect(jsonPath("$.approvalConfig.rules[0].steps[0].userId").value(reviewer.getId()));
+    }
+
+    @Test
+    void purchaseApprovalPreview_returnsOnlyBasicStepWhenAmountIs10000() throws Exception {
+        SysUser deptLeader = createUser("purchase-preview-basic-dept-leader", "Password@123", null, "EMPLOYEE");
+        SysDept dept = createDept("PUR_PREVIEW_BASIC", "Purchase Preview Basic Dept");
+        dept.setLeaderUserId(deptLeader.getId());
+        dept = sysDeptRepository.save(dept);
+        SysUser applicant = createUser("purchase-preview-basic-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        String token = accessToken(applicant, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/request-templates/purchase/approval-preview")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "applicantId": %d,
+                                  "variables": {
+                                    "amount": 10000
+                                  }
+                                }
+                                """.formatted(applicant.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].approverId").value(String.valueOf(deptLeader.getId())))
+                .andExpect(jsonPath("$[0].label").value("基础审批"));
+    }
+
+    @Test
+    void purchaseApprovalPreview_includesParentLeaderWhenAmountAbove10000() throws Exception {
+        SysUser parentLeader = createUser("purchase-preview-parent-leader", "Password@123", null, "EMPLOYEE");
+        SysDept parentDept = createDept("PUR_PREVIEW_PARENT", "Purchase Preview Parent Dept");
+        parentDept.setLeaderUserId(parentLeader.getId());
+        parentDept = sysDeptRepository.save(parentDept);
+
+        SysUser deptLeader = createUser("purchase-preview-dept-leader", "Password@123", null, "EMPLOYEE");
+        SysDept dept = createDept("PUR_PREVIEW_CHILD", "Purchase Preview Child Dept");
+        dept.setParentId(parentDept.getId());
+        dept.setLeaderUserId(deptLeader.getId());
+        dept = sysDeptRepository.save(dept);
+        SysUser applicant = createUser("purchase-preview-above-10000-applicant", "Password@123", dept.getId(), "EMPLOYEE");
+        String token = accessToken(applicant, "EMPLOYEE");
+
+        mockMvc.perform(post("/api/request-templates/purchase/approval-preview")
+                        .header("Authorization", authorization(token))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "applicantId": %d,
+                                  "variables": {
+                                    "amount": 10001
+                                  }
+                                }
+                                """.formatted(applicant.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[?(@.approverId=='%s')]".formatted(deptLeader.getId())).isNotEmpty())
+                .andExpect(jsonPath("$[?(@.approverId=='%s')]".formatted(parentLeader.getId())).isNotEmpty())
+                .andExpect(jsonPath("$[0].label").value("基础审批"))
+                .andExpect(jsonPath("$[1].label").value("金额超过10000"));
     }
 
     private String startSingleApproval(String applicantToken, Long applicantId, String businessKey, String approverId) throws Exception {

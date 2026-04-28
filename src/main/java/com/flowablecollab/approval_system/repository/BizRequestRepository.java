@@ -11,6 +11,8 @@ public interface BizRequestRepository extends JpaRepository<BizRequest, Long> {
 
     Optional<BizRequest> findByProcessInstanceId(String processInstanceId);
 
+    List<BizRequest> findByBusinessKeyIn(List<String> businessKeys);
+
     List<BizRequest> findByApplicantDeptIdIn(List<Long> deptIds);
 
     List<BizRequest> findByApplicantId(Long applicantId);

@@ -23,13 +23,13 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                         .content("""
                                 {
                                   "formKey": "leave_request",
-                                  "command": "请假类型事假，开始时间2026-05-01 09:00:00，结束时间2026-05-02 18:00:00，请假天数2天，请假原因家中有事"
+                                  "command": "请假类型事假，开始时间2026-05-01 09:00:00，结束时间2026-05-02 18:00:00，请假原因家中有事"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.formKey").value("leave_request"))
                 .andExpect(jsonPath("$.formData.leaveType").value("事假"))
-                .andExpect(jsonPath("$.formData.days").value(2.0))
+                .andExpect(jsonPath("$.formData.days").doesNotExist())
                 .andExpect(jsonPath("$.missingRequiredFields").isArray())
                 .andExpect(jsonPath("$.confidence").isNumber());
     }
@@ -46,7 +46,7 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                                 {
                                   "title": "AI 发起请假",
                                   "formKey": "leave_request",
-                                  "command": "请假类型年假，开始时间2026-06-01 09:00:00，结束时间2026-06-03 18:00:00，请假天数3天，请假原因陪伴家人",
+                                  "command": "请假类型年假，开始时间2026-06-01 09:00:00，结束时间2026-06-03 18:00:00，请假原因陪伴家人",
                                   "requireAllRequiredFields": true
                                 }
                                 """))
@@ -97,7 +97,7 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                         .content("""
                                 {
                                   "requestTemplateKey": "%s",
-                                  "command": "请假类型年假，开始时间2026-06-01 09:00:00，结束时间2026-06-03 18:00:00，请假天数3天，请假原因陪伴家人",
+                                  "command": "请假类型年假，开始时间2026-06-01 09:00:00，结束时间2026-06-03 18:00:00，请假原因陪伴家人",
                                   "requireAllRequiredFields": true
                                 }
                                 """.formatted(templateKey)))
@@ -106,7 +106,7 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
     }
 
     @Test
-    void parse_leaveDays_withDateRangeAndChineseDays_shouldNotParseYearAsDays() throws Exception {
+    void parse_leaveRequest_withDateRangeAndChineseDays_shouldExtractDateFields() throws Exception {
         SysUser employee = createUser("employee-ai-days", "Password@123", null, "EMPLOYEE");
         String token = accessToken(employee, "EMPLOYEE");
 
@@ -120,7 +120,9 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.formData.days").value(2.0));
+                .andExpect(jsonPath("$.formData.startDate").value("2026-05-01 09:00:00"))
+                .andExpect(jsonPath("$.formData.endDate").value("2026-05-02 18:00:00"))
+                .andExpect(jsonPath("$.formData.days").doesNotExist());
     }
 
     @Test
@@ -170,13 +172,13 @@ class FormCommandAiControllerIntegrationTests extends AbstractIntegrationTestSup
                         .content("""
                                 {
                                   "formKey": "leave_request",
-                                  "command": "请假类型年假，开始时间2026年9月1日 9:00，结束时间2026年9月2日18:30，请假天数2天，请假原因家庭事务"
+                                  "command": "请假类型年假，开始时间2026年9月1日 9:00，结束时间2026年9月2日18:30，请假原因家庭事务"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.formData.startDate").value("2026-09-01 09:00:00"))
                 .andExpect(jsonPath("$.formData.endDate").value("2026-09-02 18:30:00"))
-                .andExpect(jsonPath("$.formData.days").value(2.0));
+                .andExpect(jsonPath("$.formData.days").doesNotExist());
     }
 
     @Test

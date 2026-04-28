@@ -162,13 +162,16 @@ public class RequestTemplateApprovalResolverService {
         }
         java.util.ArrayList<PreviewStepView> views = new java.util.ArrayList<>();
         List<String> approverIds = preview.approverIds();
+        List<String> stepRuleNames = preview.stepRuleNames();
         for (int i = 0; i < approverIds.size(); i++) {
             PreviewStepView view = new PreviewStepView();
             String approverId = approverIds.get(i);
             view.setOrderNo(i + 1);
             view.setApproverId(approverId);
             view.setApproverName(resolveApproverName(approverId));
-            view.setLabel(i == 0 && preview.matchedRule() != null ? preview.matchedRule() : "自动审批");
+            view.setLabel(i < stepRuleNames.size() && stepRuleNames.get(i) != null && !stepRuleNames.get(i).isBlank()
+                    ? stepRuleNames.get(i)
+                    : "自动审批");
             view.setResolverType(i < labels.size() ? labels.keySet().stream().toList().get(i) : null);
             view.setResolverLabel(i < labels.size() ? labels.values().stream().toList().get(i) : "自动审批人");
             view.setSourceDescription(buildSourceDescription(view));

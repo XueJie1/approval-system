@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface BizRequestLogRepository extends JpaRepository<BizRequestLog, Long> {
     List<BizRequestLog> findByBusinessKeyIn(List<String> businessKeys);
+
+    List<BizRequestLog> findByOperatorIdAndActionIn(Long operatorId, List<String> actions);
 }

@@ -52,6 +52,7 @@ const routes = [
       { path: "start", name: "user-start", component: () => import("../views/StartRequestView.vue") },
       { path: "tasks", name: "user-tasks", component: () => import("../views/MyTasksView.vue") },
       { path: "requests", name: "user-requests", component: () => import("../views/MyRequestsView.vue") },
+      { path: "approved", name: "user-approved", component: () => import("../views/MyApprovedRequestsView.vue") },
       { path: "profile", name: "user-profile", component: () => import("../views/ProfileView.vue") }
     ]
   },

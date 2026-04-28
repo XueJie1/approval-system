@@ -190,13 +190,25 @@
               v-model="aiCommand"
               type="textarea"
               :rows="4"
-              placeholder="例如：我要请假，类型年假，开始时间2026-06-01 09:00，结束时间2026-06-03 18:00，请假天数3天，原因陪伴家人"
+              placeholder="例如：我要请假，类型年假，开始时间2026-06-01 09:00，结束时间2026-06-03 18:00，原因陪伴家人"
             />
             <div class="action-buttons">
               <el-button :loading="aiParsing" @click="handleAiParse">解析并预填</el-button>
               <el-button type="primary" :loading="aiStarting" @click="handleAiParseAndStart">解析并发起</el-button>
             </div>
-            <div v-if="aiParseHint" class="field-hint">{{ aiParseHint }}</div>
+            <el-alert
+              v-if="aiParseResult"
+              :title="aiParseResult.title"
+              :type="aiParseResult.type"
+              :closable="false"
+              show-icon
+            >
+              <template v-if="aiParseResult.details.length">
+                <ul class="ai-result-details">
+                  <li v-for="d in aiParseResult.details" :key="d">{{ d }}</li>
+                </ul>
+              </template>
+            </el-alert>
           </div>
         </el-card>
 
@@ -261,7 +273,11 @@ const approvalPreviewError = ref('');
 const aiCommand = ref('');
 const aiParsing = ref(false);
 const aiStarting = ref(false);
-const aiParseHint = ref('');
+const aiParseResult = ref<{
+  title: string;
+  type: 'success' | 'warning' | 'info' | 'error';
+  details: string[];
+} | null>(null);
 
 const form = reactive({
   businessKey: '',
@@ -403,6 +419,8 @@ async function applyTemplate() {
 
 async function handleTemplateChange() {
   dynamicData.value = {};
+  aiParseResult.value = null;
+  aiCommand.value = '';
   await applyTemplate();
 }
 
@@ -461,7 +479,7 @@ async function handleAiParse() {
     return;
   }
   aiParsing.value = true;
-  aiParseHint.value = '';
+  aiParseResult.value = null;
   try {
     const parsed = await parseFormCommand({
       command: aiCommand.value.trim(),
@@ -473,18 +491,43 @@ async function handleAiParse() {
       form.templateKey = parsed.templateKey;
       await applyTemplate();
     }
+    const formDataKeys = Object.keys(parsed.formData);
     dynamicData.value = {
       ...dynamicData.value,
       ...parsed.formData
     };
     await loadApprovalPreview();
-    aiParseHint.value = parsed.missingRequiredFields.length
-      ? `已预填，仍缺少必填字段：${parsed.missingRequiredFields.join('、')}`
-      : '已完成预填，可直接提交或继续补充。';
+
+    const details: string[] = [];
+    details.push(`模型：${parsed.model}`);
+    details.push(`置信度：${Math.round(parsed.confidence * 100)}%`);
+    if (formDataKeys.length > 0) {
+      details.push(`已填入字段：${formDataKeys.join('、')}`);
+    } else {
+      details.push('未识别到可填入的字段');
+    }
+
+    if (parsed.missingRequiredFields.length) {
+      aiParseResult.value = {
+        title: `预填完成，仍缺少必填字段：${parsed.missingRequiredFields.join('、')}`,
+        type: 'warning',
+        details
+      };
+    } else {
+      aiParseResult.value = {
+        title: '已完成预填，可直接提交或继续补充',
+        type: 'success',
+        details
+      };
+    }
     ElMessage.success('AI 解析完成');
   } catch (e) {
     console.error(e);
-    aiParseHint.value = 'AI 解析失败，请补充后重试';
+    aiParseResult.value = {
+      title: 'AI 解析失败，请检查输入或手动填写表单',
+      type: 'error',
+      details: []
+    };
     ElMessage.error('AI 解析失败');
   } finally {
     aiParsing.value = false;
@@ -497,7 +540,7 @@ async function handleAiParseAndStart() {
     return;
   }
   aiStarting.value = true;
-  aiParseHint.value = '';
+  aiParseResult.value = null;
   try {
     const result = await parseAndStartByFormCommand({
       command: aiCommand.value.trim(),
@@ -509,13 +552,29 @@ async function handleAiParseAndStart() {
     });
     lastProcessId.value = result.processInstanceId;
     form.businessKey = result.businessKey;
-    aiParseHint.value = 'AI 已直接发起流程';
+    const details: string[] = [];
+    details.push(`流程实例：${result.processInstanceId}`);
+    if (result.missingRequiredFields?.length) {
+      details.push(`缺少的必填字段：${result.missingRequiredFields.join('、')}`);
+    }
+    if (result.confidence !== undefined) {
+      details.push(`置信度：${Math.round((result.confidence ?? 0) * 100)}%`);
+    }
+    aiParseResult.value = {
+      title: 'AI 已直接发起流程',
+      type: 'success',
+      details
+    };
     ElMessage.success('AI 已发起申请');
   } catch (e) {
     console.error(e);
     const error = e as AxiosError<{ error?: string }>;
     const message = error.response?.data?.error;
-    aiParseHint.value = 'AI 发起失败，请先执行解析预填并手工补充';
+    aiParseResult.value = {
+      title: message || 'AI 发起失败，请先执行解析预填并手工补充',
+      type: 'error',
+      details: []
+    };
     ElMessage.error(message || 'AI 发起失败');
   } finally {
     aiStarting.value = false;
@@ -696,7 +755,7 @@ function resetForm() {
   lastProcessId.value = '';
   lastDraftBusinessKey.value = '';
   aiCommand.value = '';
-  aiParseHint.value = '';
+  aiParseResult.value = null;
 }
 
 function goRequests() {
@@ -831,6 +890,17 @@ watch(dynamicData, () => {
   font-size: 13px;
   color: #64748b;
   line-height: 1.5;
+}
+
+.ai-result-details {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.ai-result-details li {
+  margin: 2px 0;
+  color: #475569;
 }
 
 .template-summary {

@@ -15,10 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -133,6 +130,75 @@ public class RequestController {
                 .toList();
         return ResponseEntity.ok(taskAiSuggestionService.getHistoryForBusinessKeys(businessKeys));
     }
+
+    @GetMapping("/approved-by-me")
+    public ResponseEntity<List<ApprovedRequestView>> listApprovedByMe() {
+        Long userId = SecurityUtils.currentUserId();
+        if (userId == null) {
+            throw new ForbiddenOperationException("Unauthorized");
+        }
+
+        List<BizRequestLog> logs = bizRequestLogRepository
+                .findByOperatorIdAndActionIn(userId, List.of("APPROVE", "REJECT"));
+
+        if (logs.isEmpty()) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+
+        Map<String, BizRequestLog> latestLogPerRequest = logs.stream()
+                .collect(Collectors.toMap(
+                        BizRequestLog::getBusinessKey,
+                        log -> log,
+                        (a, b) -> a.getCreatedAt().isAfter(b.getCreatedAt()) ? a : b
+                ));
+
+        List<String> businessKeys = new ArrayList<>(latestLogPerRequest.keySet());
+        Map<String, BizRequest> requestMap = bizRequestRepository
+                .findByBusinessKeyIn(businessKeys)
+                .stream()
+                .collect(Collectors.toMap(BizRequest::getBusinessKey, r -> r));
+
+        List<ApprovedRequestView> result = new ArrayList<>();
+        for (String bk : businessKeys) {
+            BizRequest req = requestMap.get(bk);
+            BizRequestLog log = latestLogPerRequest.get(bk);
+            if (req == null) continue;
+
+            result.add(new ApprovedRequestView(
+                    req.getId(),
+                    req.getBusinessKey(),
+                    req.getProcessInstanceId(),
+                    req.getTitle(),
+                    req.getStatus(),
+                    req.getApplicantId(),
+                    req.getSubmitTime() != null ? req.getSubmitTime().toString() : null,
+                    req.getFinishTime() != null ? req.getFinishTime().toString() : null,
+                    req.getCreatedAt() != null ? req.getCreatedAt().toString() : null,
+                    log.getAction(),
+                    log.getComment(),
+                    log.getCreatedAt() != null ? log.getCreatedAt().toString() : null
+            ));
+        }
+
+        result.sort((a, b) -> b.actionTime().compareTo(a.actionTime()));
+
+        return ResponseEntity.ok(result);
+    }
+
+    public record ApprovedRequestView(
+            Long id,
+            String businessKey,
+            String processInstanceId,
+            String title,
+            Integer status,
+            Long applicantId,
+            String submitTime,
+            String finishTime,
+            String createdAt,
+            String action,
+            String comment,
+            String actionTime
+    ) {}
 
     private Long resolveRequestedUserId(Long requestedUserId) {
         Long currentUserId = SecurityUtils.currentUserId();

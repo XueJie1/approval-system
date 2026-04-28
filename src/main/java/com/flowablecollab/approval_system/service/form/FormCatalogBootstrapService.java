@@ -79,13 +79,11 @@ public class FormCatalogBootstrapService {
                         fieldSchema("leaveType", "select", "请假类型", true, List.of("事假", "病假", "年假")),
                         fieldSchema("startDate", "datetime", "开始时间", true, null),
                         fieldSchema("endDate", "datetime", "结束时间", true, null),
-                        fieldSchema("days", "number", "请假天数", true, null),
                         fieldSchema("reason", "string", "请假原因", true, null)
                 )), List.of(
                         new BuiltInFieldSeed("leaveType", "select", "请假类型", true, optionsJson(List.of("事假", "病假", "年假"))),
                         new BuiltInFieldSeed("startDate", "datetime", "开始时间", true, null),
                         new BuiltInFieldSeed("endDate", "datetime", "结束时间", true, null),
-                        new BuiltInFieldSeed("days", "number", "请假天数", true, null),
                         new BuiltInFieldSeed("reason", "string", "请假原因", true, null)
                 )),
                 new BuiltInFormSeed("expense_request", "报销申请表", schema(List.of(

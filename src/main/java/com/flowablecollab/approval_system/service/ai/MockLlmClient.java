@@ -93,6 +93,11 @@ public class MockLlmClient implements LlmClient {
     }
 
     @Override
+    public FormCommandResult parseFormCommand(FormCommandParseRequest request) {
+        throw new UnsupportedOperationException("MockLlmClient does not support form command parsing");
+    }
+
+    @Override
     public FollowUpAnswer answerFollowUp(FollowUpRequest request) {
         String question = safeText(request.getQuestion(), "").toLowerCase(Locale.ROOT);
         Suggestion currentSuggestion = request.getCurrentSuggestion();

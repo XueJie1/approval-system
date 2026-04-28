@@ -14,6 +14,9 @@
       <el-tag v-if="selectedGatewayElement" size="small" type="info">
         已选中节点：{{ gatewayForm.name || gatewayForm.id }}（{{ selectedElementTypeLabel }}）
       </el-tag>
+      <el-tag v-if="isUserTaskSelected && selectedApprovalStrategyLabel" size="small" type="warning">
+        审批策略：{{ selectedApprovalStrategyLabel }}
+      </el-tag>
     </div>
 
     <div class="designer-body" :class="{ 'is-panel-hidden': !propertiesPanelVisible }">
@@ -59,6 +62,42 @@
                   <el-button type="primary" :disabled="gatewayReadonly" @click="applyGatewayBasics">应用节点信息</el-button>
                 </div>
               </el-form>
+
+              <template v-if="isUserTaskSelected">
+                <div class="gateway-section-title">审批策略</div>
+                <el-form label-position="top" class="gateway-form" @submit.prevent>
+                  <el-form-item label="策略类型">
+                    <el-select
+                      v-model="approvalStrategyForm.strategy"
+                      :disabled="gatewayReadonly"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="item in approvalStrategyOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-alert
+                    v-if="approvalStrategyForm.strategy === 'CUSTOM'"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    title="当前节点为自定义审批配置，应用策略将按标准模板重写该节点审批规则。"
+                  />
+                  <div class="gateway-actions">
+                    <el-button
+                      type="primary"
+                      :disabled="gatewayReadonly || approvalStrategyForm.strategy === 'CUSTOM'"
+                      @click="applyApprovalStrategy"
+                    >
+                      应用审批策略
+                    </el-button>
+                  </div>
+                </el-form>
+              </template>
 
               <template v-if="isExclusiveGatewaySelected">
                 <div class="gateway-section-title">分支条件（纯文本表达式）</div>
@@ -316,6 +355,16 @@ const FIELD_TYPE_OPTIONS = [
   { label: "表达式", value: "expression" }
 ];
 
+const APPROVAL_STRATEGY_OPTIONS = [
+  { label: "Single（单人审批）", value: "SINGLE" },
+  { label: "Or-Sign（一票通过）", value: "OR_SIGN" },
+  { label: "Countersign（会签）", value: "COUNTERSIGN" },
+  { label: "自定义（仅识别，不可直接应用）", value: "CUSTOM" }
+];
+
+const OR_SIGN_COMPLETION_CONDITION = "${approveCount >= 1 || rejectCount == nrOfInstances}";
+const COUNTERSIGN_COMPLETION_CONDITION = "${countersignMode == 'ALL' ? (rejectCount == 0 && nrOfCompletedInstances == nrOfInstances) : (approveCount >= requiredApprove || rejectCount > (nrOfInstances - requiredApprove))}";
+
 const DEFAULT_XML = (processId = "Process_1", processName = "流程") => `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -447,10 +496,14 @@ export default {
         name: "",
         value: ""
       },
+      approvalStrategyForm: {
+        strategy: "SINGLE"
+      },
       listenerEventOptions: LISTENER_EVENT_OPTIONS,
       listenerTypeOptions: LISTENER_TYPE_OPTIONS,
       listenerScriptTypeOptions: LISTENER_SCRIPT_TYPE_OPTIONS,
-      fieldTypeOptions: FIELD_TYPE_OPTIONS
+      fieldTypeOptions: FIELD_TYPE_OPTIONS,
+      approvalStrategyOptions: APPROVAL_STRATEGY_OPTIONS
     };
   },
   computed: {
@@ -465,6 +518,16 @@ export default {
     },
     isExclusiveGatewaySelected() {
       return this.selectedElementType === "bpmn:ExclusiveGateway";
+    },
+    isUserTaskSelected() {
+      return this.selectedElementType === "bpmn:UserTask";
+    },
+    selectedApprovalStrategyLabel() {
+      if (!this.isUserTaskSelected) {
+        return "";
+      }
+      const strategy = this.detectUserTaskApprovalStrategy(this.selectedGatewayElement?.businessObject);
+      return this.approvalStrategyOptions.find((item) => item.value === strategy)?.label || "自定义";
     },
     listenerExpressionLabel() {
       if (this.listenerForm.listenerType === "classListener") {
@@ -713,6 +776,9 @@ export default {
       this.gatewayDefaultFlowId = "";
       this.gatewayListeners = [];
       this.gatewayProperties = [];
+      this.approvalStrategyForm = {
+        strategy: "SINGLE"
+      };
     },
     syncGatewayPanelFromSelection() {
       const businessObject = this.selectedGatewayElement?.businessObject;
@@ -729,6 +795,97 @@ export default {
       this.gatewayDefaultFlowId = this.isExclusiveGatewaySelected ? (businessObject.default?.id || "") : "";
       this.gatewayListeners = this.extractExecutionListeners(businessObject);
       this.gatewayProperties = this.extractExtensionProperties(businessObject);
+      this.approvalStrategyForm = {
+        strategy: this.detectUserTaskApprovalStrategy(businessObject)
+      };
+    },
+    normalizeExpressionText(value) {
+      return String(value || "")
+        .replace(/\s+/g, " ")
+        .replace(/\s*([(){}?:=!<>+\-*/&|])\s*/g, "$1")
+        .trim();
+    },
+    detectUserTaskApprovalStrategy(businessObject) {
+      if (!businessObject || businessObject.$type !== "bpmn:UserTask") {
+        return "SINGLE";
+      }
+      const loop = businessObject.loopCharacteristics;
+      if (!loop || loop.$type !== "bpmn:MultiInstanceLoopCharacteristics") {
+        return "SINGLE";
+      }
+      const completionBody = this.normalizeExpressionText(loop.completionCondition?.body || "");
+      const normalizedOrSign = this.normalizeExpressionText(OR_SIGN_COMPLETION_CONDITION);
+      if (completionBody === normalizedOrSign
+        || (completionBody.includes("approveCount>=1") && completionBody.includes("rejectCount==nrOfInstances"))) {
+        return "OR_SIGN";
+      }
+      if (completionBody.includes("countersignMode=='ALL'")
+        || completionBody.includes("requiredApprove")
+        || completionBody.includes("nrOfCompletedInstances==nrOfInstances")) {
+        return "COUNTERSIGN";
+      }
+      return "CUSTOM";
+    },
+    buildTaskListenerByStrategy(strategy) {
+      const moddle = this.modeler.get("moddle");
+      if (strategy === "SINGLE") {
+        return moddle.create("flowable:TaskListener", {
+          event: "complete",
+          delegateExpression: "${singleApprovalTaskListener}"
+        });
+      }
+      return moddle.create("flowable:TaskListener", {
+        event: "complete",
+        delegateExpression: "${countersignTaskListener}"
+      });
+    },
+    buildLoopCharacteristicsByStrategy(strategy) {
+      const moddle = this.modeler.get("moddle");
+      if (strategy === "SINGLE") {
+        return undefined;
+      }
+      const completionConditionBody = strategy === "OR_SIGN"
+        ? OR_SIGN_COMPLETION_CONDITION
+        : COUNTERSIGN_COMPLETION_CONDITION;
+      return moddle.create("bpmn:MultiInstanceLoopCharacteristics", {
+        isSequential: false,
+        collection: "countersignUsers",
+        elementVariable: "countersignUser",
+        completionCondition: moddle.create("bpmn:FormalExpression", { body: completionConditionBody })
+      });
+    },
+    buildAssigneeByStrategy(strategy) {
+      return strategy === "SINGLE" ? "${approverId}" : "${countersignUser}";
+    },
+    applyApprovalStrategy() {
+      if (!this.selectedGatewayElement || this.gatewayReadonly || !this.isUserTaskSelected) {
+        return;
+      }
+      const strategy = this.approvalStrategyForm.strategy;
+      if (strategy === "CUSTOM") {
+        ElMessage.warning("自定义策略无法直接应用，请先选择标准策略");
+        return;
+      }
+      try {
+        const businessObject = this.selectedGatewayElement.businessObject;
+        const extensionValues = businessObject.extensionElements?.values || [];
+        const unmanagedValues = extensionValues.filter(
+          (item) => !(item.$type === "flowable:TaskListener" && String(item.event || "").toLowerCase() === "complete")
+        );
+        const taskListener = this.buildTaskListenerByStrategy(strategy);
+        unmanagedValues.push(taskListener);
+        const moddle = this.modeler.get("moddle");
+        const extensionElements = moddle.create("bpmn:ExtensionElements", { values: unmanagedValues });
+        const loopCharacteristics = this.buildLoopCharacteristicsByStrategy(strategy);
+        this.modeler.get("modeling").updateProperties(this.selectedGatewayElement, {
+          assignee: this.buildAssigneeByStrategy(strategy),
+          loopCharacteristics,
+          extensionElements
+        });
+        ElMessage.success("审批策略已更新");
+      } catch (error) {
+        ElMessage.error(this.toImportError("应用审批策略失败", error).details);
+      }
     },
     extractDocumentation(businessObject) {
       const doc = Array.isArray(businessObject.documentation) && businessObject.documentation.length

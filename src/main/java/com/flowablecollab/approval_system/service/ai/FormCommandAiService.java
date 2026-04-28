@@ -9,6 +9,9 @@ import com.flowablecollab.approval_system.service.workflow.manage.WorkflowLaunch
 import com.flowablecollab.approval_system.service.workflow.manage.WorkflowManageDtos;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +33,8 @@ import java.util.regex.Pattern;
 @ConditionalOnBean(FormService.class)
 public class FormCommandAiService {
 
-    private static final String MODEL_NAME = "heuristic-form-parser-v1";
+    private static final Logger log = LoggerFactory.getLogger(FormCommandAiService.class);
+    private static final String HEURISTIC_MODEL = "heuristic-form-parser-v1";
     private static final Pattern FIRST_NUMBER_PATTERN = Pattern.compile("-?\\d+(?:\\.\\d+)?");
     private static final Pattern NUMBER_WITH_DAY_UNIT_PATTERN = Pattern.compile("(-?\\d+(?:\\.\\d+)?)\\s*(?:天|day|days)", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHINESE_DAY_PATTERN = Pattern.compile("([零〇一二两三四五六七八九十百半]+)\\s*天");
@@ -54,6 +58,7 @@ public class FormCommandAiService {
     private final WorkflowService workflowService;
     private final RequestTemplateService requestTemplateService;
     private final WorkflowLaunchResolverService workflowLaunchResolverService;
+    private final ObjectProvider<LlmClient> llmClientProvider;
 
     @Transactional(readOnly = true)
     public ParseResult parse(ParseRequest request) {
@@ -86,7 +91,19 @@ public class FormCommandAiService {
             throw new IllegalArgumentException("selected form version has no fields");
         }
 
-        Map<String, Object> extractedData = extractFieldValues(command, fields);
+        Map<String, Object> extractedData;
+        String effectiveModel;
+
+        LlmClient.FormCommandResult llmResult = tryLlmParse(command, fields);
+        if (llmResult != null) {
+            extractedData = llmResult.getFormData();
+            effectiveModel = llmResult.getModel();
+            log.info("LLM form parse succeeded for {} fields, model={}", fields.size(), effectiveModel);
+        } else {
+            extractedData = extractFieldValues(command, fields);
+            effectiveModel = HEURISTIC_MODEL;
+        }
+
         Map<String, Object> formData = formService.applyDefaultValues(formVersionId, extractedData);
         Map<String, Object> variables = formService.mapToWorkflowVariables(formVersionId, formData);
 
@@ -113,9 +130,12 @@ public class FormCommandAiService {
         } else {
             confidence = Math.min(1.0d, (double) formData.size() / Math.max(1, fields.size()));
         }
+        if (llmResult != null && llmResult.getConfidence() != null) {
+            confidence = llmResult.getConfidence();
+        }
 
         ParseResult result = new ParseResult();
-        result.setModel(MODEL_NAME);
+        result.setModel(effectiveModel);
         result.setTemplateKey(template == null ? null : template.getTemplateKey());
         result.setTemplateName(template == null ? null : template.getTemplateName());
         result.setFormKey(formKey);
@@ -259,6 +279,61 @@ public class FormCommandAiService {
             }
         }
         return templates.get(0);
+    }
+
+    private LlmClient.FormCommandResult tryLlmParse(String command, List<FormField> fields) {
+        LlmClient llmClient = llmClientProvider.getIfAvailable();
+        if (llmClient == null) {
+            log.info("No LlmClient bean available, falling back to heuristic parser");
+            return null;
+        }
+
+        List<LlmClient.FieldDefinition> fieldDefs = fields.stream()
+                .map(f -> {
+                    LlmClient.FieldDefinition def = new LlmClient.FieldDefinition();
+                    def.setFieldKey(f.getFieldKey());
+                    def.setFieldType(f.getFieldType() == null ? "string" : f.getFieldType());
+                    def.setLabel(f.getLabel() == null ? f.getFieldKey() : f.getLabel());
+                    def.setRequired(f.getRequired() != null && f.getRequired() == 1);
+                    if (f.getOptionsJson() != null && !f.getOptionsJson().isBlank()) {
+                        def.setOptions(parseOptionLabels(f.getOptionsJson()));
+                    }
+                    return def;
+                })
+                .toList();
+
+        try {
+            LlmClient.FormCommandParseRequest llmRequest = new LlmClient.FormCommandParseRequest();
+            llmRequest.setCommand(command);
+            llmRequest.setFields(fieldDefs);
+            return llmClient.parseFormCommand(llmRequest);
+        } catch (Exception e) {
+            log.warn("LLM form parse failed, falling back to heuristic parser: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<String> parseOptionLabels(String optionsJson) {
+        try {
+            var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(optionsJson);
+            if (!node.isArray()) {
+                return List.of();
+            }
+            List<String> labels = new ArrayList<>();
+            for (var item : node) {
+                if (item.isObject()) {
+                    String label = item.path("label").asText(null);
+                    if (label != null) {
+                        labels.add(label);
+                    }
+                } else if (item.isTextual()) {
+                    labels.add(item.asText());
+                }
+            }
+            return labels;
+        } catch (Exception ignored) {
+            return List.of();
+        }
     }
 
     private Map<String, Object> extractFieldValues(String command, List<FormField> fields) {
