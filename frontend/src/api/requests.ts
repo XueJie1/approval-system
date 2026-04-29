@@ -41,6 +41,11 @@ export interface ApprovedRequestItem {
   actionTime?: string;
 }
 
+export async function getRequestByProcessInstance(processInstanceId: string) {
+  const { data } = await http.get<BizRequest>(`/requests/by-process/${processInstanceId}`);
+  return data;
+}
+
 export async function listApprovedByMe() {
   const { data } = await http.get<ApprovedRequestItem[]>("/requests/approved-by-me");
   return data;

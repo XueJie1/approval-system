@@ -334,7 +334,7 @@ const filters = reactive({
   status: undefined as number | undefined
 });
 
-const fieldTypeOptions = ['string', 'number', 'date', 'datetime', 'select', 'table'];
+const fieldTypeOptions = ['string', 'number', 'date', 'datetime', 'select', 'table', 'file'];
 
 const selectedDefinition = computed(() => definitions.value.find(item => item.id === selectedDefinitionId.value) ?? null);
 const selectedVersion = computed(() => versions.value.find(item => item.id === selectedVersionId.value) ?? null);

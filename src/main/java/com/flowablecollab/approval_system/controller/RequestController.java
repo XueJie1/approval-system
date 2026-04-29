@@ -131,6 +131,11 @@ public class RequestController {
         return ResponseEntity.ok(taskAiSuggestionService.getHistoryForBusinessKeys(businessKeys));
     }
 
+    @GetMapping("/by-process/{processInstanceId}")
+    public ResponseEntity<BizRequest> getByProcessInstanceId(@PathVariable String processInstanceId) {
+        return ResponseEntity.ok(workflowService.getRequestByProcessInstanceId(processInstanceId));
+    }
+
     @GetMapping("/approved-by-me")
     public ResponseEntity<List<ApprovedRequestView>> listApprovedByMe() {
         Long userId = SecurityUtils.currentUserId();

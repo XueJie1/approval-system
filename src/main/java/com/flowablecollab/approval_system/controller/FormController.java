@@ -1,14 +1,22 @@
 package com.flowablecollab.approval_system.controller;
 
+import com.flowablecollab.approval_system.entity.form.FormAttachment;
 import com.flowablecollab.approval_system.entity.form.FormDefinition;
+import com.flowablecollab.approval_system.entity.form.FormField;
 import com.flowablecollab.approval_system.entity.form.FormInstance;
 import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.exception.ForbiddenOperationException;
 import com.flowablecollab.approval_system.security.SecurityUtils;
 import com.flowablecollab.approval_system.service.FormService;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -72,6 +80,70 @@ public class FormController {
         ensureRequestUserMatchesLogin(request.userId);
         formService.validateFormInstance(request.formVersionId, request.data);
         return ResponseEntity.ok(ActionResponse.ok("Validation passed"));
+    }
+
+    @PostMapping(value = "/attachments/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<FormAttachment> uploadAttachment(
+            @RequestParam Long formVersionId,
+            @RequestParam String fieldKey,
+            @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(formService.uploadAttachment(formVersionId, fieldKey, file));
+    }
+
+    @GetMapping("/attachments/{attachmentId}")
+    public ResponseEntity<Resource> downloadAttachment(@PathVariable Long attachmentId) {
+        FormAttachment attachment = formService.getAttachment(attachmentId);
+        Path filePath = formService.resolveAttachmentFile(attachment);
+        Resource resource = new FileSystemResource(filePath);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        attachment.getContentType() != null ? attachment.getContentType() : "application/octet-stream"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + attachment.getOriginalName() + "\"")
+                .body(resource);
+    }
+
+    @GetMapping("/attachments/{attachmentId}/preview")
+    public ResponseEntity<Resource> previewAttachment(@PathVariable Long attachmentId) {
+        FormAttachment attachment = formService.getAttachment(attachmentId);
+        Path filePath = formService.resolveAttachmentFile(attachment);
+        Resource resource = new FileSystemResource(filePath);
+        String contentType = attachment.getContentType() != null ? attachment.getContentType() : "application/octet-stream";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + attachment.getOriginalName() + "\"")
+                .body(resource);
+    }
+
+    @GetMapping("/instances/{formInstanceId}/attachments")
+    public ResponseEntity<List<FormAttachment>> listInstanceAttachments(@PathVariable Long formInstanceId) {
+        return ResponseEntity.ok(formService.getAttachmentsByFormInstance(formInstanceId));
+    }
+
+    @GetMapping("/instances/{formInstanceId}/data")
+    public ResponseEntity<Map<String, Object>> getInstanceData(@PathVariable Long formInstanceId) {
+        Map<String, Object> data = formService.readFormInstanceData(formInstanceId);
+        FormInstance instance = formService.getFormInstance(formInstanceId);
+        List<FormField> fields = formService.getFields(instance.getFormVersionId());
+        if (fields.isEmpty()) {
+            fields = formService.parseSchemaFields(instance.getFormVersionId());
+        }
+        List<FormAttachment> attachments = formService.getAttachmentsByFormInstance(formInstanceId);
+        if (attachments.isEmpty() && data != null) {
+            attachments = formService.resolveAttachmentsFromData(data);
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("formVersionId", instance.getFormVersionId());
+        result.put("fields", fields);
+        result.put("data", data);
+        result.put("attachments", attachments);
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/attachments/{attachmentId}")
+    public ResponseEntity<ActionResponse> deleteAttachment(@PathVariable Long attachmentId) {
+        formService.deleteAttachment(attachmentId);
+        return ResponseEntity.ok(ActionResponse.ok("Attachment deleted"));
     }
 
     private void ensureRequestUserMatchesLogin(Long requestUserId) {

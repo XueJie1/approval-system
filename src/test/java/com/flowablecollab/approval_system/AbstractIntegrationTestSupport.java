@@ -8,6 +8,7 @@ import com.flowablecollab.approval_system.entity.rbac.SysUser;
 import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.repository.BizRequestTaskRepository;
+import com.flowablecollab.approval_system.repository.form.FormAttachmentRepository;
 import com.flowablecollab.approval_system.repository.form.FormDefinitionRepository;
 import com.flowablecollab.approval_system.repository.form.FormFieldRepository;
 import com.flowablecollab.approval_system.repository.form.FormInstanceRepository;
@@ -88,6 +89,9 @@ abstract class AbstractIntegrationTestSupport {
 
     @Autowired
     protected FormInstanceRepository formInstanceRepository;
+
+    @Autowired
+    protected FormAttachmentRepository formAttachmentRepository;
 
     @Autowired
     protected BizRequestRepository bizRequestRepository;

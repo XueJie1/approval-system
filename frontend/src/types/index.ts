@@ -616,6 +616,18 @@ export interface AdminOpenAiModelListResult {
   models: string[];
 }
 
+export interface FormAttachment {
+  id: number;
+  formInstanceId?: number | null;
+  fieldKey: string;
+  fileName: string;
+  originalName: string;
+  filePath: string;
+  fileSize: number;
+  contentType: string;
+  createdAt: string;
+}
+
 export interface AiSuggestion {
   recordId: number;
   businessKey: string;

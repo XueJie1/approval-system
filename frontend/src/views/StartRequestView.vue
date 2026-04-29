@@ -118,6 +118,7 @@
             v-model="dynamicData"
             :fields="dynamicFields"
             :loaded-version-id="loadedVersionId"
+            :form-version-id="loadedVersionId"
           />
 
           <el-alert

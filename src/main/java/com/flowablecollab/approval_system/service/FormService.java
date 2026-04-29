@@ -3,26 +3,32 @@ package com.flowablecollab.approval_system.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flowablecollab.approval_system.entity.form.FormAttachment;
 import com.flowablecollab.approval_system.entity.form.FormDefinition;
 import com.flowablecollab.approval_system.entity.form.FormField;
 import com.flowablecollab.approval_system.entity.form.FormInstance;
 import com.flowablecollab.approval_system.entity.form.FormVersion;
 import com.flowablecollab.approval_system.exception.ResourceNotFoundException;
+import com.flowablecollab.approval_system.repository.form.FormAttachmentRepository;
 import com.flowablecollab.approval_system.repository.form.FormDefinitionRepository;
 import com.flowablecollab.approval_system.repository.form.FormFieldRepository;
 import com.flowablecollab.approval_system.repository.form.FormInstanceRepository;
 import com.flowablecollab.approval_system.repository.form.FormVersionRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +38,14 @@ public class FormService {
     private final FormVersionRepository formVersionRepository;
     private final FormInstanceRepository formInstanceRepository;
     private final FormFieldRepository formFieldRepository;
+    private final FormAttachmentRepository formAttachmentRepository;
     private final ObjectMapper objectMapper;
+
+    @Value("${app.upload.path:./uploads}")
+    private String uploadPath;
+
+    @Value("${app.upload.allowed-extensions:pdf,docx,xlsx,pptx,png,jpg,jpeg}")
+    private String allowedExtensions;
 
     public FormDefinition createFormDefinition(String formKey, String formName) {
         if (formKey == null || formKey.isBlank()) {
@@ -246,7 +259,9 @@ public class FormService {
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid form data");
         }
-        return formInstanceRepository.save(instance);
+        FormInstance saved = formInstanceRepository.save(instance);
+        linkAttachments(saved.getId(), normalizedData, formVersionId);
+        return saved;
     }
 
     public FormInstance getFormInstance(Long formInstanceId) {
@@ -263,6 +278,216 @@ public class FormService {
             throw new IllegalArgumentException("Invalid form instance data");
         }
     }
+
+    // ── Attachment methods ──────────────────────────────────────────────
+
+    public FormAttachment uploadAttachment(Long formVersionId, String fieldKey, MultipartFile file) {
+        if (fieldKey == null || fieldKey.isBlank()) {
+            throw new IllegalArgumentException("fieldKey is required");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("file is required");
+        }
+        String originalName = file.getOriginalFilename();
+        if (originalName == null || originalName.isBlank()) {
+            throw new IllegalArgumentException("file name is required");
+        }
+        String extension = getFileExtension(originalName).toLowerCase();
+        Set<String> allowed = parseAllowedExtensions();
+        if (!allowed.isEmpty() && !allowed.contains(extension)) {
+            throw new IllegalArgumentException("unsupported file type: " + extension);
+        }
+        getVersion(formVersionId);
+
+        String dateDir = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        String storedName = UUID.randomUUID() + "." + extension;
+        Path dir = Paths.get(uploadPath, dateDir);
+        try {
+            Files.createDirectories(dir);
+            Path target = dir.resolve(storedName);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            throw new RuntimeException("Failed to store file", ex);
+        }
+
+        FormAttachment attachment = new FormAttachment();
+        attachment.setFormInstanceId(null);
+        attachment.setFieldKey(fieldKey.trim());
+        attachment.setFileName(storedName);
+        attachment.setOriginalName(originalName.trim());
+        attachment.setFilePath(dateDir + "/" + storedName);
+        attachment.setFileSize(file.getSize());
+        attachment.setContentType(file.getContentType());
+        return formAttachmentRepository.save(attachment);
+    }
+
+    public FormAttachment getAttachment(Long attachmentId) {
+        return formAttachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new IllegalArgumentException("Attachment not found"));
+    }
+
+    public List<FormAttachment> getAttachmentsByFormInstance(Long formInstanceId) {
+        return formAttachmentRepository.findByFormInstanceIdOrderByCreatedAtAsc(formInstanceId);
+    }
+
+    public void deleteAttachment(Long attachmentId) {
+        FormAttachment attachment = getAttachment(attachmentId);
+        try {
+            Path filePath = Paths.get(uploadPath, attachment.getFilePath());
+            Files.deleteIfExists(filePath);
+        } catch (IOException ignored) {
+        }
+        formAttachmentRepository.delete(attachment);
+    }
+
+    @Transactional
+    public void linkAttachments(Long formInstanceId, Map<String, Object> data, Long formVersionId) {
+        List<String> fileFieldKeys = resolveFileFieldKeys(formVersionId);
+        for (String fieldKey : fileFieldKeys) {
+            Object value = data.get(fieldKey);
+            List<Long> attachmentIds = extractAttachmentIds(value);
+            if (attachmentIds.isEmpty()) {
+                continue;
+            }
+            List<FormAttachment> attachments = formAttachmentRepository.findByIdIn(attachmentIds);
+            for (FormAttachment attachment : attachments) {
+                attachment.setFormInstanceId(formInstanceId);
+            }
+            formAttachmentRepository.saveAll(attachments);
+        }
+    }
+
+    public List<FormField> parseSchemaFields(Long formVersionId) {
+        FormVersion version = getVersion(formVersionId);
+        String schemaJson = version.getSchemaJson();
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(schemaJson);
+            JsonNode schemaFields = root.get("fields");
+            if (schemaFields == null || !schemaFields.isArray()) {
+                return List.of();
+            }
+            List<FormField> fields = new ArrayList<>();
+            int index = 0;
+            for (JsonNode f : schemaFields) {
+                FormField field = new FormField();
+                field.setFormVersionId(formVersionId);
+                field.setFieldKey(f.path("key").asText(null));
+                field.setFieldType(f.path("type").asText("string"));
+                field.setLabel(f.path("label").asText(null));
+                field.setRequired(f.path("required").asBoolean(false) ? 1 : 0);
+                field.setDefaultValue(f.path("defaultValue").asText(null));
+                field.setSortOrder(index++);
+                fields.add(field);
+            }
+            return fields;
+        } catch (JsonProcessingException ignored) {
+            return List.of();
+        }
+    }
+
+    public List<FormAttachment> resolveAttachmentsFromData(Map<String, Object> data) {
+        if (data == null || data.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> allIds = new LinkedHashSet<>();
+        for (Object value : data.values()) {
+            allIds.addAll(extractAttachmentIds(value));
+        }
+        if (allIds.isEmpty()) {
+            return List.of();
+        }
+        return formAttachmentRepository.findAllById(allIds);
+    }
+
+    private List<String> resolveFileFieldKeys(Long formVersionId) {
+        List<FormField> fields = formFieldRepository.findByFormVersionIdOrderBySortOrderAscIdAsc(formVersionId);
+        if (!fields.isEmpty()) {
+            return fields.stream()
+                    .filter(f -> "file".equals(f.getFieldType()))
+                    .map(FormField::getFieldKey)
+                    .toList();
+        }
+        FormVersion version = getVersion(formVersionId);
+        String schemaJson = version.getSchemaJson();
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(schemaJson);
+            JsonNode schemaFields = root.get("fields");
+            if (schemaFields == null || !schemaFields.isArray()) {
+                return List.of();
+            }
+            List<String> keys = new ArrayList<>();
+            for (JsonNode f : schemaFields) {
+                String type = f.path("type").asText(null);
+                if ("file".equals(type)) {
+                    String key = f.path("key").asText(null);
+                    if (key != null && !key.isBlank()) {
+                        keys.add(key);
+                    }
+                }
+            }
+            return keys;
+        } catch (JsonProcessingException ignored) {
+            return List.of();
+        }
+    }
+
+    public Path resolveAttachmentFile(FormAttachment attachment) {
+        return Paths.get(uploadPath, attachment.getFilePath());
+    }
+
+    private List<Long> extractAttachmentIds(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof Number num) {
+            return List.of(num.longValue());
+        }
+        if (value instanceof List<?> list) {
+            List<Long> ids = new ArrayList<>();
+            for (Object item : list) {
+                if (item instanceof Number num) {
+                    ids.add(num.longValue());
+                }
+            }
+            return ids;
+        }
+        if (value instanceof String str) {
+            try {
+                return Arrays.stream(str.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(Long::parseLong)
+                        .toList();
+            } catch (NumberFormatException ignored) {
+                return List.of();
+            }
+        }
+        return List.of();
+    }
+
+    private String getFileExtension(String fileName) {
+        int lastDot = fileName.lastIndexOf('.');
+        return lastDot < 0 ? "" : fileName.substring(lastDot + 1);
+    }
+
+    private Set<String> parseAllowedExtensions() {
+        if (allowedExtensions == null || allowedExtensions.isBlank()) {
+            return Set.of();
+        }
+        return Arrays.stream(allowedExtensions.split(","))
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    // ── End attachment methods ──────────────────────────────────────────
 
     public void validateFormInstance(Long formVersionId, Map<String, Object> data) {
         FormVersion version = getVersion(formVersionId);
@@ -546,6 +771,7 @@ public class FormService {
             case "date", "datetime" -> value instanceof String;
             case "select" -> value instanceof String || value instanceof Number;
             case "table" -> value instanceof List || value instanceof Map;
+            case "file" -> value instanceof List || value instanceof Number || value instanceof String;
             default -> true;
         };
     }

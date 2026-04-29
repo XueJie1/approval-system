@@ -57,35 +57,76 @@
       :close-on-click-modal="false"
     >
       <div v-if="selectedTask" class="detail-content">
-        <section class="detail-section">
-          <div class="section-label">任务信息</div>
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">任务编号</span>
-              <span class="info-value">{{ selectedTask.taskId }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">流程实例</span>
-              <span class="info-value">{{ selectedTask.processInstanceId }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">当前办理人</span>
-              <span class="info-value">{{ selectedTask.assignee || '待认领' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">任务所有者</span>
-              <span class="info-value">{{ selectedTask.owner || '-' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">创建时间</span>
-              <span class="info-value">{{ formatTime(selectedTask.createTime) }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">委派状态</span>
-              <span class="info-value">{{ delegationStateLabel(selectedTask.delegationState) }}</span>
+        <section v-if="formLoading" class="detail-section">
+          <div class="form-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>加载表单数据...</span>
+          </div>
+        </section>
+
+        <section v-if="formDetail" class="detail-section form-data-section">
+          <div class="section-label">表单信息</div>
+          <div class="form-fields">
+            <div v-for="field in formDetail.fields" :key="field.fieldKey" class="form-field-row">
+              <span class="form-field-label">{{ field.label || field.fieldKey }}</span>
+              <span v-if="field.fieldType === 'file'" class="form-field-value">
+                <div v-if="getFieldAttachments(field.fieldKey).length > 0" class="attachment-list">
+                  <div
+                    v-for="att in getFieldAttachments(field.fieldKey)"
+                    :key="att.id"
+                    class="attachment-item"
+                  >
+                    <template v-if="isImageAttachment(att)">
+                      <el-button
+                        link
+                        type="primary"
+                        class="attachment-link"
+                        @click="previewImage(att)"
+                      >
+                        <el-icon><View /></el-icon>
+                        {{ att.originalName }}
+                      </el-button>
+                      <el-tag size="small" type="info">图片</el-tag>
+                    </template>
+                    <template v-else>
+                      <el-icon><Document /></el-icon>
+                      <span class="attachment-name">{{ att.originalName }}</span>
+                      <el-button
+                        class="attachment-download-btn"
+                        @click="downloadAttachment(att)"
+                      >
+                        <el-icon><Download /></el-icon>
+                        下载
+                      </el-button>
+                    </template>
+                    <span class="attachment-size">{{ formatFileSize(att.fileSize) }}</span>
+                  </div>
+                </div>
+                <span v-else class="form-field-empty">-</span>
+              </span>
+              <span v-else class="form-field-value">{{ formatFieldValue(field, formDetail.data[field.fieldKey]) }}</span>
             </div>
           </div>
         </section>
+
+        <el-collapse v-if="!formLoading">
+          <el-collapse-item title="审批与任务信息" name="task-info">
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">当前办理人</span>
+                <span class="info-value">{{ selectedTask.assignee || '待认领' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">创建时间</span>
+                <span class="info-value">{{ formatTime(selectedTask.createTime) }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">委派状态</span>
+                <span class="info-value">{{ delegationStateLabel(selectedTask.delegationState) }}</span>
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
 
         <section class="detail-section">
           <div class="section-label">审批操作</div>
@@ -309,6 +350,12 @@
         <el-button @click="detailDrawer.open = false">关闭</el-button>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="imagePreviewVisible" title="图片预览" width="80%" :close-on-click-modal="true">
+      <div v-if="imagePreviewUrl" style="display: flex; justify-content: center;">
+        <img :src="imagePreviewUrl" style="max-width: 100%; max-height: 70vh;" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -318,15 +365,20 @@ import { ElMessage } from 'element-plus';
 import {
   Clock,
   Document,
+  Download,
   User,
   Refresh,
   Select,
   CloseBold,
   CircleCheck,
   CircleClose,
-  Loading
+  Loading,
+  View
 } from '@element-plus/icons-vue';
-import type { AiSuggestion, TaskInfo } from '../types';
+import type { AiSuggestion, BizRequest, FormAttachment, TaskInfo } from '../types';
+import type { FormInstanceData } from '../api/forms';
+import { getFormInstanceData, fetchAttachmentPreviewBlob, fetchAttachmentBlob, downloadAttachmentBlob } from '../api/forms';
+import { getRequestByProcessInstance } from '../api/requests';
 import { useAuthStore } from '../stores/auth';
 import {
   fetchTasks,
@@ -351,6 +403,10 @@ const tasks = ref<TaskInfo[]>([]);
 const selectedTaskId = ref<string>('');
 const selectedTask = ref<TaskInfo | null>(null);
 const currentSuggestion = ref<AiSuggestion | null>(null);
+const formDetail = ref<FormInstanceData | null>(null);
+const formLoading = ref(false);
+const imagePreviewVisible = ref(false);
+const imagePreviewUrl = ref('');
 
 const detailDrawer = reactive({
   open: false
@@ -395,7 +451,82 @@ function selectTask(task: TaskInfo) {
   action.newAssigneeId = '';
   action.targetActivityId = '';
   currentSuggestion.value = null;
+  formDetail.value = null;
   detailDrawer.open = true;
+  loadFormData(task);
+}
+
+async function loadFormData(task: TaskInfo) {
+  if (!task.processInstanceId) return;
+  formLoading.value = true;
+  try {
+    const request: BizRequest = await getRequestByProcessInstance(task.processInstanceId);
+    if (request.formInstanceId) {
+      formDetail.value = await getFormInstanceData(request.formInstanceId);
+    }
+  } catch (e) {
+    console.error('Failed to load form data', e);
+  } finally {
+    formLoading.value = false;
+  }
+}
+
+function getFieldAttachments(fieldKey: string): FormAttachment[] {
+  if (!formDetail.value) return [];
+  return formDetail.value.attachments.filter(a => a.fieldKey === fieldKey);
+}
+
+function isImageAttachment(att: FormAttachment): boolean {
+  return att.contentType?.startsWith('image/') ?? false;
+}
+
+async function previewImage(att: FormAttachment) {
+  try {
+    imagePreviewUrl.value = await fetchAttachmentPreviewBlob(att.id);
+    imagePreviewVisible.value = true;
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('加载图片失败');
+  }
+}
+
+async function downloadAttachment(att: FormAttachment) {
+  try {
+    const { blob } = await fetchAttachmentBlob(att.id);
+    downloadAttachmentBlob(blob, att.originalName);
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('下载文件失败');
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatFieldValue(field: { fieldType: string; optionsJson?: string }, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (field.fieldType === 'select' && field.optionsJson) {
+    try {
+      const options = JSON.parse(field.optionsJson) as Array<string | { label?: string; value?: string | number }>;
+      const match = options.find((opt: any) => {
+        const optValue = typeof opt === 'object' ? (opt.value ?? opt.label) : opt;
+        return String(optValue) === String(value);
+      });
+      if (match) {
+        if (typeof match === 'string') return match;
+        return match.label ?? String(match.value ?? value);
+      }
+    } catch {}
+  }
+  if (field.fieldType === 'table' || field.fieldType === 'file') {
+    if (Array.isArray(value)) return `[${value.length} 项]`;
+    return String(value);
+  }
+  if (field.fieldType === 'number') return String(value);
+  return String(value);
 }
 
 function formatTime(time?: string | Date) {
@@ -895,6 +1026,86 @@ async function askAi() {
 .ai-follow-up {
   display: flex;
   gap: 8px;
+}
+
+.form-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: #64748b;
+}
+
+.form-data-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.form-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.form-field-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.form-field-label {
+  font-size: 13px;
+  color: #64748b;
+  padding-top: 2px;
+}
+
+.form-field-value {
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.form-field-empty {
+  color: #94a3b8;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 6px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.attachment-link {
+  text-decoration: none;
+}
+
+.attachment-name {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.attachment-download-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.attachment-size {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {

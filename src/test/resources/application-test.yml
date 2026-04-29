@@ -13,6 +13,10 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
     open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
 
 flowable:
   database-schema-update: true
@@ -21,6 +25,11 @@ flowable:
   rest:
     api:
       enabled: true
+
+app:
+  upload:
+    path: ${UPLOAD_PATH:./target/test-uploads}
+    allowed-extensions: pdf,docx,xlsx,pptx,png,jpg,jpeg
 
 security:
   jwt:
