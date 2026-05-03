@@ -93,6 +93,35 @@ public class MockLlmClient implements LlmClient {
     }
 
     @Override
+    public ChatResult chat(ChatRequest request) {
+        if (request.getMessage() == null || request.getMessage().isBlank()) {
+            ChatResult result = new ChatResult();
+            result.setReply("请问有什么可以帮助您的？");
+            result.setModel(mockModel);
+            return result;
+        }
+        String message = request.getMessage().toLowerCase(Locale.ROOT).trim();
+        String reply;
+        if (message.contains("审批") || message.contains("approval")) {
+            reply = "审批流程分为单人审批、会签和或签三种模式。单人审批只需一人同意，会签需要所有人同意，或签只需一人同意即可。您可以在发起申请时选择审批模式。";
+        } else if (message.contains("表单") || message.contains("form") || message.contains("字段")) {
+            reply = "表单由管理员在后台配置，支持文本、数字、日期、下拉选择和附件等字段类型。发起申请时填写表单数据，审批人可查看表单内容。";
+        } else if (message.contains("委派") || message.contains("delegate")) {
+            reply = "任务委派是将任务临时交给他人处理，处理完成后会返回给原委派人确认。在待办任务详情中点击「委派给他人」即可操作。";
+        } else if (message.contains("回退") || message.contains("退回") || message.contains("return")) {
+            reply = "回退操作可以将任务退回到上一个环节、退回到发起人，或者指定退回到某个节点。回退后需要重新处理该环节。";
+        } else if (message.contains("你好") || message.contains("hello") || message.contains("hi")) {
+            reply = "您好！我是智能审批系统的 AI 助手，可以帮您解答关于审批流程、表单填写、任务处理等方面的问题。请问有什么需要帮助的？";
+        } else {
+            reply = "好的，我理解您的问题。作为审批系统助手，我可以帮您了解审批流程、解释表单字段、说明任务操作方法等。请您更具体地描述遇到的问题，我会尽力解答。";
+        }
+        ChatResult result = new ChatResult();
+        result.setReply(reply);
+        result.setModel(mockModel);
+        return result;
+    }
+
+    @Override
     public FormCommandResult parseFormCommand(FormCommandParseRequest request) {
         throw new UnsupportedOperationException("MockLlmClient does not support form command parsing");
     }

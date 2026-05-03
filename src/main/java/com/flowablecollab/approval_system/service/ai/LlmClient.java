@@ -13,6 +13,8 @@ public interface LlmClient {
 
     FormCommandResult parseFormCommand(FormCommandParseRequest request);
 
+    ChatResult chat(ChatRequest request);
+
     @Data
     class SuggestionRequest {
         private String taskId;
@@ -104,6 +106,18 @@ public interface LlmClient {
         private Map<String, Object> formData;
         private Double confidence;
         private String reasoning;
+        private String model;
+    }
+
+    @Data
+    class ChatRequest {
+        private String message;
+        private List<ConversationTurn> history;
+    }
+
+    @Data
+    class ChatResult {
+        private String reply;
         private String model;
     }
 }

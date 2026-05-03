@@ -12,6 +12,7 @@ import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -217,9 +218,19 @@ public class WorkflowService {
         variables.put("rejectCount", 0);
         variables.put("countersignResult", "PENDING");
 
-        ProcessInstance processInstance = request.getFlowableProcessDefinitionId() == null
-                ? runtimeService.startProcessInstanceByKey(processKey, businessKey, variables)
-                : runtimeService.startProcessInstanceById(request.getFlowableProcessDefinitionId(), businessKey, variables);
+        ProcessInstance processInstance;
+        if (request.getFlowableProcessDefinitionId() == null) {
+            processInstance = runtimeService.startProcessInstanceByKey(processKey, businessKey, variables);
+        } else {
+            try {
+                processInstance = runtimeService.startProcessInstanceById(
+                        request.getFlowableProcessDefinitionId(), businessKey, variables);
+            } catch (FlowableObjectNotFoundException e) {
+                log.warn("Flowable process definition {} not found, falling back to start by key {}",
+                        request.getFlowableProcessDefinitionId(), processKey);
+                processInstance = runtimeService.startProcessInstanceByKey(processKey, businessKey, variables);
+            }
+        }
 
         BizRequest bizRequest = existingRequest == null ? new BizRequest() : existingRequest;
         bizRequest.setBusinessKey(businessKey);

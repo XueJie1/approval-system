@@ -317,10 +317,32 @@
                 </ul>
               </div>
 
+              <div v-if="currentSuggestion.anomalies?.length" class="ai-anomalies">
+                <div class="anomaly-label">异常检测</div>
+                <ul>
+                  <li v-for="(a, i) in currentSuggestion.anomalies" :key="i">{{ a }}</li>
+                </ul>
+              </div>
+
+              <div v-if="currentSuggestion.supplementaryInfo?.length" class="ai-supplementary">
+                <div class="supplementary-label">补充信息</div>
+                <ul>
+                  <li v-for="(info, i) in currentSuggestion.supplementaryInfo" :key="i">{{ info }}</li>
+                </ul>
+              </div>
+
               <div v-if="currentSuggestion.approvalComment" class="ai-comment">
                 <div class="comment-label">建议审批意见</div>
                 <div class="comment-text">{{ currentSuggestion.approvalComment }}</div>
                 <el-button size="small" @click="adoptAiComment">采用此意见</el-button>
+              </div>
+
+              <div v-if="suggestedUpdatesEntries.length" class="ai-suggested-updates">
+                <div class="updates-label">建议补充字段</div>
+                <div v-for="[key, value] in suggestedUpdatesEntries" :key="key" class="update-item">
+                  <span class="update-key">{{ key }}</span>
+                  <span class="update-value">{{ formatSuggestedValue(value) }}</span>
+                </div>
               </div>
 
               <div v-if="currentSuggestion.conversation?.length" class="ai-history">
@@ -360,7 +382,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, provide, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   Clock,
@@ -380,6 +402,7 @@ import type { FormInstanceData } from '../api/forms';
 import { getFormInstanceData, fetchAttachmentPreviewBlob, fetchAttachmentBlob, downloadAttachmentBlob } from '../api/forms';
 import { getRequestByProcessInstance } from '../api/requests';
 import { useAuthStore } from '../stores/auth';
+import { AI_ASSISTANT_KEY, type ApprovalAiContext } from '../components/ai/types';
 import {
   fetchTasks,
   claimTask as claimTaskApi,
@@ -424,6 +447,25 @@ const aiPanel = reactive({
   loading: false,
   asking: false,
   question: ''
+});
+
+const suggestedUpdatesEntries = computed(() => {
+  const updates = currentSuggestion.value?.suggestedFormUpdates;
+  if (!updates || typeof updates !== 'object') return [];
+  return Object.entries(updates).filter(([, v]) => v != null);
+});
+
+const aiTaskId = computed(() => selectedTask.value?.taskId ?? null);
+
+provide<ApprovalAiContext>(AI_ASSISTANT_KEY, {
+  mode: 'approval',
+  taskId: aiTaskId,
+  onAdopt(comment: string, decision: string) {
+    action.comment = comment;
+    if (decision) {
+      action.approvalResult = decision;
+    }
+  }
 });
 
 onMounted(() => {
@@ -526,6 +568,13 @@ function formatFieldValue(field: { fieldType: string; optionsJson?: string }, va
     return String(value);
   }
   if (field.fieldType === 'number') return String(value);
+  return String(value);
+}
+
+function formatSuggestedValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 
@@ -978,11 +1027,74 @@ async function askAi() {
 }
 
 .warning-label,
+.anomaly-label,
+.supplementary-label,
 .comment-label,
-.history-label {
+.history-label,
+.updates-label {
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+.ai-anomalies,
+.ai-supplementary,
+.ai-suggested-updates {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.anomaly-label {
+  color: #d97706;
+}
+
+.supplementary-label {
+  color: #2563eb;
+}
+
+.updates-label {
+  color: #7c3aed;
+}
+
+.ai-anomalies ul,
+.ai-supplementary ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.ai-anomalies li {
+  color: #d97706;
+  margin: 4px 0;
+}
+
+.ai-supplementary li {
+  color: #475569;
+  margin: 4px 0;
+}
+
+.update-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
+  margin-bottom: 6px;
+}
+
+.update-item:last-child {
+  margin-bottom: 0;
+}
+
+.update-key {
+  font-weight: 500;
+  color: #7c3aed;
+  white-space: nowrap;
+}
+
+.update-value {
+  color: #475569;
 }
 
 .ai-warnings ul {

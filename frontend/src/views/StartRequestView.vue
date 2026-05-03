@@ -243,7 +243,7 @@
 
 <script setup lang="ts">
 import type { AxiosError } from 'axios';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, provide, reactive, ref, toRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { InfoFilled } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
@@ -255,6 +255,7 @@ import { listRequestTemplates, previewRequestTemplateApproval } from '../api/req
 import { saveDraft as saveDraftApi, startRequest, submitDraft as submitDraftApi } from '../api/workflow';
 import CountersignUserPickerDialog from '../components/requests/CountersignUserPickerDialog.vue';
 import RequestDynamicFields from '../components/requests/RequestDynamicFields.vue';
+import { AI_ASSISTANT_KEY, type FormCommandAiContext } from '../components/ai/types';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -762,6 +763,25 @@ function resetForm() {
 function goRequests() {
   router.push('/user/requests');
 }
+
+provide<FormCommandAiContext>(AI_ASSISTANT_KEY, {
+  mode: 'form-command',
+  templateKey: toRef(form, 'templateKey'),
+  formKey: toRef(form, 'formKey'),
+  formVersionId: loadedVersionId,
+  onFillFormData(data: Record<string, unknown>) {
+    dynamicData.value = { ...dynamicData.value, ...data };
+    loadApprovalPreview();
+  },
+  onTemplateChange(templateKey: string) {
+    form.templateKey = templateKey;
+    applyTemplate();
+  },
+  onStartProcess() {
+    resetForm();
+    goRequests();
+  }
+});
 
 onMounted(() => {
   loadRequestTemplates();

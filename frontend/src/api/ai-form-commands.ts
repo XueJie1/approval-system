@@ -1,6 +1,24 @@
 import type { FormAiParseResult } from "../types";
 import { http } from "./http";
 
+export interface ChatTurn {
+  question: string;
+  answer: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  model: string;
+}
+
+export async function aiChat(payload: {
+  message: string;
+  history?: ChatTurn[];
+}) {
+  const { data } = await http.post<ChatResponse>("/ai/chat", payload);
+  return data;
+}
+
 export async function parseFormCommand(payload: {
   command: string;
   requestTemplateKey?: string;

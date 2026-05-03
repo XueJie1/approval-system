@@ -90,7 +90,7 @@ public class OpenAiLlmClient implements LlmClient {
 
     @Override
     public Suggestion suggestApproval(SuggestionRequest request) {
-        ChatResult chatResult = executeChat(List.of(
+        OpenAiChatResult chatResult = executeChat(List.of(
                 Map.of("role", "system", "content", buildSuggestionSystemPrompt()),
                 Map.of("role", "user", "content", buildSuggestionUserPrompt(request))
         ));
@@ -113,7 +113,7 @@ public class OpenAiLlmClient implements LlmClient {
 
     @Override
     public FormCommandResult parseFormCommand(FormCommandParseRequest request) {
-        ChatResult chatResult = executeChat(List.of(
+        OpenAiChatResult chatResult = executeChat(List.of(
                 Map.of("role", "system", "content", buildFormCommandSystemPrompt()),
                 Map.of("role", "user", "content", buildFormCommandUserPrompt(request))
         ));
@@ -133,8 +133,32 @@ public class OpenAiLlmClient implements LlmClient {
     }
 
     @Override
+    public ChatResult chat(ChatRequest request) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content",
+                "你是一个智能审批系统的 AI 助手，可以回答用户关于审批流程、表单填写、系统使用等方面的问题。请用中文回答，简洁友好。"));
+        if (request.getHistory() != null) {
+            for (ConversationTurn turn : request.getHistory()) {
+                if (turn.getQuestion() != null && !turn.getQuestion().isBlank()) {
+                    messages.add(Map.of("role", "user", "content", turn.getQuestion()));
+                }
+                if (turn.getAnswer() != null && !turn.getAnswer().isBlank()) {
+                    messages.add(Map.of("role", "assistant", "content", turn.getAnswer()));
+                }
+            }
+        }
+        messages.add(Map.of("role", "user", "content", request.getMessage()));
+
+        OpenAiChatResult chatResult = executeChat(messages);
+        ChatResult result = new ChatResult();
+        result.setReply(chatResult.content() != null ? chatResult.content().trim() : "");
+        result.setModel(chatResult.model());
+        return result;
+    }
+
+    @Override
     public FollowUpAnswer answerFollowUp(FollowUpRequest request) {
-        ChatResult chatResult = executeChat(List.of(
+        OpenAiChatResult chatResult = executeChat(List.of(
                 Map.of("role", "system", "content", buildFollowUpSystemPrompt()),
                 Map.of("role", "user", "content", buildFollowUpUserPrompt(request))
         ));
@@ -151,7 +175,7 @@ public class OpenAiLlmClient implements LlmClient {
         return followUpAnswer;
     }
 
-    private ChatResult executeChat(List<Map<String, Object>> messages) {
+    private OpenAiChatResult executeChat(List<Map<String, Object>> messages) {
         AiProviderSettingsService.OpenAiRuntimeSettings runtimeSettings = resolveRuntimeSettings();
         String resolvedApiKey = runtimeSettings.apiKey();
         String resolvedModel = runtimeSettings.model();
@@ -179,11 +203,11 @@ public class OpenAiLlmClient implements LlmClient {
         return parseChatResult(response.getBody(), resolvedModel);
     }
 
-    private ChatResult parseChatResult(String rawBody, String defaultModel) {
+    private OpenAiChatResult parseChatResult(String rawBody, String defaultModel) {
         try {
             JsonNode root = objectMapper.readTree(rawBody);
             String content = extractAssistantContent(root);
-            return new ChatResult(content, root.path("model").asText(defaultModel));
+            return new OpenAiChatResult(content, root.path("model").asText(defaultModel));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to parse OpenAI response", ex);
         }
@@ -288,12 +312,15 @@ public class OpenAiLlmClient implements LlmClient {
 
                 Rules:
                 1. Extract the value for each field from the command if present.
-                2. For date/datetime fields: normalize to "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS" format.
-                3. For number fields: return the numeric value (not the unit text). If a number is written in Chinese (e.g. 两天), convert to digits (2).
-                4. For select fields: match the command against available options (label or value), return the matched option value.
-                5. For string fields: extract the relevant phrase, remove surrounding noise.
-                6. If a field cannot be found in the command, do NOT include it in formData.
-                7. Assign a confidence score (0.0 to 1.0) reflecting how well the command matches the fields.
+                2. For date fields (fieldType=date): always output the value as a string in ISO format "YYYY-MM-DD". \
+                For example, "2026-06-01" for June 1, 2026. Convert Chinese dates like "2026年6月1日" to "2026-06-01".
+                3. For datetime fields (fieldType=datetime): always output the value as a string in ISO format \
+                "YYYY-MM-DD HH:MM:SS". For example, "2026-06-01 09:00:00".
+                4. For number fields: return the numeric value (not the unit text). If a number is written in Chinese (e.g. 两天), convert to digits (2).
+                5. For select fields: match the command against available options (label or value), return the matched option value.
+                6. For string fields: extract the relevant phrase, remove surrounding noise.
+                7. If a field cannot be found in the command, do NOT include it in formData.
+                8. Assign a confidence score (0.0 to 1.0) reflecting how well the command matches the fields.
 
                 Return strict JSON only with keys: formData (object of fieldKey->value), confidence (number), reasoning (brief string).
                 """;
@@ -380,6 +407,6 @@ public class OpenAiLlmClient implements LlmClient {
         return aiProviderSettingsService.resolveOpenAiRuntimeSettings(baseUrl, apiKey, fallbackModel);
     }
 
-    private record ChatResult(String content, String model) {
+    private record OpenAiChatResult(String content, String model) {
     }
 }
