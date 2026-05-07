@@ -1,0 +1,13 @@
+
+> approval-system-frontend@0.1.0 dev
+> vite --host 0.0.0.0 --port 5173 --strictPort
+
+
+  VITE v7.3.1  ready in 373 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.31.51:5173/
+  ➜  Network: http://100.66.199.43:5173/
+  ➜  Network: http://10.67.66.4:5173/
+  ➜  Network: http://172.17.0.1:5173/
+  ➜  Network: http://198.18.0.1:5173/

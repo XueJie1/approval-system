@@ -1,0 +1,6 @@
+{
+  "last_turn_at": "2026-04-22T12:10:54.799Z",
+  "last_progress_at": "2026-04-22T12:10:54.799Z",
+  "turn_count": 5,
+  "last_agent_output": "已完成，两项都已落地到 `docs` 目录。\n\n### 新增文件\n\n1. **部署指南**\n   - `docs/deployment-guide.md`\n\n2. **可迁移 SQL 脚本**\n   "
+}
