@@ -1,10 +1,17 @@
 <template>
   <div class="ai-floating-assistant" :class="{ open: panelOpen }">
     <transition name="panel-fade">
-      <div v-if="panelOpen" class="ai-panel">
+      <div v-if="panelOpen" class="ai-panel" :class="{ 'sidebar-open': sidebarVisible }">
         <div class="ai-panel-header">
           <div class="ai-panel-title">
-            <el-icon><ChatDotRound /></el-icon>
+            <el-button
+              text
+              size="small"
+              class="sidebar-toggle-btn"
+              @click="sidebarVisible = !sidebarVisible"
+            >
+              <el-icon><Fold v-if="sidebarVisible" /><ChatDotSquare v-else /></el-icon>
+            </el-button>
             <span>AI 助手</span>
           </div>
           <div class="ai-panel-actions">
@@ -27,9 +34,9 @@
             <el-button
               :type="activeTab === 'chat' ? 'primary' : 'default'"
               size="small"
-              @click="activeTab = 'chat'"
+              @click="handleNewChat"
             >
-              聊天
+              新建聊天
             </el-button>
             <el-button text size="small" @click="panelOpen = false">
               <el-icon><Close /></el-icon>
@@ -37,11 +44,42 @@
           </div>
         </div>
 
+        <!-- Sidebar -->
+        <transition name="sidebar-slide">
+          <div v-if="sidebarVisible && activeTab === 'chat'" class="ai-sidebar">
+            <div class="sidebar-header">
+              <span>聊天记录</span>
+            </div>
+            <div class="sidebar-list">
+              <div
+                v-for="conv in conversations"
+                :key="conv.id"
+                class="sidebar-item"
+                :class="{ active: conv.id === activeConversationId }"
+                @click="switchConversation(conv.id)"
+              >
+                <div class="sidebar-item-title">{{ conv.title }}</div>
+                <div class="sidebar-item-time">{{ conv.createdAt }}</div>
+                <el-button
+                  text
+                  size="small"
+                  class="sidebar-item-delete"
+                  @click.stop="deleteConversation(conv.id)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+              <div v-if="conversations.length === 0" class="sidebar-empty">
+                暂无聊天记录
+              </div>
+            </div>
+          </div>
+        </transition>
+
         <div class="ai-panel-body">
           <!-- Approval mode -->
           <template v-if="ctx?.mode === 'approval' && activeTab === 'approval'">
-            <div v-if="!ctx.taskId.value" class="ai-empty-state">
-              <el-icon :size="32"><InfoFilled /></el-icon>
+            <div v-if="!ctx.taskId.value" class="ai-idle">
               <p>请在任务列表中选中一个待办任务，即可使用 AI 审批建议</p>
             </div>
 
@@ -171,10 +209,6 @@
           <!-- Chat mode -->
           <template v-if="activeTab === 'chat'">
             <div class="ai-chat-messages" ref="chatMessagesEl">
-              <div v-if="chatState.messages.length === 0" class="ai-empty-state">
-                <el-icon :size="32"><ChatDotSquare /></el-icon>
-                <p>你好！我是 AI 助手，可以回答关于审批流程、表单填写、系统使用等方面的问题</p>
-              </div>
               <div v-for="(msg, i) in chatState.messages" :key="i" class="chat-bubble-row" :class="msg.role">
                 <div class="chat-bubble">
                   <div class="bubble-text">{{ msg.content }}</div>
@@ -202,9 +236,8 @@
           </template>
 
           <!-- No context available -->
-          <template v-if="!ctx">
-            <div class="ai-empty-state">
-              <el-icon :size="32"><ChatDotSquare /></el-icon>
+          <template v-if="!ctx && activeTab !== 'chat'">
+            <div class="ai-idle">
               <p>AI 助手可以帮你审批、填表</p>
               <p class="hint">进入「我的任务」或「发起申请」页面即可使用</p>
             </div>
@@ -223,10 +256,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, reactive, ref } from 'vue';
+import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
 import {
   ChatDotRound, ChatDotSquare, CircleCheck, CircleClose,
-  Close, InfoFilled, Loading
+  Close, Delete, Fold, Loading
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import type { AiSuggestion } from '../../types';
@@ -234,12 +267,50 @@ import { aiSuggestion, aiSuggestionFollowUp } from '../../api/workflow';
 import { aiChat, parseAndStartByFormCommand, parseFormCommand, type ChatTurn } from '../../api/ai-form-commands';
 import { AI_ASSISTANT_KEY } from './types';
 
+const CONVERSATIONS_KEY = 'ai-chat-conversations';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  time: string;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+}
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function loadConversations(): Conversation[] {
+  try {
+    const raw = localStorage.getItem(CONVERSATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(list: Conversation[]) {
+  try {
+    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(list));
+  } catch { /* quota exceeded, silently ignore */ }
+}
+
 const ctx = inject(AI_ASSISTANT_KEY, null);
 
 const panelOpen = ref(false);
 const activeTab = ref<'approval' | 'form-command' | 'chat'>('chat');
+const sidebarVisible = ref(false);
 
 const chatMessagesEl = ref<HTMLElement | null>(null);
+
+const conversations = reactive<Conversation[]>(loadConversations());
+const activeConversationId = ref<string | null>(null);
 
 const suggestionState = reactive({
   loading: false,
@@ -259,16 +330,99 @@ const commandState = reactive({
 const chatState = reactive({
   loading: false,
   input: '',
-  messages: [] as { role: 'user' | 'assistant'; content: string; time: string }[]
+  messages: [] as ChatMessage[]
 });
+
+// persist conversations on change
+watch(
+  () => conversations.map(c => ({ id: c.id, title: c.title, messages: [...c.messages], createdAt: c.createdAt })),
+  (val) => saveConversations(val as Conversation[]),
+  { deep: true }
+);
 
 function now() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
+function dateLabel() {
+  const d = new Date();
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function syncCurrentConversation() {
+  if (!activeConversationId.value) return;
+  const conv = conversations.find(c => c.id === activeConversationId.value);
+  if (conv) {
+    conv.messages = [...chatState.messages];
+    if (conv.messages.length > 0) {
+      const first = conv.messages.find(m => m.role === 'user');
+      if (first && conv.title === '新对话') {
+        conv.title = first.content.slice(0, 40);
+      }
+    }
+  }
+}
+
+function handleNewChat() {
+  if (activeTab.value !== 'chat') {
+    activeTab.value = 'chat';
+  }
+  // save current conversation first
+  syncCurrentConversation();
+  // create new
+  const conv: Conversation = {
+    id: generateId(),
+    title: '新对话',
+    messages: [],
+    createdAt: dateLabel()
+  };
+  conversations.unshift(conv);
+  activeConversationId.value = conv.id;
+  chatState.messages = [];
+  chatState.input = '';
+}
+
+function switchConversation(id: string) {
+  syncCurrentConversation();
+  const conv = conversations.find(c => c.id === id);
+  if (conv) {
+    activeConversationId.value = conv.id;
+    chatState.messages = [...conv.messages];
+  }
+}
+
+function deleteConversation(id: string) {
+  const idx = conversations.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  conversations.splice(idx, 1);
+  if (activeConversationId.value === id) {
+    if (conversations.length > 0) {
+      const next = conversations[Math.min(idx, conversations.length - 1)];
+      activeConversationId.value = next.id;
+      chatState.messages = [...next.messages];
+    } else {
+      activeConversationId.value = null;
+      chatState.messages = [];
+    }
+  }
+}
+
 async function handleChatSend() {
   const text = chatState.input.trim();
   if (!text || chatState.loading) return;
+
+  // auto-create conversation if none active
+  if (!activeConversationId.value) {
+    const conv: Conversation = {
+      id: generateId(),
+      title: text.slice(0, 40),
+      messages: [],
+      createdAt: dateLabel()
+    };
+    conversations.unshift(conv);
+    activeConversationId.value = conv.id;
+  }
+
   chatState.messages.push({ role: 'user', content: text, time: now() });
   chatState.input = '';
   chatState.loading = true;
@@ -290,6 +444,7 @@ async function handleChatSend() {
     chatState.messages.push({ role: 'assistant', content: '抱歉，AI 服务暂时不可用，请稍后再试。', time: now() });
   } finally {
     chatState.loading = false;
+    syncCurrentConversation();
     await nextTick();
     scrollChatToBottom();
   }
@@ -314,6 +469,11 @@ function togglePanel() {
       activeTab.value = ctx.mode;
     } else {
       activeTab.value = 'chat';
+    }
+    // ensure a conversation is active when opening chat
+    if (activeTab.value === 'chat' && !activeConversationId.value && conversations.length > 0) {
+      activeConversationId.value = conversations[0].id;
+      chatState.messages = [...conversations[0].messages];
     }
   }
 }
@@ -524,8 +684,8 @@ async function handleParseAndStart() {
   position: absolute;
   right: 0;
   bottom: 72px;
-  width: 420px;
-  max-height: 560px;
+  width: 500px;
+  height: 620px;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
@@ -541,21 +701,124 @@ async function handleParseAndStart() {
   padding: 12px 16px;
   border-bottom: 1px solid #f1f5f9;
   background: #fafbfc;
+  flex-shrink: 0;
 }
 
 .ai-panel-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   font-weight: 600;
   font-size: 15px;
   color: #1e293b;
+}
+
+.sidebar-toggle-btn {
+  margin-right: 4px;
 }
 
 .ai-panel-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Sidebar */
+.ai-sidebar {
+  position: absolute;
+  left: 0;
+  top: 49px;
+  bottom: 0;
+  width: 280px;
+  background: #fafbfc;
+  border-right: 1px solid #e5e7eb;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.sidebar-item {
+  position: relative;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+}
+
+.sidebar-item:hover {
+  background: #eef2ff;
+}
+
+.sidebar-item.active {
+  background: #e0e7ff;
+}
+
+.sidebar-item-title {
+  font-size: 13px;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 24px;
+}
+
+.sidebar-item-time {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.sidebar-item-delete {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.sidebar-item:hover .sidebar-item-delete {
+  opacity: 1;
+}
+
+.sidebar-empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* sidebar slide transition */
+.sidebar-slide-enter-active,
+.sidebar-slide-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.sidebar-slide-enter-from {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.sidebar-slide-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
 }
 
 .ai-panel-body {
@@ -567,24 +830,21 @@ async function handleParseAndStart() {
   gap: 12px;
 }
 
-.ai-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 32px 16px;
+.ai-idle {
   text-align: center;
   color: #94a3b8;
+  font-size: 13px;
+  padding: 16px 0;
 }
 
-.ai-empty-state p {
+.ai-idle p {
   margin: 0;
-  font-size: 14px;
 }
 
-.ai-empty-state .hint {
+.ai-idle .hint {
   font-size: 12px;
   color: #b0bec5;
+  margin-top: 4px;
 }
 
 .ai-loading {
@@ -595,17 +855,6 @@ async function handleParseAndStart() {
   padding: 32px;
   color: #64748b;
   font-size: 14px;
-}
-
-.ai-idle {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-  padding: 16px 0;
-}
-
-.ai-idle p {
-  margin: 0;
 }
 
 .ai-suggestion-content {
@@ -776,6 +1025,7 @@ async function handleParseAndStart() {
   transform: translateY(12px) scale(0.96);
 }
 
+/* Chat area */
 .ai-chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -871,8 +1121,13 @@ async function handleParseAndStart() {
     bottom: 0;
     left: 0;
     width: auto;
+    height: auto;
     max-height: 75vh;
     border-radius: 12px 12px 0 0;
+  }
+
+  .ai-sidebar {
+    top: 49px;
   }
 }
 </style>

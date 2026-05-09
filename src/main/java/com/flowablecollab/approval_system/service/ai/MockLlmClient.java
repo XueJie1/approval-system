@@ -4,11 +4,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 @ConditionalOnProperty(name = "ai.llm.provider", havingValue = "mock", matchIfMissing = true)
@@ -16,6 +21,28 @@ public class MockLlmClient implements LlmClient {
 
     @Value("${ai.llm.mock-model:mock-approval-advisor-v2}")
     private String mockModel;
+
+    private static final String HEURISTIC_MODEL = "heuristic-form-parser-v2";
+    private static final Pattern FIRST_NUMBER_PATTERN = Pattern.compile("-?\\d+(?:\\.\\d+)?");
+    private static final Pattern NUMBER_WITH_DAY_UNIT_PATTERN = Pattern.compile(
+            "(-?\\d+(?:\\.\\d+)?)\\s*(?:天|day|days)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CHINESE_DAY_PATTERN = Pattern.compile("([零〇一二两三四五六七八九十百半]+)\\s*天");
+    private static final Pattern AMOUNT_BY_KEYWORD_PATTERN = Pattern.compile(
+            "(?:金额|预算|费用|报销|总计|price|cost|amount|budget)\\D{0,8}([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern CURRENCY_PREFIX_PATTERN = Pattern.compile("[¥￥$]\\s*([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)");
+    private static final Pattern CURRENCY_SUFFIX_PATTERN = Pattern.compile(
+            "([+-]?\\d+(?:,\\d{3})*(?:\\.\\d+)?)\\s*(?:元|块|人民币|rmb|cny)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DATE_TOKEN_PATTERN = Pattern.compile(
+            "\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}(?:[ T]\\d{1,2}:\\d{2}(?::\\d{2})?)?"
+                    + "|\\d{4}年\\d{1,2}月\\d{1,2}日?(?:\\s*\\d{1,2}(?:[:：时点]\\d{1,2})?(?:[:：]\\d{1,2})?)?"
+    );
+    private static final Pattern ISO_DATE_TIME_PATTERN = Pattern.compile(
+            "(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})(?:[ T](\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?");
+    private static final Pattern CHINESE_DATE_TIME_PATTERN = Pattern.compile(
+            "(\\d{4})年(\\d{1,2})月(\\d{1,2})日?(?:\\s*(\\d{1,2})(?:[:：时点](\\d{1,2}))?(?:[:：](\\d{1,2}))?)?");
+    private static final Pattern CHINESE_DATE_PATTERN = Pattern.compile("\\d{4}年\\d{1,2}月\\d{1,2}日?");
+    private static final Pattern CHINESE_YEAR_MONTH_PATTERN = Pattern.compile("\\d{4}年\\d{1,2}月");
 
     @Override
     public Suggestion suggestApproval(SuggestionRequest request) {
@@ -123,7 +150,39 @@ public class MockLlmClient implements LlmClient {
 
     @Override
     public FormCommandResult parseFormCommand(FormCommandParseRequest request) {
-        throw new UnsupportedOperationException("MockLlmClient does not support form command parsing");
+        if (request.getCommand() == null || request.getCommand().isBlank()) {
+            throw new IllegalArgumentException("command is required");
+        }
+        if (request.getFields() == null || request.getFields().isEmpty()) {
+            throw new IllegalArgumentException("fields are required for parsing");
+        }
+
+        String command = request.getCommand().trim();
+        List<FieldDefinition> fields = request.getFields();
+
+        List<String> dateTokens = findDateTokens(command);
+        Map<String, Object> formData = new LinkedHashMap<>();
+
+        for (FieldDefinition field : fields) {
+            if (field.getFieldKey() == null || field.getFieldKey().isBlank()) {
+                continue;
+            }
+            Object parsed = parseFieldValue(command, field, dateTokens);
+            if (parsed != null) {
+                formData.put(field.getFieldKey(), parsed);
+            }
+        }
+
+        int filledCount = formData.size();
+        double confidence = (double) filledCount / Math.max(1, fields.size());
+
+        FormCommandResult result = new FormCommandResult();
+        result.setFormData(formData);
+        result.setConfidence(Math.min(confidence, 1.0));
+        result.setReasoning("Heuristic parser extracted " + filledCount + " of " + fields.size()
+                + " fields from natural language command.");
+        result.setModel(HEURISTIC_MODEL);
+        return result;
     }
 
     @Override
@@ -257,5 +316,333 @@ public class MockLlmClient implements LlmClient {
 
     private String formatMoney(Double value) {
         return value == null ? "0.00" : String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    // ── heuristic form-command parsing ──
+
+    private Object parseFieldValue(String command, FieldDefinition field, List<String> dateTokens) {
+        String type = field.getFieldType() == null ? "string" : field.getFieldType().trim().toLowerCase(Locale.ROOT);
+        String explicit = extractByAliases(command, aliases(field));
+
+        return switch (type) {
+            case "number" -> parseNumberValue(field, command, explicit, dateTokens);
+            case "date", "datetime" -> parseTemporalValue(field, command, explicit, dateTokens, "datetime".equals(type));
+            case "select" -> parseSelectValue(field, command, explicit);
+            case "table" -> normalizeString(explicit);
+            case "file" -> null; // file fields not extractable from text
+            default -> normalizeString(explicit);
+        };
+    }
+
+    private Object parseNumberValue(FieldDefinition field, String command, String explicit, List<String> dateTokens) {
+        Double explicitNumber = parseFirstNumber(explicit);
+        if (explicitNumber != null) {
+            return explicitNumber;
+        }
+        String indicator = (field.getFieldKey() + " " + safeStr(field.getLabel())).toLowerCase(Locale.ROOT);
+        if (isDurationField(indicator)) {
+            return parseDurationNumber(command, dateTokens);
+        }
+        if (isAmountField(indicator)) {
+            return parseAmountNumber(command);
+        }
+        return parseFirstNumber(stripDateTokens(command, dateTokens));
+    }
+
+    private Object parseTemporalValue(FieldDefinition field, String command, String explicit,
+                                       List<String> dateTokens, boolean withTime) {
+        String candidate = normalizeDateToken(explicit, withTime);
+        if (candidate != null) {
+            return candidate;
+        }
+        String indicator = (field.getFieldKey() + " " + safeStr(field.getLabel())).toLowerCase(Locale.ROOT);
+        if (dateTokens.isEmpty()) {
+            return null;
+        }
+        if (indicator.contains("start") || indicator.contains("开始")) {
+            return normalizeDateToken(dateTokens.get(0), withTime);
+        }
+        if (indicator.contains("end") || indicator.contains("结束")) {
+            return normalizeDateToken(dateTokens.get(dateTokens.size() - 1), withTime);
+        }
+        return normalizeDateToken(dateTokens.get(0), withTime);
+    }
+
+    private Object parseSelectValue(FieldDefinition field, String command, String explicit) {
+        List<String> options = field.getOptions();
+        if (options != null && !options.isEmpty()) {
+            String source = (command + " " + safeStr(explicit)).toLowerCase(Locale.ROOT);
+            for (String option : options) {
+                if (option != null && source.contains(option.toLowerCase(Locale.ROOT))) {
+                    return option;
+                }
+            }
+        }
+        return normalizeString(explicit);
+    }
+
+    private String extractByAliases(String command, List<String> aliases) {
+        for (String alias : aliases) {
+            if (alias == null || alias.isBlank()) {
+                continue;
+            }
+            Pattern pattern = Pattern.compile(
+                    Pattern.quote(alias) + "\\s*(?:为|是|:|：)?\\s*([^，,。；;\\n]+)",
+                    Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(command);
+            if (matcher.find()) {
+                return matcher.group(1).trim();
+            }
+        }
+        return null;
+    }
+
+    private List<String> aliases(FieldDefinition field) {
+        List<String> list = new ArrayList<>();
+        if (field.getLabel() != null && !field.getLabel().isBlank()) {
+            list.add(field.getLabel().trim());
+        }
+        if (field.getFieldKey() != null && !field.getFieldKey().isBlank()) {
+            list.add(field.getFieldKey().trim());
+            list.add(field.getFieldKey().replace("_", " ").trim());
+        }
+        return list;
+    }
+
+    // ── number helpers ──
+
+    private Double parseFirstNumber(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        Matcher matcher = FIRST_NUMBER_PATTERN.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(matcher.group());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isDurationField(String indicator) {
+        return indicator.contains("days") || indicator.contains("day")
+                || indicator.contains("duration") || indicator.contains("天") || indicator.contains("时长");
+    }
+
+    private boolean isAmountField(String indicator) {
+        return indicator.contains("amount") || indicator.contains("budget")
+                || indicator.contains("price") || indicator.contains("cost")
+                || indicator.contains("金额") || indicator.contains("费用")
+                || indicator.contains("预算") || indicator.contains("报销");
+    }
+
+    private Double parseDurationNumber(String command, List<String> dateTokens) {
+        Matcher numericDays = NUMBER_WITH_DAY_UNIT_PATTERN.matcher(command);
+        if (numericDays.find()) {
+            return parseFirstNumber(numericDays.group(1));
+        }
+        Matcher chineseDays = CHINESE_DAY_PATTERN.matcher(command);
+        if (chineseDays.find()) {
+            Double chineseNumber = parseChineseNumber(chineseDays.group(1));
+            if (chineseNumber != null) {
+                return chineseNumber;
+            }
+        }
+        return parseDurationFromDateRange(dateTokens);
+    }
+
+    private Double parseAmountNumber(String command) {
+        Double keywordAmount = extractCapturedNumber(command, AMOUNT_BY_KEYWORD_PATTERN);
+        if (keywordAmount != null) return keywordAmount;
+        Double prefixedAmount = extractCapturedNumber(command, CURRENCY_PREFIX_PATTERN);
+        if (prefixedAmount != null) return prefixedAmount;
+        return extractCapturedNumber(command, CURRENCY_SUFFIX_PATTERN);
+    }
+
+    private Double extractCapturedNumber(String text, Pattern pattern) {
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        return parseFirstNumber(matcher.group(1).replace(",", ""));
+    }
+
+    // ── date helpers ──
+
+    private List<String> findDateTokens(String command) {
+        List<String> tokens = new ArrayList<>();
+        Matcher matcher = DATE_TOKEN_PATTERN.matcher(command);
+        while (matcher.find()) {
+            tokens.add(matcher.group());
+        }
+        return tokens;
+    }
+
+    private Double parseDurationFromDateRange(List<String> dateTokens) {
+        if (dateTokens == null || dateTokens.size() < 2) {
+            return null;
+        }
+        LocalDate start = parseDateOnly(dateTokens.get(0));
+        LocalDate end = parseDateOnly(dateTokens.get(dateTokens.size() - 1));
+        if (start == null || end == null || end.isBefore(start)) {
+            return null;
+        }
+        return (double) (end.toEpochDay() - start.toEpochDay() + 1);
+    }
+
+    private LocalDate parseDateOnly(String token) {
+        String normalized = normalizeDateToken(token, false);
+        if (normalized == null) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(normalized);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String stripDateTokens(String text, List<String> dateTokens) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        String cleaned = text;
+        if (dateTokens != null) {
+            for (String token : dateTokens) {
+                if (token != null && !token.isBlank()) {
+                    cleaned = cleaned.replace(token, " ");
+                }
+            }
+        }
+        cleaned = CHINESE_DATE_PATTERN.matcher(cleaned).replaceAll(" ");
+        cleaned = CHINESE_YEAR_MONTH_PATTERN.matcher(cleaned).replaceAll(" ");
+        return cleaned;
+    }
+
+    private String normalizeDateToken(String token, boolean withTime) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        String normalized = tryNormalizeDateToken(token.trim(), withTime, ISO_DATE_TIME_PATTERN);
+        if (normalized != null) return normalized;
+        return tryNormalizeDateToken(token.trim(), withTime, CHINESE_DATE_TIME_PATTERN);
+    }
+
+    private String tryNormalizeDateToken(String token, boolean withTime, Pattern pattern) {
+        Matcher matcher = pattern.matcher(token);
+        if (!matcher.find()) {
+            return null;
+        }
+        Integer year = parseIntegerGroup(matcher, 1);
+        Integer month = parseIntegerGroup(matcher, 2);
+        Integer day = parseIntegerGroup(matcher, 3);
+        if (year == null || month == null || day == null) {
+            return null;
+        }
+        LocalDate date;
+        try {
+            date = LocalDate.of(year, month, day);
+        } catch (Exception ignored) {
+            return null;
+        }
+        if (!withTime) {
+            return date.toString();
+        }
+        Integer hour = parseIntegerGroup(matcher, 4);
+        Integer minute = parseIntegerGroup(matcher, 5);
+        Integer second = parseIntegerGroup(matcher, 6);
+        if (hour == null) {
+            return date + " 00:00:00";
+        }
+        if (minute == null) minute = 0;
+        if (second == null) second = 0;
+        try {
+            LocalTime time = LocalTime.of(hour, minute, second);
+            return date + " %02d:%02d:%02d".formatted(time.getHour(), time.getMinute(), time.getSecond());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Integer parseIntegerGroup(Matcher matcher, int group) {
+        if (matcher.groupCount() < group) return null;
+        String raw = matcher.group(group);
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    // ── Chinese number helpers ──
+
+    private Double parseChineseNumber(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        String normalized = token.trim();
+        if ("半".equals(normalized)) {
+            return 0.5d;
+        }
+        if (normalized.contains("百")) {
+            String[] parts = normalized.split("百", 2);
+            Integer hundred = parseChineseDigit(parts[0].isBlank() ? "一" : parts[0]);
+            Integer tail = parts.length < 2 || parts[1].isBlank() ? 0 : parseChineseInteger(parts[1]);
+            if (hundred == null || tail == null) return null;
+            return (double) (hundred * 100 + tail);
+        }
+        Integer integer = parseChineseInteger(normalized);
+        return integer == null ? null : integer.doubleValue();
+    }
+
+    private Integer parseChineseInteger(String token) {
+        if (token == null || token.isBlank()) return null;
+        if (token.contains("十")) {
+            String[] parts = token.split("十", 2);
+            int tens;
+            if (parts.length > 0 && !parts[0].isBlank()) {
+                Integer parsed = parseChineseDigit(parts[0]);
+                if (parsed == null) return null;
+                tens = parsed;
+            } else {
+                tens = 1;
+            }
+            int units = 0;
+            if (parts.length == 2 && !parts[1].isBlank()) {
+                Integer parsed = parseChineseDigit(parts[1]);
+                if (parsed == null) return null;
+                units = parsed;
+            }
+            return tens * 10 + units;
+        }
+        return parseChineseDigit(token);
+    }
+
+    private Integer parseChineseDigit(String token) {
+        return switch (token) {
+            case "零", "〇" -> 0;
+            case "一" -> 1;
+            case "二", "两" -> 2;
+            case "三" -> 3;
+            case "四" -> 4;
+            case "五" -> 5;
+            case "六" -> 6;
+            case "七" -> 7;
+            case "八" -> 8;
+            case "九" -> 9;
+            default -> null;
+        };
+    }
+
+    private String normalizeString(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
+    }
+
+    private String safeStr(String text) {
+        return text == null ? "" : text;
     }
 }
