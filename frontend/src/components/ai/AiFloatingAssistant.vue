@@ -265,9 +265,10 @@ import { ElMessage } from 'element-plus';
 import type { AiSuggestion } from '../../types';
 import { aiSuggestion, aiSuggestionFollowUp } from '../../api/workflow';
 import { aiChat, parseAndStartByFormCommand, parseFormCommand, type ChatTurn } from '../../api/ai-form-commands';
+import { useAuthStore } from '../../stores/auth';
 import { AI_ASSISTANT_KEY } from './types';
 
-const CONVERSATIONS_KEY = 'ai-chat-conversations';
+const auth = useAuthStore();
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -286,9 +287,14 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function storageKey(): string {
+  const uid = auth.currentUser?.userId;
+  return uid != null ? `ai-chat-${uid}` : 'ai-chat-anonymous';
+}
+
 function loadConversations(): Conversation[] {
   try {
-    const raw = localStorage.getItem(CONVERSATIONS_KEY);
+    const raw = localStorage.getItem(storageKey());
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -297,7 +303,7 @@ function loadConversations(): Conversation[] {
 
 function saveConversations(list: Conversation[]) {
   try {
-    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(list));
+    localStorage.setItem(storageKey(), JSON.stringify(list));
   } catch { /* quota exceeded, silently ignore */ }
 }
 
@@ -338,6 +344,15 @@ watch(
   () => conversations.map(c => ({ id: c.id, title: c.title, messages: [...c.messages], createdAt: c.createdAt })),
   (val) => saveConversations(val as Conversation[]),
   { deep: true }
+);
+
+watch(
+  () => auth.currentUser?.userId,
+  () => {
+    conversations.splice(0, conversations.length, ...loadConversations());
+    activeConversationId.value = null;
+    chatState.messages = [];
+  }
 );
 
 function now() {
