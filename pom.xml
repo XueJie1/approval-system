@@ -12,7 +12,7 @@
 	<artifactId>approval-system</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>approval-system</name>
-	<description>Demo project for Spring Boot</description>
+	<description>基于 Flowable 工作流引擎的智能协同审批系统</description>
 	<url/>
 	<licenses>
 		<license/>
