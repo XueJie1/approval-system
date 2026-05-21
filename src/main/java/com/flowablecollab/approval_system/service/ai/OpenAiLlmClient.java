@@ -180,7 +180,10 @@ public class OpenAiLlmClient implements LlmClient {
         String resolvedApiKey = runtimeSettings.apiKey();
         String resolvedModel = runtimeSettings.model();
         if (resolvedApiKey == null || resolvedApiKey.isBlank()) {
-            throw new IllegalStateException("OpenAI api-key is required when ai.llm.provider=openai");
+            throw new IllegalStateException(
+                    "OpenAI api-key is not configured. "
+                            + "Set OPENAI_API_KEY environment variable or configure it in Admin Settings. "
+                            + "Without a valid API key, the AI suggestion feature will not work.");
         }
         String endpoint = normalizeBaseUrl(runtimeSettings.baseUrl()) + "/chat/completions";
 
@@ -197,7 +200,7 @@ public class OpenAiLlmClient implements LlmClient {
         try {
             response = restTemplate.postForEntity(endpoint, new HttpEntity<>(payload, headers), String.class);
         } catch (RestClientException ex) {
-            throw new IllegalStateException("OpenAI request failed", ex);
+            throw new IllegalStateException("OpenAI request failed: " + ex.getMessage(), ex);
         }
 
         return parseChatResult(response.getBody(), resolvedModel);

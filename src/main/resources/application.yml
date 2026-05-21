@@ -52,12 +52,12 @@ app:
 
 ai:
   llm:
-    provider: openai 
+    provider: ${AI_LLM_PROVIDER:mock}
     # mock-model: mock-approval-advisor-v1
     openai:
-      base-url: https://api.openai.com/v1
+      base-url: ${AI_LLM_OPENAI_BASE_URL:https://api.openai.com/v1}
       api-key: ${OPENAI_API_KEY:}
-      model: gpt-5.4-mini
+      model: ${AI_LLM_OPENAI_MODEL:gpt-5.4-mini}
       temperature: 0.2
       connect-timeout-seconds: 10
       read-timeout-seconds: 30

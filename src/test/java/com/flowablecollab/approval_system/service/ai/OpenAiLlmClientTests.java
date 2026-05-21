@@ -207,7 +207,7 @@ class OpenAiLlmClientTests {
 
         assertThatThrownBy(() -> client.suggestApproval(new LlmClient.SuggestionRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("api-key is required");
+                .hasMessageContaining("api-key");
     }
 
     @Test
