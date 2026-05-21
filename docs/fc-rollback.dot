@@ -1,0 +1,25 @@
+digraph rollback {
+    rankdir=TB
+    graph [fontname="SimSun", fontsize=14, nodesep=0.6, ranksep=0.75, pad="0.3", splines=ortho]
+    node [fontname="SimSun", fontsize=14, style=filled, fillcolor=white]
+    edge [fontname="SimSun", fontsize=14]
+
+    start  [label="开始", shape=oval, width=1.4]
+    req    [label="审批人发起退回请求", shape=box, width=3.0]
+    d_tgt  [label="选择退回目标", shape=diamond, width=2.8, height=1.0]
+    prev   [label="退回上一节点", shape=box, width=2.0]
+    appli  [label="退回给申请人", shape=box, width=2.0]
+    speci  [label="退回指定节点", shape=box, width=2.0]
+    jump   [label="重置变量并执行节点跳转", shape=box, width=3.4]
+    end_   [label="结束", shape=oval, width=1.4]
+
+    start -> req -> d_tgt
+    d_tgt -> prev  [label="上一节点", tailport=w]
+    d_tgt -> appli [label="退回申请人", tailport=s]
+    d_tgt -> speci [label="指定节点", tailport=e]
+    {rank=same; prev; appli; speci}
+    prev  -> jump
+    appli -> jump
+    speci -> jump
+    jump  -> end_
+}

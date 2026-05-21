@@ -1,0 +1,25 @@
+digraph usermgmt {
+    rankdir=TB
+    graph [fontname="SimSun", fontsize=14, nodesep=0.6, ranksep=0.75, pad="0.3", splines=ortho]
+    node [fontname="SimSun", fontsize=14, style=filled, fillcolor=white]
+    edge [fontname="SimSun", fontsize=14]
+
+    start  [label="开始", shape=oval, width=1.4]
+    d_op   [label="选择操作类型", shape=diamond, width=2.8, height=1.0]
+    input  [label="填写用户基本信息", shape=box, width=2.8]
+    d_dup  [label="用户名是否已存在?", shape=diamond, width=3.0, height=1.0]
+    err    [label="返回重复错误提示", shape=box, width=2.8]
+    assign [label="分配角色和数据权限", shape=box, width=2.8]
+    edit   [label="修改用户信息或状态", shape=box, width=2.8]
+    end_   [label="结束", shape=oval, width=1.4]
+
+    start -> d_op
+    d_op  -> input [label="新建用户", tailport=w]
+    d_op  -> edit  [label="修改用户", tailport=e]
+    input -> d_dup
+    d_dup -> assign [label="否", tailport=w]
+    d_dup -> err    [label="是", tailport=e]
+    edit   -> end_
+    err    -> end_
+    assign -> end_
+}

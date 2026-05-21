@@ -1,0 +1,31 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+switch (选择操作类型)
+case (新建用户)
+  :填写用户基本信息;
+  if (用户名是否已存在?) then (是)
+    :返回重复错误提示;
+  else (否)
+    :分配角色和数据权限;
+  endif
+case (修改用户)
+  :修改用户信息或状态;
+endswitch
+stop
+@enduml

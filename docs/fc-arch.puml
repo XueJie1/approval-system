@@ -1,0 +1,45 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam PackageBackgroundColor white
+skinparam PackageBorderColor black
+skinparam PackageFontColor black
+skinparam PackageFontName SimSun
+skinparam PackageFontSize 14
+skinparam ComponentBackgroundColor white
+skinparam ComponentBorderColor black
+skinparam ComponentFontColor black
+skinparam ComponentFontName SimSun
+skinparam ComponentFontSize 14
+skinparam ArrowColor black
+skinparam ArrowFontColor black
+skinparam ArrowFontName SimSun
+skinparam ArrowFontSize 14
+
+package "表示层" {
+  [Vue 3 前端应用] as fe1
+  [Vue Router 路由守卫] as fe2
+}
+
+package "业务逻辑层" {
+  [Spring Security\nJWT认证过滤器] as biz1
+  [Controller / Service层] as biz2
+  [Flowable 7.0\n工作流引擎] as biz3
+  [LLM服务接口\nAI建议模块] as biz4
+}
+
+package "数据访问层" {
+  [Spring Data JPA] as da1
+  [MariaDB 数据库] as da2
+}
+
+fe1 --> biz1 : HTTP + JWT
+biz1 --> biz2
+biz2 --> biz3
+biz2 --> biz4 : API调用
+biz2 --> da1
+biz3 --> da1
+da1 --> da2 : SQL
+@enduml

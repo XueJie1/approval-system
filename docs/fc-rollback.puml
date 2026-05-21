@@ -1,0 +1,30 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:审批人发起退回请求;
+switch (选择退回目标)
+case (上一节点)
+  :退回上一节点;
+case (退回申请人)
+  :退回给申请人;
+case (指定节点)
+  :退回指定节点;
+endswitch
+:重置变量并执行节点跳转;
+stop
+@enduml

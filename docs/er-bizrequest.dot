@@ -1,0 +1,24 @@
+// biz_request 审批申请实体 E-R 图 (twopi bubble chart)
+graph {
+    layout=twopi
+    graph [fontname="Source Han Sans CN", ranksep=2.2, pad=0.4, bgcolor=white, charset="UTF-8"]
+    node  [fontname="Source Han Sans CN", fontsize=12]
+    edge  [fontname="Source Han Sans CN"]
+
+    Req [label="审批申请", shape=box, width=1.2, height=0.55,
+         style=filled, fillcolor=white, root=true, fixedsize=true]
+
+    B1 [label="业务主键",   shape=ellipse]
+    B2 [label="申请标题",   shape=ellipse]
+    B3 [label="发起人",     shape=ellipse]
+    B4 [label="申请状态",   shape=ellipse]
+    B5 [label="当前处理人", shape=ellipse]
+    B6 [label="流程实例ID", shape=ellipse]
+    B7 [label="表单实例",   shape=ellipse]
+    B8 [label="申请模板键", shape=ellipse]
+    B9 [label="发起时间",   shape=ellipse]
+    B10[label="完成时间",   shape=ellipse]
+
+    Req -- B1; Req -- B2; Req -- B3; Req -- B4; Req -- B5
+    Req -- B6; Req -- B7; Req -- B8; Req -- B9; Req -- B10
+}

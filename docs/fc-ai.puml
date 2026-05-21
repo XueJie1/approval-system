@@ -1,0 +1,28 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:审批人请求AI建议;
+:汇总任务上下文和历史统计数据;
+:调用大语言模型API;
+if (调用是否成功?) then (是)
+  :解析并展示建议结果;
+else (否)
+  :返回服务不可用提示;
+endif
+stop
+@enduml

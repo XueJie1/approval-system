@@ -1,0 +1,22 @@
+// workflow_definition 工作流定义实体 E-R 图 (twopi bubble chart)
+graph {
+    layout=twopi
+    graph [fontname="Source Han Sans CN", ranksep=2.1, pad=0.4, bgcolor=white, charset="UTF-8"]
+    node  [fontname="Source Han Sans CN", fontsize=12]
+    edge  [fontname="Source Han Sans CN"]
+
+    WD [label="工作流定义", shape=box, width=1.2, height=0.55,
+        style=filled, fillcolor=white, root=true, fixedsize=true]
+
+    W1 [label="流程键",    shape=ellipse]
+    W2 [label="流程名称",  shape=ellipse]
+    W3 [label="分类",      shape=ellipse]
+    W4 [label="描述",      shape=ellipse]
+    W5 [label="状态",      shape=ellipse]
+    W6 [label="当前版本ID", shape=ellipse]
+    W7 [label="创建人",    shape=ellipse]
+    W8 [label="创建时间",  shape=ellipse]
+
+    WD -- W1; WD -- W2; WD -- W3; WD -- W4
+    WD -- W5; WD -- W6; WD -- W7; WD -- W8
+}

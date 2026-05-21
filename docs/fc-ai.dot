@@ -1,0 +1,21 @@
+digraph ai_suggest {
+    rankdir=TB
+    graph [fontname="SimSun", fontsize=14, nodesep=0.6, ranksep=0.75, pad="0.3", splines=ortho]
+    node [fontname="SimSun", fontsize=14, style=filled, fillcolor=white]
+    edge [fontname="SimSun", fontsize=14]
+
+    start  [label="开始", shape=oval, width=1.4]
+    req    [label="审批人请求AI建议", shape=box, width=3.0]
+    ctx    [label="汇总任务上下文和历史统计数据", shape=box, width=3.8]
+    call   [label="调用大语言模型API", shape=box, width=3.0]
+    d_ok   [label="调用是否成功?", shape=diamond, width=3.0, height=1.0]
+    err    [label="返回服务不可用提示", shape=box, width=3.0]
+    parse  [label="解析并展示建议结果", shape=box, width=3.0]
+    end_   [label="结束", shape=oval, width=1.4]
+
+    start -> req -> ctx -> call -> d_ok
+    d_ok  -> err   [label="否", tailport=e]
+    d_ok  -> parse [label="是", tailport=s]
+    err   -> end_
+    parse -> end_
+}

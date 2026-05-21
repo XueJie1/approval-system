@@ -1,0 +1,38 @@
+@startwbs
+skinparam {
+  roundcorner 0
+  BackgroundColor white
+  BorderColor black
+  FontName "Source Han Sans CN"
+  FontSize 13
+}
+skinparam wbsBorderColor black
+skinparam wbsBackgroundColor white
+
+* 智能协同审批系统
+** 系统超级管理员
+*** 个人中心管理
+*** 用户管理
+*** 部门管理
+*** 岗位管理
+*** 角色管理
+*** 工作流定义管理
+*** 工作流节点配置
+*** AI服务配置
+*** 登录审计日志
+** 系统管理员
+*** 个人中心管理
+*** 申请模板管理
+*** 表单定义管理
+*** 表单字段配置
+*** 权限分配管理
+** 普通员工
+*** 账号管理
+*** 个人中心
+*** 发起审批申请
+*** 审批任务处理
+*** 流程管理
+*** 审批历史查询
+*** AI审批建议
+*** 表单附件管理
+@endwbs

@@ -1,0 +1,28 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:创建工作流定义;
+:BPMN编辑器设计流程\n并配置各节点审批规则;
+:提交发布新版本;
+if (BPMN结构是否合法?) then (是)
+  :部署到Flowable并更新版本记录;
+else (否)
+  :返回校验错误信息;
+endif
+stop
+@enduml

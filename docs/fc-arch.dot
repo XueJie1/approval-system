@@ -1,0 +1,56 @@
+digraph arch {
+    rankdir=TB
+    graph [fontname="SimSun", fontsize=14, nodesep=0.6, ranksep=0.75, pad="0.4", splines=ortho]
+    node [fontname="SimSun", fontsize=14, style=filled, fillcolor=white, height=0.7]
+    edge [fontname="SimSun", fontsize=14]
+
+    subgraph cluster_fe {
+        label="表示层"
+        fontname="SimSun"
+        fontsize=14
+        style=filled
+        fillcolor="#D6EAF8"
+        color="#1A5276"
+        fontcolor="#1A5276"
+        fe1 [label="Vue 3 前端应用", shape=box, width=2.2]
+        fe2 [label="Vue Router 路由守卫", shape=box, width=2.2]
+        {rank=same; fe1; fe2}
+    }
+
+    subgraph cluster_biz {
+        label="业务逻辑层"
+        fontname="SimSun"
+        fontsize=14
+        style=filled
+        fillcolor="#D5F5E3"
+        color="#1E8449"
+        fontcolor="#1E8449"
+        biz1 [label="Spring Security\nJWT认证过滤器", shape=box, width=2.4]
+        biz2 [label="Controller / Service层", shape=box, width=2.4]
+        biz3 [label="Flowable 7.0\n工作流引擎", shape=box, width=2.4]
+        biz4 [label="LLM服务接口\nAI建议模块", shape=box, width=2.4]
+        {rank=same; biz1; biz2}
+        {rank=same; biz3; biz4}
+    }
+
+    subgraph cluster_data {
+        label="数据访问层"
+        fontname="SimSun"
+        fontsize=14
+        style=filled
+        fillcolor="#FDEBD0"
+        color="#CA6F1E"
+        fontcolor="#CA6F1E"
+        da1 [label="Spring Data JPA", shape=box, width=2.2]
+        da2 [label="MariaDB 数据库", shape=box, width=2.2]
+        {rank=same; da1; da2}
+    }
+
+    fe1  -> biz1 [label="HTTP + JWT"]
+    biz1 -> biz2
+    biz2 -> biz3
+    biz2 -> biz4 [label="API调用"]
+    biz2 -> da1
+    biz3 -> da1
+    da1  -> da2  [label="SQL"]
+}

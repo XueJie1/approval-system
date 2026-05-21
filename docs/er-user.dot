@@ -1,0 +1,25 @@
+// sys_user 用户实体 E-R 图 (twopi bubble chart)
+graph {
+    layout = twopi;
+    graph [fontname = "SimSun"; ranksep = 2.1; pad = 0.4; bgcolor = white; charset = "UTF-8";];
+    node [fontname = "SimSun"; fontsize = 14;];
+    edge [fontname = "SimSun";];
+    
+    User [label = "用户";shape = box;width = 1.0;height = 0.55;style = filled;fillcolor = white;root = true;fixedsize = true;];
+    
+    A1 [label = "用户名";shape = ellipse;];
+    A2 [label = "密码";shape = ellipse;];
+    A3 [label = "所属部门";shape = ellipse;];
+    A4 [label = "直属主管";shape = ellipse;];
+    A5 [label = "账号状态";shape = ellipse;];
+    A6 [label = "双因素认证";shape = ellipse;];
+    A7 [label = "最后登录时间";shape = ellipse;];
+    
+    User -- A1;
+    User -- A2;
+    User -- A3;
+    User -- A4;
+    User -- A5;
+    User -- A6;
+    User -- A7;
+}

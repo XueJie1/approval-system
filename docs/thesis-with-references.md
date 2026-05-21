@@ -70,9 +70,9 @@ The system has completed functional verification in the development environment,
 
 传统的审批管理模式主要依赖纸质单据流转和人工传递，存在审批周期长、流转效率低、历史记录难以追溯等突出痛点。随着电子邮件和即时通讯工具的普及，部分企业开始使用邮件审批或聊天工具审批的方式替代纸质流转，然而这种方式虽然在一定程度上提升了流转速度，却仍然缺乏结构化的流程管控能力。审批节点之间的依赖关系不明确、审批权限缺乏细粒度控制、审批数据的统计分析和审计追踪难以实现等问题，使得企业难以对审批流程进行有效的管理和优化。
 
-近年来，工作流引擎技术为解决上述问题提供了有效的技术方案。BPMN 2.0（Business Process Model and Notation）作为业务流程建模的国际标准，已经被广泛应用于企业流程管理系统中。以 Flowable 为代表的开源工作流引擎实现了 BPMN 2.0 标准，提供了流程定义、流程实例管理、任务分配、并行网关等功能，能够支撑复杂的企业审批流转场景。
+近年来，工作流引擎技术为解决上述问题提供了有效的技术方案。BPMN 2.0（Business Process Model and Notation）作为业务流程建模的国际标准，已经被广泛应用于企业流程管理系统中<sup>[1]</sup>。以 Flowable 为代表的开源工作流引擎实现了 BPMN 2.0 标准，提供了流程定义、流程实例管理、任务分配、并行网关等功能，能够支撑复杂的企业审批流转场景<sup>[2]</sup>。
 
-与此同时，人工智能技术的快速发展为企业管理软件的智能化升级提供了新的可能。以 GPT 系列为代表的大语言模型（Large Language Model, LLM）在自然语言理解、文本生成、数据分析等方面展现出了强大的能力。将大语言模型集成到审批系统中，可以在审批建议生成、风险自动识别、表单智能填充等环节提供辅助决策支持，从而进一步提升审批管理的效率和质量。
+与此同时，人工智能技术的快速发展为企业管理软件的智能化升级提供了新的可能。以 GPT 系列为代表的大语言模型（Large Language Model, LLM）在自然语言理解、文本生成、数据分析等方面展现出了强大的能力<sup>[3]</sup>。将大语言模型集成到审批系统中，可以在审批建议生成、风险自动识别、表单智能填充等环节提供辅助决策支持，从而进一步提升审批管理的效率和质量。
 
 基于以上背景，本文设计并实现了一个基于 Flowable 工作流引擎的智能协同审批系统。该系统采用前后端分离的 B/S 架构，后端使用 Spring Boot 框架和 Flowable 工作流引擎实现业务流程的灵活编排与执行，前端使用 Vue 3 框架构建响应式用户界面。系统在传统工作流引擎的基础上，引入了大语言模型智能辅助能力，实现了审批建议自动生成和表单自然语言解析等创新功能，为企业提供了一套完整、灵活、智能的审批管理解决方案。
 
@@ -80,11 +80,11 @@ The system has completed functional verification in the development environment,
 
 ### 1.2.1 工作流技术研究现状
 
-工作流技术的研究可以追溯到二十世纪七十年代的办公自动化研究。1993 年，工作流管理联盟（Workflow Management Coalition, WfMC）成立，制定了工作流参考模型和相关标准，为工作流技术的标准化奠定了基础。此后，工作流技术在企业资源计划（ERP）、办公自动化（OA）等领域得到了广泛应用。
+工作流技术的研究可以追溯到二十世纪七十年代的办公自动化研究。1993 年，工作流管理联盟（Workflow Management Coalition, WfMC）成立，制定了工作流参考模型和相关标准，为工作流技术的标准化奠定了基础<sup>[2]</sup>。此后，工作流技术在企业资源计划（ERP）、办公自动化（OA）等领域得到了广泛应用<sup>[4]</sup>。
 
 在工作流引擎的实现方面，目前主流的开源解决方案包括 Activiti、Flowable 和 Camunda 等。Activiti 是由 Alfresco 公司于 2010 年发布的开源工作流引擎，其核心开发团队具有丰富的 JBoss jBPM 项目经验。Flowable 由 Activiti 的原始核心团队成员于 2016 年创建，在架构设计上对 Activiti 进行了重大改进，提供了更好的云原生支持和更清晰的服务划分。Camunda 是另一个广受欢迎的 BPMN 工作流引擎，以其高性能和企业级特性著称。在国内，阿里巴巴的 CompileFlow、小米的 Zeus 等自研流程引擎也在企业内部得到了应用。
 
-在学术研究领域，工作流引擎的研究主要集中在流程引擎性能优化、分布式流程调度、柔性工作流、流程挖掘等方面。近年来，随着微服务架构和云原生技术的兴起，工作流引擎的云化部署和容器化运行成为新的研究方向。
+在学术研究领域，工作流引擎的研究主要集中在流程引擎性能优化、分布式流程调度、柔性工作流、流程挖掘等方面<sup>[4]</sup>。近年来，随着微服务架构和云原生技术的兴起，工作流引擎的云化部署和容器化运行成为新的研究方向。
 
 ### 1.2.2 审批系统研究现状
 
@@ -94,7 +94,7 @@ The system has completed functional verification in the development environment,
 
 ### 1.2.3 大语言模型在企业管理中的应用
 
-2022 年末 ChatGPT 的发布引发了大语言模型的研究和应用热潮。在企业级应用场景中，大语言模型在智能客服、文档处理、数据分析等领域展现出显著价值。在审批管理领域，已有研究探讨利用大语言模型进行合同审查、风险识别、审批意见生成等任务。然而，将大语言模型深度集成到工作流引擎中，实现审批流程的智能辅助决策，仍是一个具有创新性的研究方向。
+2022 年末 ChatGPT 的发布引发了大语言模型的研究和应用热潮<sup>[5]</sup>。在企业级应用场景中，大语言模型在智能客服、文档处理、数据分析等领域展现出显著价值。在审批管理领域，已有研究探讨利用大语言模型进行合同审查、风险识别、审批意见生成等任务<sup>[5]</sup>。然而，将大语言模型深度集成到工作流引擎中，实现审批流程的智能辅助决策，仍是一个具有创新性的研究方向。
 
 综上所述，市场上缺乏将工作流引擎与大语言模型充分结合的审批解决方案。本课题的研究正是针对这一现状，尝试将 Flowable 工作流引擎与大语言模型技术进行有机融合，构建一个兼具流程灵活性和决策智能化的协同审批系统。
 
@@ -130,23 +130,23 @@ Java 是一种面向对象的编程语言，自 1995 年由 Sun Microsystems 公
 
 Java 语言具有以下突出特点：其一，跨平台特性，Java 程序被编译为与平台无关的字节码，可以在任何安装了 Java 虚拟机（JVM）的平台上运行；其二，面向对象，Java 支持封装、继承和多态等面向对象特性，便于构建结构清晰、可维护的大型应用；其三，内存安全，Java 的自动垃圾回收机制和强类型系统减少了内存泄漏和类型错误等问题；其四，丰富的类库和框架生态，从 Web 开发到大数据处理，Java 拥有最为全面的开源生态支持。
 
-本系统选择 Java 17 版本作为后端开发语言，利用其密封类、模式匹配、Records 等新特性，提升代码的表达力和可读性。
+本系统选择 Java 17 版本作为后端开发语言，利用其密封类、模式匹配、Records 等新特性，提升代码的表达力和可读性。在编码实践中，系统遵循面向对象设计的最佳实践原则，注重接口设计、不可变对象和异常处理等方面的规范<sup>[6]</sup>。
 
 ## 2.3 Spring Boot 框架
 
-Spring Boot 是由 Pivotal 团队开发的一个基于 Spring 框架的快速应用开发框架，其核心设计理念是"约定优于配置"。Spring Boot 通过自动配置和起步依赖（Starter），大幅简化了 Spring 应用的搭建和开发过程。
+Spring Boot 是由 Pivotal 团队开发的一个基于 Spring 框架的快速应用开发框架，其核心设计理念是"约定优于配置"<sup>[7]</sup>。Spring Boot 通过自动配置和起步依赖（Starter），大幅简化了 Spring 应用的搭建和开发过程。
 
-在本系统中，Spring Boot 3.5.10 版本被用作整个后端系统的核心框架。系统通过 spring-boot-starter-web 启动 Web 服务，通过 spring-boot-starter-data-jpa 实现数据持久化，通过 spring-boot-starter-security 集成安全框架，通过 spring-boot-starter-validation 实现请求参数的自动校验。Spring Boot 的自动配置能力使开发者能够将注意力集中在业务逻辑的实现上，而无需花费大量时间进行复杂的基础设施配置。
+在本系统中，Spring Boot 3.5.10 版本被用作整个后端系统的核心框架。系统通过 spring-boot-starter-web 启动 Web 服务，通过 spring-boot-starter-data-jpa 实现数据持久化，通过 spring-boot-starter-security 集成安全框架，通过 spring-boot-starter-validation 实现请求参数的自动校验。Spring Boot 的自动配置能力使开发者能够将注意力集中在业务逻辑的实现上，而无需花费大量时间进行复杂的基础设施配置<sup>[8]</sup>。
 
 本系统还充分利用了 Spring 框架的依赖注入（Dependency Injection）和面向切面编程（Aspect-Oriented Programming）特性，通过声明式事务管理（@Transactional）保证了业务操作的数据一致性。
 
 ## 2.4 Flowable 工作流引擎
 
-Flowable 是一个基于 Java 语言开发的轻量级开源工作流引擎，完全实现了 BPMN 2.0 标准。Flowable 由原 Activiti 核心团队成员于 2016 年创建，在继承了 Activiti 核心功能的基础上，对引擎架构进行了重构和优化。
+Flowable 是一个基于 Java 语言开发的轻量级开源工作流引擎，完全实现了 BPMN 2.0 标准<sup>[1]</sup>。Flowable 由原 Activiti 核心团队成员于 2016 年创建，在继承了 Activiti 核心功能的基础上，对引擎架构进行了重构和优化。
 
 Flowable 引擎由多个独立的服务组件构成。流程存储服务（RepositoryService）负责流程定义的存储和版本管理，运行时服务（RuntimeService）负责流程实例的创建和执行，任务服务（TaskService）负责用户任务的管理，历史服务（HistoryService）负责已完成的流程数据和审计记录的查询。
 
-Flowable 支持多种流程节点类型，包括用户任务（UserTask）、服务任务（ServiceTask）、排他网关（ExclusiveGateway）、并行网关（ParallelGateway）等，能够通过 BPMN 2.0 标准定义复杂的业务流转逻辑。在多实例任务方面，Flowable 提供了灵活的循环特性（multiInstanceLoopCharacteristics），支持并行和串行两种多实例执行模式，并支持自定义完成条件（completionCondition），这些特性正是本系统实现会签审批功能的技术基础。
+Flowable 支持多种流程节点类型，包括用户任务（UserTask）、服务任务（ServiceTask）、排他网关（ExclusiveGateway）、并行网关（ParallelGateway）等，能够通过 BPMN 2.0 标准定义复杂的业务流转逻辑<sup>[2]</sup>。在多实例任务方面，Flowable 提供了灵活的循环特性（multiInstanceLoopCharacteristics），支持并行和串行两种多实例执行模式，并支持自定义完成条件（completionCondition），这些特性正是本系统实现会签审批功能的技术基础。
 
 Flowable 还提供了丰富的扩展机制。任务监听器（TaskListener）允许在任务的生命周期事件（如创建、分配、完成）中插入自定义逻辑，执行监听器（ExecutionListener）则可以在流程执行的不同阶段触发自定义行为。本系统利用这些扩展机制实现了审批任务的业务数据记录和状态同步功能。
 
@@ -154,41 +154,41 @@ Flowable 还提供了丰富的扩展机制。任务监听器（TaskListener）�
 
 ## 2.5 MariaDB 数据库
 
-MariaDB 是由 MySQL 原始开发者 Monty Widenius 领导开发的一个开源关系型数据库管理系统，它是 MySQL 的一个分支，保持了与 MySQL 的高度兼容性。MariaDB 在选择存储引擎方面提供了更多灵活性，并且在高并发场景下通常能提供优于 MySQL 的查询性能。
+MariaDB 是由 MySQL 原始开发者 Monty Widenius 领导开发的一个开源关系型数据库管理系统，它是 MySQL 的一个分支，保持了与 MySQL 的高度兼容性。MariaDB 在选择存储引擎方面提供了更多灵活性，并且在高并发场景下通常能提供优于 MySQL 的查询性能。在数据库模式设计、索引优化和查询调优等方面，关系型数据库的高性能实践经验同样适用于 MariaDB<sup>[9]</sup>。
 
-在本系统中，MariaDB 被用作主数据库，存储用户信息、审批流程数据、表单定义和实例数据、操作日志等业务数据。系统通过 Spring Data JPA 框架与数据库进行交互，利用 Hibernate 作为 JPA 的实现提供者，实现了对象关系映射（ORM）。在开发阶段，Hibernate 的 ddl-auto: update 策略被用于根据实体类的变更自动更新数据库表结构，提升了开发迭代效率。在测试环境中，系统使用 H2 内存数据库替代 MariaDB，以实现测试用例的快速执行和环境隔离。
+在本系统中，MariaDB 被用作主数据库，存储用户信息、审批流程数据、表单定义和实例数据、操作日志等业务数据。系统通过 Spring Data JPA 框架与数据库进行交互，利用 Hibernate 作为 JPA 的实现提供者，实现了对象关系映射（ORM），将 Java 实体对象与数据库表结构进行声明式映射，屏蔽了底层 SQL 操作的复杂性<sup>[10]</sup>。在开发阶段，Hibernate 的 ddl-auto: update 策略被用于根据实体类的变更自动更新数据库表结构，提升了开发迭代效率。在测试环境中，系统使用 H2 内存数据库替代 MariaDB，以实现测试用例的快速执行和环境隔离。
 
 系统设计了包含 22 张数据表的数据库模型，涵盖了 RBAC 权限管理、动态表单、审批业务、工作流管理、系统设置等功能域。各表之间通过外键关联和数据冗余的合理平衡，在保证数据一致性的同时兼顾了查询性能。
 
 ## 2.6 Vue 框架
 
-Vue.js 是由尤雨溪于 2014 年发布的一款渐进式 JavaScript 前端框架。Vue 3 是 Vue 框架的最新主版本，于 2020 年正式发布，在性能、TypeScript 支持和组合式 API 方面相比 Vue 2 有了显著提升。
+Vue.js 是由尤雨溪于 2014 年发布的一款渐进式 JavaScript 前端框架。Vue 3 是 Vue 框架的最新主版本，于 2020 年正式发布，在性能、TypeScript 支持和组合式 API 方面相比 Vue 2 有了显著提升<sup>[11]</sup>。
 
-Vue 3 采用基于 Proxy 的响应式系统替代了 Vue 2 中的 Object.defineProperty 方案，解决了此前无法检测属性添加和删除的问题，同时提升了响应式数据的追踪效率。Vue 3 引入了组合式 API（Composition API），通过 setup 函数和响应式引用（ref、reactive），使组件的逻辑组织和复用更加灵活直观，特别适合构建复杂的单页面应用。
+Vue 3 采用基于 Proxy 的响应式系统替代了 Vue 2 中的 Object.defineProperty 方案，解决了此前无法检测属性添加和删除的问题，同时提升了响应式数据的追踪效率。Vue 3 引入了组合式 API（Composition API），通过 setup 函数和响应式引用（ref、reactive），使组件的逻辑组织和复用更加灵活直观，特别适合构建复杂的单页面应用<sup>[11]</sup>。
 
-在本系统中，前端基于 Vue 3 和 TypeScript 构建，使用 Vite 作为构建工具，Pinia 作为状态管理库，Vue Router 作为路由管理。系统通过 Element Plus 组件库构建用户界面，保证了界面风格的一致性和交互体验的专业性。前端通过 Axios 封装 API 调用层，与后端进行 RESTful 风格的数据交互。
+在本系统中，前端基于 Vue 3 和 TypeScript 构建，使用 Vite 作为构建工具，Pinia 作为状态管理库，Vue Router 作为路由管理。系统通过 Element Plus 组件库构建用户界面，保证了界面风格的一致性和交互体验的专业性。前端通过 Axios 封装 API 调用层，与后端进行 RESTful 风格的数据交互。REST 架构风格通过统一接口、无状态交互和资源标识等约束，为前后端分离架构提供了良好的可扩展性和松耦合特性<sup>[12]</sup>。
 
 系统前端采用了基于角色的路由访问控制，根据用户角色动态决定导航菜单和可访问页面的范围。前端按界面划分为普通员工审批台与统一的管理控制台两类布局：普通员工进入审批台，流程设计员、系统管理员和系统超级管理员则共用同一管理控制台，系统依据登录用户的角色动态过滤其可见的导航菜单与可访问页面，实现界面级的权限隔离，而非为每个管理角色单独提供一套门户。
 
 ## 2.7 Spring Security 与 JWT
 
-Spring Security 是 Spring 生态系统中用于应用安全防护的核心框架，提供了认证（Authentication）和授权（Authorization）两个层面的完整安全方案。
+Spring Security 是 Spring 生态系统中用于应用安全防护的核心框架，提供了认证（Authentication）和授权（Authorization）两个层面的完整安全方案<sup>[13]</sup>。
 
-在认证方面，本系统采用 JWT（JSON Web Token）作为无状态认证方案。用户登录成功后，服务端使用 jjwt 库生成一个包含用户标识、角色列表和过期时间的加密令牌，客户端在后续请求中通过 HTTP 请求头的 Authorization 字段携带该令牌。服务端通过 JwtAuthenticationFilter 过滤器拦截所有请求，解析并验证令牌的有效性，将用户信息加载到 Spring Security 的安全上下文中。这种无状态认证方式避免了服务端 Session 存储的开销，天然适合前后端分离的部署架构。
+在认证方面，本系统采用 JWT（JSON Web Token）<sup>[14]</sup>作为无状态认证方案。用户登录成功后，服务端使用 jjwt 库生成一个包含用户标识、角色列表和过期时间的加密令牌，客户端在后续请求中通过 HTTP 请求头的 Authorization 字段携带该令牌。服务端通过 JwtAuthenticationFilter 过滤器拦截所有请求，解析并验证令牌的有效性，将用户信息加载到 Spring Security 的安全上下文中。这种无状态认证方式避免了服务端 Session 存储的开销，天然适合前后端分离的部署架构。
 
-在授权方面，本系统实现了基于角色的访问控制（Role-Based Access Control, RBAC）。系统定义了普通员工、部门主管、流程设计员、系统管理员和系统超级管理员五种角色，每种角色拥有不同的系统操作权限。其中系统启动时固化创建系统超级管理员、系统管理员、流程设计员三种管理角色，部门主管则通过部门负责人配置与基于部门数据范围的角色动态体现。在 URL 级别，通过 SecurityFilterChain 配置了按路径和 HTTP 方法匹配的权限拦截规则。在数据级别，通过 RbacService 实现了基于角色数据范围的部门级数据隔离，确保用户只能查看被授权范围内的审批数据。
+在授权方面，本系统实现了基于角色的访问控制（Role-Based Access Control, RBAC）<sup>[15]</sup>。系统定义了普通员工、部门主管、流程设计员、系统管理员和系统超级管理员五种角色，每种角色拥有不同的系统操作权限。其中系统启动时固化创建系统超级管理员、系统管理员、流程设计员三种管理角色，部门主管则通过部门负责人配置与基于部门数据范围的角色动态体现。在 URL 级别，通过 SecurityFilterChain 配置了按路径和 HTTP 方法匹配的权限拦截规则。在数据级别，通过 RbacService 实现了基于角色数据范围的部门级数据隔离，确保用户只能查看被授权范围内的审批数据。
 
-在双因素认证方面，系统集成了基于时间的一次性密码（Time-based One-Time Password, TOTP）方案。TOTP 算法基于 HMAC-SHA1 哈希函数，使用共享密钥和当前时间戳生成 6 位动态验证码，有效期通常为 30 秒。用户在登录时通过密码验证后，仍需输入由认证器应用生成的动态验证码，只有两层验证均通过才能获得系统的完整访问权限。系统还支持生成一次性恢复码，用于在用户丢失认证器设备时进行账号恢复。
+在双因素认证方面，系统集成了基于时间的一次性密码（Time-based One-Time Password, TOTP）<sup>[16]</sup>方案。TOTP 算法基于 HMAC-SHA1 哈希函数，使用共享密钥和当前时间戳生成 6 位动态验证码，有效期通常为 30 秒。用户在登录时通过密码验证后，仍需输入由认证器应用生成的动态验证码，只有两层验证均通过才能获得系统的完整访问权限。系统还支持生成一次性恢复码，用于在用户丢失认证器设备时进行账号恢复。
 
 ## 2.8 大语言模型技术
 
-大语言模型（Large Language Model, LLM）是指基于 Transformer 架构、在海量文本数据上训练的大型神经网络模型。以 GPT 系列为代表的大语言模型通过自回归的下一词预测训练方式，学习到了丰富的语言知识和推理能力，能够在自然语言理解、文本生成、代码生成、数据分析等多种任务上展现出接近乃至超越人类的表现。
+大语言模型（Large Language Model, LLM）是指基于 Transformer 架构<sup>[17]</sup>、在海量文本数据上训练的大型神经网络模型。以 GPT 系列为代表的大语言模型通过自回归的下一词预测训练方式，学习到了丰富的语言知识和推理能力，能够在自然语言理解、文本生成、代码生成、数据分析等多种任务上展现出接近乃至超越人类的表现<sup>[3]</sup>。
 
 在本系统中，大语言模型技术应用于两个核心场景。第一，审批建议生成。当审批人打开待办任务时，系统自动收集该任务的上下文信息（包括申请表单数据、申请人历史记录、相似案例统计、系统策略规则等），构造结构化的提示词（Prompt）发送给大语言模型，由模型生成包含审批建议决策、风险警告、异常检测和参考摘要的结构化输出。审批人可以将 AI 建议作为决策参考，并可以通过追问功能对 AI 进行进一步的细节询问。
 
 第二，自然语言表单解析。发起人可以通过自然语言描述申请内容，例如"我申请5月15日到17日去上海出差，预算3000元"。系统将自然语言文本与目标表单的字段定义一起发送给大语言模型或启发式解析器，解析得到结构化的表单数据，自动填充到对应的表单字段中，减少用户的手动输入成本。
 
-系统在 LLM 集成架构上采用了接口抽象的设计模式，定义了统一的 LlmClient 接口，支持 OpenAI 兼容协议的多种模型实现，可在不同模型供应商之间灵活切换。同时系统内置了基于正则表达式和关键词匹配的启发式解析器，作为 LLM 不可用时的降级方案。所有 AI 生成的内容都会被持久化记录在数据库中，并追踪最终的审批结果，用于后续的效果评估和模型优化。
+系统在 LLM 集成架构上采用了接口抽象的设计模式<sup>[18]</sup>，定义了统一的 LlmClient 接口，支持 OpenAI 兼容协议的多种模型实现，可在不同模型供应商之间灵活切换。同时系统内置了基于正则表达式和关键词匹配的启发式解析器，作为 LLM 不可用时的降级方案。所有 AI 生成的内容都会被持久化记录在数据库中，并追踪最终的审批结果，用于后续的效果评估和模型优化。
 
 # 3. 系统可行性与需求分析
 
@@ -216,7 +216,7 @@ Spring Security 是 Spring 生态系统中用于应用安全防护的核心框�
 
 ## 3.2 需求分析
 
-在系统开发设计之前，我们需要对系统本身的需求做一个大概的分析，了解系统应分为几个模块，应该实现怎样的功能。为此，在对智能协同审批系统进行需求分析后，我们决定将整个系统主要分为三个模块：系统超级管理员、系统管理员和普通员工，每个模块下的分支功能不一样。对各模块的功能做出如下说明：
+在系统开发设计之前，我们需要对系统本身的需求做一个大概的分析，了解系统应分为几个模块，应该实现怎样的功能。需求分析是软件生命周期中的关键阶段，其目标是准确把握用户的功能性需求和非功能性需求，为后续的概要设计和详细设计奠定基础<sup>[19]</sup>。为此，在对智能协同审批系统进行需求分析后，我们决定将整个系统主要分为三个模块：系统超级管理员、系统管理员和普通员工，每个模块下的分支功能不一样。对各模块的功能做出如下说明：
 
 需要说明的是，系统管理员与系统超级管理员在前端共用同一管理控制台，系统根据登录用户角色动态过滤可见菜单与可访问页面，二者并不存在彼此独立的管理门户；此外，系统还提供了一个权限范围更窄的流程设计员角色，登录后进入该管理控制台的受限视图，仅开放表单定义与字段配置相关功能，可视为系统管理员模块的一个受限子集。而部门主管并非独立的权限角色，而是由系统超级管理员将某用户配置为部门负责人后动态赋予的数据范围扩展：其可执行的功能与普通员工完全一致，仅审批数据的可见范围扩大到所辖部门，因此不单列为独立模块，其用例已包含在普通员工模块中。
 
@@ -263,7 +263,7 @@ h）表单附件管理：支持在表单中上传和下载附件文件，方便�
 
 ## 4.1 功能模块设计
 
-本系统按功能域划分为以下六个核心模块。首先，用户认证与安全管理模块和权限管理模块共同构建了系统的安全管控体系，前者提供身份认证、Token 管理和双因素认证等基础安全能力，后者实现基于角色的细粒度权限控制和用户组织管理；然后，审批流程模块与动态表单模块协同构成业务核心，前者通过与 Flowable 引擎深度集成实现 BPMN 2.0 标准的流程编排和执行，后者提供版本化的表单定义和动态数据采集能力；其次，AI 智能辅助模块为审批过程注入智能化能力，工作流管理模块则提供流程定义和申请模板的配置管理功能。各模块的详细职责如下：
+本系统按功能域划分为以下六个核心模块。首先，用户认证与安全管理模块和权限管理模块共同构建了系统的安全管控体系，前者提供身份认证、Token 管理和双因素认证等基础安全能力，后者实现基于角色的细粒度权限控制和用户组织管理；然后，审批流程模块与动态表单模块协同构成业务核心，前者通过与 Flowable 引擎深度集成实现 BPMN 2.0 标准的流程编排和执行<sup>[1]</sup>，后者提供版本化的表单定义和动态数据采集能力；其次，AI 智能辅助模块为审批过程注入智能化能力，工作流管理模块则提供流程定义和申请模板的配置管理功能。各模块的详细职责如下：
 
 **用户认证与安全管理模块**负责处理用户身份认证和系统安全控制，包含用户登录、JWT Token 管理、TOTP 双因素认证、账号锁定与解锁、密码修改、以及引导模式的系统初始化等功能。该模块是整个系统的安全基石，所有后续操作的入口都依赖此模块提供的认证和授权能力。
 
@@ -532,7 +532,7 @@ h）表单附件管理：支持在表单中上传和下载附件文件，方便�
 
 ## 5.1 系统架构设计
 
-本系统采用经典三层架构，由表示层、业务逻辑层和数据访问层构成，如图 5.1 所示。
+本系统采用经典三层架构，由表示层、业务逻辑层和数据访问层构成<sup>[20]</sup>，如图 5.1 所示。
 
 表示层由 Vue 3 前端应用构成，通过 Axios 封装的 HTTP 客户端与后端 API 通信，所有请求统一携带 JWT Token 进行身份认证。Vue Router 路由守卫在页面跳转时动态校验用户角色权限，不同角色的导航菜单和功能入口各有不同。
 
@@ -548,7 +548,7 @@ h）表单附件管理：支持在表单中上传和下载附件文件，方便�
 
 用户登录模块负责对用户身份进行安全验证并签发访问凭证。用户提交用户名和密码后，系统首先校验密码是否正确；若密码连续错误次数超过上限，则临时锁定账号以防止暴力破解。密码验证通过后，系统判断用户是否开启了双因素认证。
 
-若未启用双因素认证，系统直接签发 Access Token 并返回给客户端。若用户启用了双因素认证（TOTP），系统首先签发有效期仅 5 分钟的临时 Challenge Token，用户需在下一步输入认证器应用生成的 6 位 TOTP 验证码。验证码经 HMAC-SHA1 算法校验通过后，系统签发正式 Access Token，完成完整的双因素认证流程。
+若未启用双因素认证，系统直接签发 Access Token 并返回给客户端。若用户启用了双因素认证（TOTP），系统首先签发有效期仅 5 分钟的临时 Challenge Token，用户需在下一步输入认证器应用生成的 6 位 TOTP 验证码。验证码经 HMAC-SHA1 算法校验通过后<sup>[16]</sup>，系统签发正式 Access Token，完成完整的双因素认证流程。
 
 ![图5.2 用户登录流程图](images/图5.2%20用户登录流程图.png)
 
@@ -556,7 +556,7 @@ h）表单附件管理：支持在表单中上传和下载附件文件，方便�
 
 用户与权限管理模块提供用户账号的全生命周期管理功能，由系统超级管理员操作。管理员新建用户时，系统首先校验用户名是否已存在；若重复则提示错误，否则为用户分配角色、部门和岗位信息。若所分配的角色需要配置数据范围权限，系统还将进一步设置该用户可访问的部门数据范围，从而实现细粒度的数据隔离。
 
-对于已有用户，管理员可以修改其基本信息、重置密码或调整账号状态（启用/禁用）。系统基于 RBAC 模型，通过角色与权限的绑定关系，结合 Spring Security 的 URL 级访问控制，实现功能权限和数据权限的双层保护。
+对于已有用户，管理员可以修改其基本信息、重置密码或调整账号状态（启用/禁用）。系统基于 RBAC 模型<sup>[15]</sup>，通过角色与权限的绑定关系，结合 Spring Security 的 URL 级访问控制，实现功能权限和数据权限的双层保护。
 
 ![图5.3 用户与权限管理流程图](images/图5.3%20用户与权限管理流程图.png)
 
@@ -604,7 +604,7 @@ h）表单附件管理：支持在表单中上传和下载附件文件，方便�
 
 AI 审批建议模块在审批人处理任务时提供智能辅助决策支持。审批人请求 AI 建议后，系统首先从 Flowable 引擎获取任务上下文和表单数据，再从历史数据中统计申请人的月度行为数据和同类申请的历史审批统计结果，同时应用预定义的启发式规则对申请内容进行异常检查。
 
-上述数据汇总后组装为结构化的 LLM 请求报文，通过 LlmClient 接口调用大语言模型 API。若调用失败则返回服务不可用的提示；若调用成功，系统解析和规范化模型返回结果，将建议记录持久化到 ai_suggestion_record 表，并向审批人展示建议决策（通过或拒绝）和推理依据。审批人可以选择是否采纳建议，系统记录采纳状态以供后续效果分析。
+上述数据汇总后组装为结构化的 LLM 请求报文，通过 LlmClient 接口调用大语言模型 API<sup>[3,17]</sup>。若调用失败则返回服务不可用的提示；若调用成功，系统解析和规范化模型返回结果，将建议记录持久化到 ai_suggestion_record 表，并向审批人展示建议决策（通过或拒绝）和推理依据。审批人可以选择是否采纳建议，系统记录采纳状态以供后续效果分析。
 
 ![图5.9 AI审批建议流程图](images/图5.9%20AI审批建议流程图.png)
 
@@ -664,11 +664,11 @@ TaskAiSuggestionService 作为 AI 建议的缓存和持久化层，负责将每�
 
 ### 6.2.4 安全模块实现
 
-JWT Service 提供了两种令牌的生成和校验功能。Access Token 是用户登录成功后获得的正式访问令牌，有效期为 120 分钟，载荷中包含用户 ID、用户名和角色列表。Challenge Token 是开启双因素认证的用户在密码验证通过后获得的临时挑战令牌，有效期仅 5 分钟，仅用于二步验证环节。两种令牌在载荷中通过 type 字段进行区分，防止令牌类型的混用。
+JWT Service<sup>[14]</sup>提供了两种令牌的生成和校验功能。Access Token 是用户登录成功后获得的正式访问令牌，有效期为 120 分钟，载荷中包含用户 ID、用户名和角色列表。Challenge Token 是开启双因素认证的用户在密码验证通过后获得的临时挑战令牌，有效期仅 5 分钟，仅用于二步验证环节。两种令牌在载荷中通过 type 字段进行区分，防止令牌类型的混用。
 
 JwtAuthenticationFilter 是请求认证的入口过滤器。它在每个请求到达 Controller 之前拦截执行，从 HTTP 请求头的 Authorization 字段提取 JWT 令牌，调用 JwtService.parseAccessToken() 解析和验证令牌的有效性。验证通过后，从令牌的 Claims 中提取用户 ID、用户名和角色信息，构造 AuthUserPrincipal 和 UsernamePasswordAuthenticationToken 对象，将其设置到 Spring Security 的 SecurityContextHolder 中，后续的 Controller 和 Service 层即可通过 SecurityUtils 工具类获取当前登录用户的信息。
 
-TOTP 双因素认证基于标准的 TOTP 算法（RFC 6238）实现。用户首次设置双因素认证时，系统生成一个随机密钥，该密钥以 Base32 编码后与系统标识一起生成 otpauth URI。前端用户使用认证器应用扫描生成的二维码完成绑定。登录时的验证过程使用 HMAC-SHA1 算法结合密钥和当前时间窗口生成期望的验证码，与用户输入的验证码进行比对。系统还支持生成一组一次性恢复码，以加密形式存储在用户记录中，用于用户在丢失认证器设备时的应急登录。
+TOTP 双因素认证基于标准的 TOTP 算法（RFC 6238）<sup>[16]</sup>实现。用户首次设置双因素认证时，系统生成一个随机密钥，该密钥以 Base32 编码后与系统标识一起生成 otpauth URI。前端用户使用认证器应用扫描生成的二维码完成绑定。登录时的验证过程使用 HMAC-SHA1 算法结合密钥和当前时间窗口生成期望的验证码，与用户输入的验证码进行比对。系统还支持生成一组一次性恢复码，以加密形式存储在用户记录中，用于用户在丢失认证器设备时的应急登录。
 
 # 7. 结论
 
@@ -684,35 +684,45 @@ TOTP 双因素认证基于标准的 TOTP 算法（RFC 6238）实现。用户首�
 
 # 8. 参考文献
 
-[1] 刘俊强. 基于 Activiti 的工作流引擎在 OA 系统中的应用研究[D]. 西安电子科技大学, 2018.
+[1] Von Rosing M, White S, Cummins F, et al. Business Process Model and Notation-BPMN[J]. 2015.
 
-[2] 杨浩淼, 李铎. 基于 Spring Boot 的轻量级微服务框架设计与实现[J]. 计算机技术与发展, 2022, 32(3): 35-42.
+[2] Hollingsworth D. The workflow reference model[J]. workflow management coalition TC00-1003, 1995.
 
-[3] 冯志勇, 李文杰, 李晓红. 工作流管理技术综述[J]. 计算机集成制造系统, 2020, 26(4): 889-901.
+[3] Brown T, Mann B, Ryder N, et al. Language models are few-shot learners[J]. Advances in neural information processing systems, 2020, 33: 1877-1901.
 
-[4] Object Management Group. Business Process Model and Notation (BPMN) Version 2.0[S]. OMG Document Number: formal/2011-01-03, 2011.
+[4] 史美林, 杨光信, 向勇, 等. WfMS: 工作流管理系统[J]. 计算机学报, 1999, 22(3): 325-334.
 
-[5] Flowable Project Team. Flowable Documentation[EB/OL]. https://www.flowable.com/open-source/docs/, 2026.
+[5] 谢正, 李浩, 宋伊萍, 等. 从AIGC到AIGA,智能新赛道: 决策大模型[J]. 科学观察, 2024, 19(2): 14-33.
 
-[6] 尤雨溪. Vue.js 设计与实现[M]. 人民邮电出版社, 2022.
+[6] Bloch J. Effective Java[M]. 3rd ed. Boston: Addison-Wesley Professional, 2018.
 
-[7] Spring Team. Spring Boot Reference Documentation[EB/OL]. https://docs.spring.io/spring-boot/docs/current/reference/htmlsingle/, 2026.
+[7] Walls C. Spring in action[M]. Simon and Schuster, 2022.
 
-[8] Craig Walls. Spring Boot in Action[M]. Manning Publications, 2016.
+[8] 刘汀. 基于SpringBoot的微服务体系在企业信息管理系统中的应用[J]. 信息技术与信息化, 2023(5): 23-26.
 
-[9] Brown T B, Mann B, Ryder N, et al. Language Models are Few-Shot Learners[C]. Advances in Neural Information Processing Systems, 2020, 33: 1877-1901.
+[9] Schwartz B, Zaitsev P, Tkachenko V. High performance MySQL: optimization, backups, and replication[M]. 3rd ed. Sebastopol: O'Reilly Media, 2012.
 
-[10] 吴翰清. 白帽子讲 Web 安全[M]. 电子工业出版社, 2012.
+[10] Bauer C, King G, Gregory G. Java persistence with Hibernate[M]. 2nd ed. Shelter Island: Manning Publications, 2015.
 
-[11] Hardt D. The OAuth 2.0 Authorization Framework[S]. RFC 6749, Internet Engineering Task Force, 2012.
+[11] 方生. 基于"Vue.js"前端框架技术的研究[J]. 电脑知识与技术, 2021, 17(19): 59-60.
 
-[12] M'Raihi D, Machani S, Pei M, et al. TOTP: Time-Based One-Time Password Algorithm[S]. RFC 6238, Internet Engineering Task Force, 2011.
+[12] Fielding R T. Architectural styles and the design of network-based software architectures[D]. Irvine: University of California, Irvine, 2000.
 
-[13] 李智慧. 大型网站技术架构: 核心原理与案例分析[M]. 电子工业出版社, 2013.
+[13] 吴翰清. 白帽子讲Web安全[M]. 北京: 电子工业出版社, 2012.
 
-[14] Jones M, Bradley J, Sakimura N. JSON Web Token (JWT)[S]. RFC 7519, Internet Engineering Task Force, 2015.
+[14] Jones M, Bradley J, Sakimura N. JSON web token (JWT)[S]. RFC 7519. Fremont: Internet Engineering Task Force, 2015.
 
-[15] Gamma E, Helm R, Johnson R, et al. Design Patterns: Elements of Reusable Object-Oriented Software[M]. Addison-Wesley, 1995.
+[15] Sandhu R S, Coyne E J, Feinstein H L, et al. Role-based access control models[J]. IEEE Computer, 1996, 29(2): 38-47.
+
+[16] M'Raihi D, Machani S, Pei M, et al. TOTP: time-based one-time password algorithm[S]. RFC 6238. Fremont: Internet Engineering Task Force, 2011.
+
+[17] Vaswani A, Shazeer N, Parmar N, et al. Attention is all you need[J]. Advances in neural information processing systems, 2017, 30.
+
+[18] Gamma E, Helm R, Johnson R, et al. Design patterns: elements of reusable object-oriented software[M]. Reading: Addison-Wesley, 1994.
+
+[19] 张海藩, 牟永敏. 软件工程导论[M]. 6版. 北京: 清华大学出版社, 2013.
+
+[20] 李智慧. 大型网站技术架构: 核心原理与案例分析[M]. 北京: 电子工业出版社, 2013.
 
 # 9. 致谢
 
@@ -725,4 +735,3 @@ TOTP 双因素认证基于标准的 TOTP 算法（RFC 6238）实现。用户首�
 感谢实验室的各位同学，在系统开发过程中大家互相帮助、共同探讨技术问题，营造了良好的学习和研究氛围。
 
 最后要感谢我的家人，你们的默默支持和无私付出是我能够专注于学业并顺利完成毕业论文的坚实后盾。
-

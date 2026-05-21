@@ -1,0 +1,46 @@
+@startuml 图3.2 系统管理员用例图
+left to right direction
+
+actor "系统管理员" as ADM
+
+usecase "个人中心\n管理" as UC01
+usecase "申请模板管理" as UC02
+usecase "表单定义管理" as UC03
+usecase "表单字段配置" as UC04
+usecase "权限分配管理" as UC05
+
+usecase "管理个人信息" as S01
+
+usecase "创建与修改模板" as S02
+usecase "配置模板角色\n与启动权限" as S03
+
+usecase "管理定义与版本" as S04
+usecase "发布与归档版本" as S05
+usecase "影响分析与\n示例验证" as S06
+
+usecase "配置字段类型\n与默认值" as S07
+usecase "设置校验与\n可见性规则" as S08
+
+usecase "分配角色与岗位" as S09
+usecase "分配部门" as S10
+usecase "配置数据权限" as S11
+
+ADM --> UC01
+ADM --> UC02
+ADM --> UC03
+ADM --> UC04
+ADM --> UC05
+
+UC01 ..> S01 : <<include>>
+UC02 ..> S02 : <<include>>
+UC02 ..> S03 : <<include>>
+UC03 ..> S04 : <<include>>
+UC03 ..> S05 : <<include>>
+UC03 ..> S06 : <<include>>
+UC04 ..> S07 : <<include>>
+UC04 ..> S08 : <<include>>
+UC05 ..> S09 : <<include>>
+UC05 ..> S10 : <<include>>
+UC05 ..> S11 : <<include>>
+
+@enduml

@@ -1,0 +1,30 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:输入账号和密码;
+if (密码校验是否通过?) then (是)
+  if (是否启用双因素认证?) then (是)
+    :验证TOTP验证码;
+  else (否)
+  endif
+  :签发Access Token;
+else (否)
+  :返回登录失败;
+endif
+stop
+@enduml

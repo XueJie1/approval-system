@@ -1,0 +1,31 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:创建或选择表单定义;
+repeat
+  :配置草稿版本字段规则;
+repeat while (是否需要继续修改?) is (是) not (否)
+:提交发布表单版本;
+if (是否存在已发布版本?) then (是)
+  :将旧版本状态置为已归档;
+  :将当前版本状态置为已发布\n并更新关联模板;
+else (否)
+  :直接将当前版本状态置为已发布\n并更新关联模板;
+endif
+stop
+@enduml

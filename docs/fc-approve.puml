@@ -1,0 +1,31 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:获取并查看待处理任务;
+if (是否选择委派/转办?) then (是)
+  :执行委派或转办操作;
+else (否)
+  :填写审批意见;
+  if (是否审批通过?) then (通过)
+    :完成任务，流程流转至下一节点\n（或终止并置申请为已批准）;
+  else (拒绝)
+    :完成任务，流程立即终止\n（申请状态置为已拒绝）;
+  endif
+endif
+stop
+@enduml

@@ -1,0 +1,23 @@
+digraph form_mgmt {
+    rankdir=TB
+    graph [fontname="SimSun", fontsize=14, nodesep=0.6, ranksep=0.75, pad="0.3", splines=ortho]
+    node [fontname="SimSun", fontsize=14, style=filled, fillcolor=white]
+    edge [fontname="SimSun", fontsize=14]
+
+    start   [label="开始", shape=oval, width=1.4]
+    def     [label="创建或选择表单定义", shape=box, width=3.0]
+    fields  [label="配置草稿版本字段规则", shape=box, width=3.0]
+    d_ok    [label="是否需要继续修改?", shape=diamond, width=3.0, height=1.0]
+    pub     [label="提交发布表单版本", shape=box, width=3.0]
+    d_prev  [label="是否存在已发布版本?", shape=diamond, width=3.2, height=1.0]
+    update  [label="更新版本状态并关联模板", shape=box, width=3.4]
+    end_    [label="结束", shape=oval, width=1.4]
+
+    start  -> def -> fields -> d_ok
+    d_ok   -> fields [label="是", tailport=w]
+    d_ok   -> pub    [label="否", tailport=s]
+    pub    -> d_prev
+    d_prev -> update [label="是（归档旧版本）", tailport=s]
+    d_prev -> update [label="否（直接发布）", tailport=e]
+    update -> end_
+}

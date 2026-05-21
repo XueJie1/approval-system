@@ -1,0 +1,64 @@
+@startuml 图3.1 系统超级管理员用例图
+left to right direction
+
+actor "系统超级管理员" as SA
+
+usecase "个人中心\n管理" as UC01
+usecase "用户管理" as UC02
+usecase "部门管理" as UC03
+usecase "岗位管理" as UC04
+usecase "角色管理" as UC05
+usecase "工作流定义\n管理" as UC06
+usecase "工作流节点\n配置" as UC07
+usecase "AI 服务配置" as UC08
+usecase "登录审计日志" as UC09
+
+usecase "管理个人信息" as S01
+
+usecase "用户增删改查" as S02
+usecase "账号状态与\n密码管理" as S03
+usecase "CSV 批量导入" as S04
+
+usecase "部门增删改查\n与负责人管理" as S05
+
+usecase "岗位增删改查" as S06
+
+usecase "角色定义与分配" as S07
+usecase "配置数据权限\n范围" as S08
+
+usecase "创建与版本管理" as S09
+usecase "发布与状态管理" as S10
+usecase "查看日志与分析" as S11
+
+usecase "配置审批规则\n与表单绑定" as S12
+
+usecase "管理接口地址\n与模型参数" as S13
+
+usecase "查看登录历史\n与详情" as S14
+
+SA --> UC01
+SA --> UC02
+SA --> UC03
+SA --> UC04
+SA --> UC05
+SA --> UC06
+SA --> UC07
+SA --> UC08
+SA --> UC09
+
+UC01 ..> S01 : <<include>>
+UC02 ..> S02 : <<include>>
+UC02 ..> S03 : <<include>>
+UC02 ..> S04 : <<include>>
+UC03 ..> S05 : <<include>>
+UC04 ..> S06 : <<include>>
+UC05 ..> S07 : <<include>>
+UC05 ..> S08 : <<include>>
+UC06 ..> S09 : <<include>>
+UC06 ..> S10 : <<include>>
+UC06 ..> S11 : <<include>>
+UC07 ..> S12 : <<include>>
+UC08 ..> S13 : <<include>>
+UC09 ..> S14 : <<include>>
+
+@enduml

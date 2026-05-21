@@ -1,0 +1,52 @@
+// form_version + form_field E-R 图 (neato with explicit positions)
+graph {
+    layout = neato;
+    graph [fontname = "SimSun"; pad = 0.5; splines = false; bgcolor = white; charset = "UTF-8";];
+    node [fontname = "SimSun"; fontsize = 14;];
+    edge [fontname = "SimSun"; fontsize = 14;];
+    dpi = 300;
+    size = "8,4";
+    
+    // ── Entities ──
+    FV [label = "表单版本";shape = box;width = 1.2;height = 0.55;style = filled;fillcolor = white;pos = "3,0!";];
+    FF [label = "表单字段";shape = box;width = 1.2;height = 0.55;style = filled;fillcolor = white;pos = "9.5,0!";];
+    
+    // ── Relationship ──
+    Rel [label = "包含";shape = diamond;width = 1.1;height = 0.65;style = filled;fillcolor = white;pos = "6.25,0!";];
+    
+    // ── FormVersion attributes (left side) ──
+    V1 [label = "版本号";shape = ellipse;pos = "0.5, 2.2!";];
+    V2 [label = "字段结构";shape = ellipse;pos = "2.2, 2.2!";];
+    V3 [label = "版本状态";shape = ellipse;pos = "0.5,-2.2!";];
+    V4 [label = "发布人";shape = ellipse;pos = "2.2,-2.2!";];
+    V5 [label = "发布时间";shape = ellipse;pos = "3.8,-2.2!";];
+    
+    // ── FormField attributes (right side) ──
+    F1 [label = "字段键";shape = ellipse;pos = "8.0, 2.2!";];
+    F2 [label = "流程变量键";shape = ellipse;pos = "9.7, 2.2!";];
+    F3 [label = "字段类型";shape = ellipse;pos = "11.4,2.2!";];
+    F4 [label = "字段标签";shape = ellipse;pos = "8.0,-2.2!";];
+    F5 [label = "是否必填";shape = ellipse;pos = "9.7,-2.2!";];
+    F6 [label = "选项配置";shape = ellipse;pos = "11.4,-2.2!";];
+    F7 [label = "校验规则";shape = ellipse;pos = "12.8, 0.0!";];
+    F8 [label = "排序序号";shape = ellipse;pos = "12.8, 1.2!";];
+    
+    // ── Entity-Relationship edges ──
+    FV -- Rel [label = " 1 ";];
+    Rel -- FF [label = " n ";];
+    
+    // ── Attribute edges ──
+    FV -- V1;
+    FV -- V2;
+    FV -- V3;
+    FV -- V4;
+    FV -- V5;
+    FF -- F1;
+    FF -- F2;
+    FF -- F3;
+    FF -- F4;
+    FF -- F5;
+    FF -- F6;
+    FF -- F7;
+    FF -- F8;
+}

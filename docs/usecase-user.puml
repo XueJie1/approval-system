@@ -1,0 +1,62 @@
+@startuml 图3.3 普通员工用例图
+left to right direction
+
+actor "普通员工" as EMP
+
+usecase "账号管理" as UC01
+usecase "个人中心" as UC02
+usecase "发起审批申请" as UC03
+usecase "审批任务处理" as UC04
+usecase "流程管理" as UC05
+usecase "审批历史查询" as UC06
+usecase "AI 审批建议" as UC07
+usecase "表单附件管理" as UC08
+
+usecase "登录认证" as S01
+usecase "双因素认证\n与安全保护" as S02
+
+usecase "管理个人资料\n与密码" as S03
+
+usecase "选择模板并\n填写表单" as S04
+usecase "预览流程并\n提交申请" as S05
+usecase "AI 智能填充表单" as S06
+
+usecase "批准与拒绝" as S07
+usecase "认领与委派" as S08
+usecase "转办与回退" as S09
+usecase "会签审批" as S10
+
+usecase "查看申请与进度" as S11
+usecase "撤销与挂起激活" as S12
+
+usecase "查看审批历史" as S13
+
+usecase "获取与追问建议" as S14
+usecase "采纳 AI 建议" as S15
+
+EMP --> UC01
+EMP --> UC02
+EMP --> UC03
+EMP --> UC04
+EMP --> UC05
+EMP --> UC06
+EMP --> UC07
+EMP --> UC08
+
+UC01 ..> S01 : <<include>>
+UC01 ..> S02 : <<include>>
+UC02 ..> S03 : <<include>>
+UC03 ..> S04 : <<include>>
+UC03 ..> S05 : <<include>>
+UC03 ..> S06 : <<include>>
+UC04 ..> S07 : <<include>>
+UC04 ..> S08 : <<include>>
+UC04 ..> S09 : <<include>>
+UC04 ..> S10 : <<include>>
+UC05 ..> S11 : <<include>>
+UC05 ..> S12 : <<include>>
+UC06 ..> S13 : <<include>>
+UC07 ..> S14 : <<include>>
+UC07 ..> S15 : <<include>>
+
+@enduml

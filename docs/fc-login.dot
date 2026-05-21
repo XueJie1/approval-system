@@ -1,0 +1,24 @@
+digraph login {
+    rankdir=TB
+    graph [fontname="SimSun", fontsize=14, nodesep=0.6, ranksep=0.75, pad="0.3", splines=ortho]
+    node [fontname="SimSun", fontsize=14, style=filled, fillcolor=white]
+    edge [fontname="SimSun", fontsize=14]
+
+    start [label="开始", shape=oval, width=1.4]
+    input [label="输入账号和密码", shape=box, width=2.8]
+    d1    [label="密码校验是否通过?", shape=diamond, width=3.0, height=1.0]
+    fail  [label="返回登录失败", shape=box, width=2.8]
+    d2    [label="是否启用双因素认证?", shape=diamond, width=3.2, height=1.0]
+    totp  [label="验证TOTP验证码", shape=box, width=2.8]
+    token [label="签发Access Token", shape=box, width=2.8]
+    end_  [label="结束", shape=oval, width=1.4]
+
+    start -> input -> d1
+    d1 -> fail  [label="否", tailport=e]
+    d1 -> d2    [label="是", tailport=s]
+    d2 -> token [label="否", tailport=e]
+    d2 -> totp  [label="是", tailport=s]
+    totp  -> token
+    fail  -> end_
+    token -> end_
+}

@@ -1,0 +1,32 @@
+@startuml
+skinparam dpi 300
+skinparam backgroundColor white
+skinparam defaultFontName SimSun
+skinparam defaultFontSize 14
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityFontColor black
+skinparam ActivityFontName SimSun
+skinparam ActivityFontSize 14
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondFontColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam ArrowColor black
+
+start
+:选择模板并填写表单;
+if (是否具备发起权限?) then (是)
+  :创建表单实例并解析审批人;
+  if (是否单人审批?) then (单人审批流)
+    :选用单人审批流程定义;
+  else (顺序审批流)
+    :选用顺序多人串行审批流程定义;
+  endif
+  :启动流程实例并写入业务申请记录;
+else (否)
+  :返回权限不足错误;
+endif
+stop
+@enduml

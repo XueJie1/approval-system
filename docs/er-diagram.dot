@@ -1,0 +1,78 @@
+// Chen-style E-R diagram — neato layout with explicit positions
+// Units: inches.  pos="x,y!" means fixed coordinate.
+graph ER {
+    graph [
+        charset  = "UTF-8"
+        fontname = "Source Han Sans CN"
+        splines  = false
+        pad      = "0.5"
+        overlap  = false
+    ]
+    node [fontname="Source Han Sans CN", fontsize=12, margin="0.12,0.06"]
+    edge [fontname="Source Han Sans CN", fontsize=11]
+
+    // ───────────────── ENTITIES ─────────────────
+    User     [label="用户",   shape=box, pos="0,0!",    width=0.9, height=0.55, style=filled, fillcolor=white]
+    BizReq   [label="审批申请", shape=box, pos="4.2,0!",  width=1.3, height=0.55, style=filled, fillcolor=white]
+    Template [label="申请模板", shape=box, pos="8.4,0!",  width=1.3, height=0.55, style=filled, fillcolor=white]
+    Form     [label="表单",   shape=box, pos="12.5,1.5!", width=0.9, height=0.55, style=filled, fillcolor=white]
+    Workflow [label="工作流",  shape=box, pos="12.5,-1.5!",width=1.0, height=0.55, style=filled, fillcolor=white]
+
+    // ───────────────── RELATIONSHIPS ─────────────────
+    Initiate [label="发起",   shape=diamond, pos="2.1,0!",    width=1.1, height=0.65, style=filled, fillcolor=white]
+    Approve  [label="审批",   shape=diamond, pos="2.1,-2.2!", width=1.1, height=0.65, style=filled, fillcolor=white]
+    BasedOn  [label="基于",   shape=diamond, pos="6.3,0!",    width=1.1, height=0.65, style=filled, fillcolor=white]
+    CfgForm  [label="配置表单", shape=diamond, pos="10.4,1.5!", width=1.3, height=0.65, style=filled, fillcolor=white]
+    CfgFlow  [label="配置流程", shape=diamond, pos="10.4,-1.5!",width=1.3, height=0.65, style=filled, fillcolor=white]
+
+    // ───────────────── USER ATTRIBUTES ─────────────────
+    u1 [label="用户名",  shape=ellipse, pos="-1.5,1.8!",  width=0.9, height=0.45]
+    u2 [label="密码",    shape=ellipse, pos="-0.3,1.8!",  width=0.75,height=0.45]
+    u3 [label="姓名",    shape=ellipse, pos="-1.5,-1.8!", width=0.75,height=0.45]
+    u4 [label="所属部门", shape=ellipse, pos="-0.2,-1.8!", width=1.0, height=0.45]
+    u5 [label="账号状态", shape=ellipse, pos="1.1,-1.8!",  width=1.0, height=0.45]
+
+    // ───────────────── BIZREQUEST ATTRIBUTES ─────────────────
+    r1 [label="申请标题", shape=ellipse, pos="3.2,1.8!",  width=1.0, height=0.45]
+    r2 [label="申请状态", shape=ellipse, pos="4.5,1.8!",  width=1.0, height=0.45]
+    r3 [label="发起时间", shape=ellipse, pos="3.2,-1.8!", width=1.0, height=0.45]
+    r4 [label="结束时间", shape=ellipse, pos="4.5,-1.8!", width=1.0, height=0.45]
+
+    // ───────────────── TEMPLATE ATTRIBUTES ─────────────────
+    t1 [label="模板名称", shape=ellipse, pos="7.5,1.8!",  width=1.0, height=0.45]
+    t2 [label="分类",     shape=ellipse, pos="8.7,1.8!",  width=0.8, height=0.45]
+    t3 [label="发起权限", shape=ellipse, pos="9.9,1.8!",  width=1.0, height=0.45]
+
+    // ───────────────── FORM ATTRIBUTES ─────────────────
+    f1 [label="表单名称", shape=ellipse, pos="11.8,2.9!", width=1.0, height=0.45]
+    f2 [label="表单键",   shape=ellipse, pos="13.2,2.9!", width=0.9, height=0.45]
+    f3 [label="版本状态", shape=ellipse, pos="14.4,1.5!", width=1.0, height=0.45]
+
+    // ───────────────── WORKFLOW ATTRIBUTES ─────────────────
+    w1 [label="流程名称", shape=ellipse, pos="11.8,-2.9!",width=1.0, height=0.45]
+    w2 [label="流程键",   shape=ellipse, pos="13.2,-2.9!",width=0.9, height=0.45]
+    w3 [label="状态",     shape=ellipse, pos="14.4,-1.5!",width=0.75,height=0.45]
+
+    // ───────────────── ENTITY–RELATIONSHIP EDGES ─────────────────
+    User     -- Initiate  [label="1"]
+    Initiate -- BizReq    [label="n"]
+
+    User     -- Approve   [label="m"]
+    Approve  -- BizReq    [label="n"]
+
+    BizReq   -- BasedOn   [label="n"]
+    BasedOn  -- Template  [label="1"]
+
+    Template -- CfgForm   [label="1"]
+    CfgForm  -- Form      [label="1"]
+
+    Template -- CfgFlow   [label="1"]
+    CfgFlow  -- Workflow  [label="1"]
+
+    // ───────────────── ATTRIBUTE EDGES ─────────────────
+    User     -- u1;  User -- u2;  User -- u3;  User -- u4;  User -- u5
+    BizReq   -- r1;  BizReq -- r2;  BizReq -- r3;  BizReq -- r4
+    Template -- t1;  Template -- t2;  Template -- t3
+    Form     -- f1;  Form -- f2;  Form -- f3
+    Workflow -- w1;  Workflow -- w2;  Workflow -- w3
+}
