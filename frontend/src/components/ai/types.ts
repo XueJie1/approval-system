@@ -1,4 +1,4 @@
-import type { InjectionKey, Ref } from 'vue';
+import type { Ref } from 'vue';
 
 export interface ApprovalAiContext {
   mode: 'approval';
@@ -17,5 +17,3 @@ export interface FormCommandAiContext {
 }
 
 export type AiAssistantContext = ApprovalAiContext | FormCommandAiContext | null;
-
-export const AI_ASSISTANT_KEY: InjectionKey<AiAssistantContext> = Symbol('aiAssistant');

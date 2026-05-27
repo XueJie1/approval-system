@@ -1,7 +1,6 @@
 package com.flowablecollab.approval_system.service.ai;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -16,7 +15,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-@ConditionalOnProperty(name = "ai.llm.provider", havingValue = "mock", matchIfMissing = true)
 public class MockLlmClient implements LlmClient {
 
     @Value("${ai.llm.mock-model:mock-approval-advisor-v2}")
@@ -145,6 +143,27 @@ public class MockLlmClient implements LlmClient {
         ChatResult result = new ChatResult();
         result.setReply(reply);
         result.setModel(mockModel);
+        return result;
+    }
+
+    @Override
+    public ChatWithToolsResult chatWithTools(ChatWithToolsRequest request) {
+        String lastUser = "";
+        if (request.getMessages() != null) {
+            for (int i = request.getMessages().size() - 1; i >= 0; i--) {
+                ChatMessage m = request.getMessages().get(i);
+                if ("user".equals(m.getRole()) && m.getContent() != null) {
+                    lastUser = m.getContent();
+                    break;
+                }
+            }
+        }
+        ChatRequest legacy = new ChatRequest();
+        legacy.setMessage(lastUser);
+        ChatResult basic = chat(legacy);
+        ChatWithToolsResult result = new ChatWithToolsResult();
+        result.setContent(basic.getReply() + "\n\n（提示：当前 AI 处于 mock 模式，无法自动调用工具。请配置 OpenAI/DeepSeek API key 后获得完整能力。）");
+        result.setModel(basic.getModel());
         return result;
     }
 

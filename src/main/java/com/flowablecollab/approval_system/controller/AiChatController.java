@@ -1,5 +1,6 @@
 package com.flowablecollab.approval_system.controller;
 
+import com.flowablecollab.approval_system.service.ai.AiAgentService;
 import com.flowablecollab.approval_system.service.ai.LlmClient;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -16,17 +17,19 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AiChatController {
 
-    private final LlmClient llmClient;
+    private final AiAgentService aiAgentService;
 
     @PostMapping("/chat")
     public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request) {
-        LlmClient.ChatRequest llmRequest = new LlmClient.ChatRequest();
-        llmRequest.setMessage(request.getMessage());
-        llmRequest.setHistory(request.getHistory());
-        LlmClient.ChatResult chatResult = llmClient.chat(llmRequest);
+        AiAgentService.AgentChatRequest agentRequest = new AiAgentService.AgentChatRequest();
+        agentRequest.setMessage(request.getMessage());
+        agentRequest.setHistory(request.getHistory());
+        AiAgentService.AgentChatResult result = aiAgentService.chat(agentRequest);
+
         ChatResponse response = new ChatResponse();
-        response.setReply(chatResult.getReply());
-        response.setModel(chatResult.getModel());
+        response.setReply(result.getReply());
+        response.setModel(result.getModel());
+        response.setPendingAction(result.getPendingAction());
         return ResponseEntity.ok(response);
     }
 
@@ -40,5 +43,6 @@ public class AiChatController {
     public static class ChatResponse {
         private String reply;
         private String model;
+        private AiAgentService.PendingAction pendingAction;
     }
 }

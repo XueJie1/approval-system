@@ -6,9 +6,44 @@
         <p class="page-subtitle">配置 AI 连接参数（Base URL、API Key、模型）并安全持久化</p>
       </div>
       <div class="heading-actions">
-        <el-button :loading="loading" @click="loadSettings">刷新</el-button>
+        <el-button :loading="loading || providerLoading" @click="refreshAll">刷新</el-button>
       </div>
     </div>
+
+    <el-card shadow="never" class="panel" v-loading="providerLoading">
+      <template #header>
+        <div class="panel-header">
+          <span class="panel-title">LLM 提供方</span>
+          <el-tag :type="provider?.provider === 'openai' ? 'success' : 'info'">
+            当前：{{ providerLabel(provider?.provider) }}
+          </el-tag>
+        </div>
+      </template>
+
+      <el-radio-group v-model="selectedProvider" :disabled="providerSaving">
+        <el-radio value="mock">Mock（内置启发式，仅用于演示）</el-radio>
+        <el-radio value="openai">OpenAI 兼容（调用真实接口）</el-radio>
+      </el-radio-group>
+
+      <div v-if="selectedProvider === 'openai' && provider && !provider.openAiReady" class="form-hint warn">
+        OpenAI 模式需要先在下方"OpenAI Provider 设置"中配置 API Key。
+      </div>
+      <div class="form-hint">
+        切换后立即对所有 AI 入口（审批建议、AI 填表、聊天）生效，无需重启服务。
+        <span v-if="provider?.updatedAt">最近更新：{{ formatDateTime(provider.updatedAt) }}</span>
+      </div>
+
+      <div class="action-row">
+        <el-button
+          type="primary"
+          :loading="providerSaving"
+          :disabled="!canSaveProvider"
+          @click="saveProvider"
+        >
+          保存切换
+        </el-button>
+      </div>
+    </el-card>
 
     <el-card shadow="never" class="panel" v-loading="loading">
       <template #header>
@@ -92,8 +127,14 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
-import type { AdminOpenAiSettings } from "../types";
-import { getAdminOpenAiSettings, listAdminOpenAiModels, updateAdminOpenAiSettings } from "../api/admin-settings";
+import type { AdminAiProvider, AdminAiProviderName, AdminOpenAiSettings } from "../types";
+import {
+  getAdminAiProvider,
+  getAdminOpenAiSettings,
+  listAdminOpenAiModels,
+  updateAdminAiProvider,
+  updateAdminOpenAiSettings
+} from "../api/admin-settings";
 import { buildOpenAiSettingsUpdatePayload, normalizeBaseUrl, normalizeModel } from "../utils/admin-settings";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
@@ -104,6 +145,18 @@ const modelsLoading = ref(false);
 const settings = ref<AdminOpenAiSettings | null>(null);
 const formRef = ref<FormInstance>();
 const modelOptions = ref<string[]>([]);
+
+const providerLoading = ref(false);
+const providerSaving = ref(false);
+const provider = ref<AdminAiProvider | null>(null);
+const selectedProvider = ref<AdminAiProviderName>("mock");
+
+const canSaveProvider = computed(() => {
+  if (!provider.value) return false;
+  if (selectedProvider.value === provider.value.provider) return false;
+  if (selectedProvider.value === "openai" && !provider.value.openAiReady) return false;
+  return true;
+});
 
 const form = reactive({
   baseUrl: "",
@@ -141,6 +194,7 @@ const hasPendingApiKeyUpdate = computed(() => Boolean(form.apiKey.trim().length)
 
 onMounted(() => {
   loadSettings();
+  loadProvider();
 });
 
 async function loadSettings() {
@@ -156,6 +210,39 @@ async function loadSettings() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadProvider() {
+  providerLoading.value = true;
+  try {
+    const data = await getAdminAiProvider();
+    provider.value = data;
+    selectedProvider.value = data.provider;
+  } finally {
+    providerLoading.value = false;
+  }
+}
+
+async function saveProvider() {
+  if (!canSaveProvider.value) return;
+  providerSaving.value = true;
+  try {
+    const data = await updateAdminAiProvider({ provider: selectedProvider.value });
+    provider.value = data;
+    selectedProvider.value = data.provider;
+    ElMessage.success(`已切换 LLM 提供方为 ${providerLabel(data.provider)}`);
+  } finally {
+    providerSaving.value = false;
+  }
+}
+
+function providerLabel(value?: AdminAiProviderName | null) {
+  if (value === "openai") return "OpenAI 兼容";
+  return "Mock";
+}
+
+async function refreshAll() {
+  await Promise.all([loadSettings(), loadProvider()]);
 }
 
 async function saveSettings() {
@@ -187,6 +274,7 @@ async function saveSettings() {
     form.model = data.model ?? form.model;
     form.clearApiKey = false;
     await loadModels(true);
+    await loadProvider();
     ElMessage.success("系统设置已保存");
   } finally {
     saving.value = false;
@@ -305,6 +393,10 @@ function formatDateTime(value?: string | null) {
   margin-top: 6px;
   font-size: 12px;
   color: #909399;
+}
+
+.form-hint.warn {
+  color: #e6a23c;
 }
 
 .model-row {

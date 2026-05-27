@@ -243,7 +243,7 @@
 
 <script setup lang="ts">
 import type { AxiosError } from 'axios';
-import { computed, onMounted, provide, reactive, ref, toRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, toRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { InfoFilled } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
@@ -255,7 +255,8 @@ import { listRequestTemplates, previewRequestTemplateApproval } from '../api/req
 import { saveDraft as saveDraftApi, startRequest, submitDraft as submitDraftApi } from '../api/workflow';
 import CountersignUserPickerDialog from '../components/requests/CountersignUserPickerDialog.vue';
 import RequestDynamicFields from '../components/requests/RequestDynamicFields.vue';
-import { AI_ASSISTANT_KEY, type FormCommandAiContext } from '../components/ai/types';
+import type { FormCommandAiContext } from '../components/ai/types';
+import { useAiAssistantStore } from '../stores/aiAssistant';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -764,7 +765,8 @@ function goRequests() {
   router.push('/user/requests');
 }
 
-provide<FormCommandAiContext>(AI_ASSISTANT_KEY, {
+const aiAssistantStore = useAiAssistantStore();
+const aiCtx: FormCommandAiContext = {
   mode: 'form-command',
   templateKey: toRef(form, 'templateKey'),
   formKey: toRef(form, 'formKey'),
@@ -780,6 +782,12 @@ provide<FormCommandAiContext>(AI_ASSISTANT_KEY, {
   onStartProcess() {
     resetForm();
     goRequests();
+  }
+};
+aiAssistantStore.set(aiCtx);
+onBeforeUnmount(() => {
+  if (aiAssistantStore.current === aiCtx) {
+    aiAssistantStore.clear();
   }
 });
 

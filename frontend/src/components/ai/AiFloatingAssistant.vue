@@ -210,9 +210,51 @@
           <template v-if="activeTab === 'chat'">
             <div class="ai-chat-messages" ref="chatMessagesEl">
               <div v-for="(msg, i) in chatState.messages" :key="i" class="chat-bubble-row" :class="msg.role">
-                <div class="chat-bubble">
-                  <div class="bubble-text">{{ msg.content }}</div>
-                  <div class="bubble-time">{{ msg.time }}</div>
+                <div class="chat-bubble-wrapper">
+                  <div class="chat-bubble">
+                    <div class="bubble-text">{{ msg.content }}</div>
+                    <div class="bubble-time">{{ msg.time }}</div>
+                  </div>
+                  <div v-if="msg.pendingAction" class="pending-action-card">
+                    <div class="pa-header">
+                      <el-icon><Document /></el-icon>
+                      <span>AI 准备发起：{{ msg.pendingAction.templateName || msg.pendingAction.templateKey || '申请' }}</span>
+                    </div>
+                    <div v-if="msg.pendingAction.confidence !== undefined" class="pa-meta">
+                      置信度 {{ Math.round((msg.pendingAction.confidence ?? 0) * 100) }}%
+                    </div>
+                    <div class="pa-fields">
+                      <div v-for="[k, v] in pendingActionEntries(msg.pendingAction)" :key="k" class="pa-row">
+                        <code>{{ k }}</code>
+                        <span>{{ formatPendingValue(v) }}</span>
+                      </div>
+                      <div v-if="pendingActionEntries(msg.pendingAction).length === 0" class="pa-empty">
+                        未识别到字段
+                      </div>
+                    </div>
+                    <div v-if="msg.pendingAction.missingRequiredFields?.length" class="pa-missing">
+                      仍缺少必填字段：{{ msg.pendingAction.missingRequiredFields.join('、') }}
+                    </div>
+                    <div v-if="msg.pendingError" class="pa-error">{{ msg.pendingError }}</div>
+                    <div v-if="msg.pendingStatus === 'started'" class="pa-success">
+                      已发起，流程实例：{{ msg.pendingResult?.processInstanceId }}
+                    </div>
+                    <div v-else-if="msg.pendingStatus === 'cancelled'" class="pa-cancelled">已取消</div>
+                    <div v-else class="pa-actions">
+                      <el-button
+                        size="small"
+                        type="primary"
+                        :loading="msg.pendingStatus === 'confirming'"
+                        :disabled="!!msg.pendingAction.missingRequiredFields?.length"
+                        @click="confirmPending(msg)"
+                      >
+                        确认发起
+                      </el-button>
+                      <el-button size="small" :disabled="msg.pendingStatus === 'confirming'" @click="cancelPending(msg)">
+                        取消
+                      </el-button>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div v-if="chatState.loading" class="chat-bubble-row assistant">
@@ -256,24 +298,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import {
   ChatDotRound, ChatDotSquare, CircleCheck, CircleClose,
-  Close, Delete, Fold, Loading
+  Close, Delete, Document, Fold, Loading
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import type { AiSuggestion } from '../../types';
 import { aiSuggestion, aiSuggestionFollowUp } from '../../api/workflow';
-import { aiChat, parseAndStartByFormCommand, parseFormCommand, type ChatTurn } from '../../api/ai-form-commands';
+import { aiChat, parseAndStartByFormCommand, parseFormCommand, type AiPendingAction, type ChatTurn } from '../../api/ai-form-commands';
 import { useAuthStore } from '../../stores/auth';
-import { AI_ASSISTANT_KEY } from './types';
+import { useAiAssistantStore } from '../../stores/aiAssistant';
 
 const auth = useAuthStore();
+const aiAssistantStore = useAiAssistantStore();
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   time: string;
+  pendingAction?: AiPendingAction;
+  /** 'pending' | 'confirming' | 'started' | 'cancelled' */
+  pendingStatus?: 'pending' | 'confirming' | 'started' | 'cancelled';
+  /** Server-side result after confirm. */
+  pendingResult?: { processInstanceId: string; title?: string };
+  /** Error message if confirm failed. */
+  pendingError?: string;
 }
 
 interface Conversation {
@@ -307,7 +357,7 @@ function saveConversations(list: Conversation[]) {
   } catch { /* quota exceeded, silently ignore */ }
 }
 
-const ctx = inject(AI_ASSISTANT_KEY, null);
+const ctx = computed(() => aiAssistantStore.current);
 
 const panelOpen = ref(false);
 const activeTab = ref<'approval' | 'form-command' | 'chat'>('chat');
@@ -453,7 +503,12 @@ async function handleChatSend() {
       }
     }
     const res = await aiChat({ message: text, history });
-    chatState.messages.push({ role: 'assistant', content: res.reply, time: now() });
+    const assistantMsg: ChatMessage = { role: 'assistant', content: res.reply, time: now() };
+    if (res.pendingAction) {
+      assistantMsg.pendingAction = res.pendingAction;
+      assistantMsg.pendingStatus = 'pending';
+    }
+    chatState.messages.push(assistantMsg);
   } catch (e) {
     console.error(e);
     chatState.messages.push({ role: 'assistant', content: '抱歉，AI 服务暂时不可用，请稍后再试。', time: now() });
@@ -480,8 +535,8 @@ const suggestedUpdatesEntries = computed(() => {
 function togglePanel() {
   panelOpen.value = !panelOpen.value;
   if (panelOpen.value) {
-    if (ctx) {
-      activeTab.value = ctx.mode;
+    if (ctx.value) {
+      activeTab.value = ctx.value.mode;
     } else {
       activeTab.value = 'chat';
     }
@@ -501,13 +556,13 @@ function formatSuggestedValue(value: unknown): string {
 }
 
 async function handleGetSuggestion() {
-  if (!ctx || ctx.mode !== 'approval' || !ctx.taskId.value) return;
+  if (!ctx.value || ctx.value.mode !== 'approval' || !ctx.value.taskId.value) return;
   suggestionState.loading = true;
   suggestionState.suggestion = null;
   suggestionState.conversation = [];
   suggestionState.question = '';
   try {
-    const result = await aiSuggestion(ctx.taskId.value);
+    const result = await aiSuggestion(ctx.value.taskId.value);
     suggestionState.suggestion = result;
     if (result.conversation) {
       suggestionState.conversation = result.conversation;
@@ -521,12 +576,12 @@ async function handleGetSuggestion() {
 }
 
 async function handleFollowUp() {
-  if (!ctx || ctx.mode !== 'approval' || !ctx.taskId.value || !suggestionState.suggestion) return;
+  if (!ctx.value || ctx.value.mode !== 'approval' || !ctx.value.taskId.value || !suggestionState.suggestion) return;
   if (!suggestionState.question.trim()) return;
   suggestionState.asking = true;
   try {
     const result = await aiSuggestionFollowUp(
-      ctx.taskId.value,
+      ctx.value.taskId.value,
       suggestionState.suggestion.recordId,
       suggestionState.question.trim()
     );
@@ -545,8 +600,8 @@ async function handleFollowUp() {
 }
 
 function handleAdopt() {
-  if (!ctx || ctx.mode !== 'approval' || !suggestionState.suggestion?.approvalComment) return;
-  ctx.onAdopt(
+  if (!ctx.value || ctx.value.mode !== 'approval' || !suggestionState.suggestion?.approvalComment) return;
+  ctx.value.onAdopt(
     suggestionState.suggestion.approvalComment,
     suggestionState.suggestion.decision || ''
   );
@@ -555,25 +610,26 @@ function handleAdopt() {
 }
 
 async function handleParse() {
-  if (!ctx || ctx.mode !== 'form-command' || !commandState.command.trim()) {
+  if (!ctx.value || ctx.value.mode !== 'form-command' || !commandState.command.trim()) {
     ElMessage.warning('请输入表单指令');
     return;
   }
+  const formCtx = ctx.value;
   commandState.parsing = true;
   commandState.result = null;
   try {
     const parsed = await parseFormCommand({
       command: commandState.command.trim(),
-      requestTemplateKey: ctx.templateKey.value || undefined,
-      formKey: ctx.formKey.value || undefined,
-      formVersionId: ctx.formVersionId.value ?? undefined
+      requestTemplateKey: formCtx.templateKey.value || undefined,
+      formKey: formCtx.formKey.value || undefined,
+      formVersionId: formCtx.formVersionId.value ?? undefined
     });
 
-    if (parsed.templateKey && parsed.templateKey !== ctx.templateKey.value) {
-      ctx.onTemplateChange(parsed.templateKey);
+    if (parsed.templateKey && parsed.templateKey !== formCtx.templateKey.value) {
+      formCtx.onTemplateChange(parsed.templateKey);
     }
 
-    ctx.onFillFormData(parsed.formData);
+    formCtx.onFillFormData(parsed.formData);
 
     const details: string[] = [];
     details.push(`模型：${parsed.model}`);
@@ -612,19 +668,62 @@ async function handleParse() {
   }
 }
 
+function pendingActionEntries(action: AiPendingAction): Array<[string, unknown]> {
+  if (!action.formData) return [];
+  return Object.entries(action.formData);
+}
+
+async function confirmPending(msg: ChatMessage) {
+  if (!msg.pendingAction || msg.pendingStatus !== 'pending') return;
+  msg.pendingStatus = 'confirming';
+  try {
+    const result = await parseAndStartByFormCommand({
+      command: msg.pendingAction.command,
+      requestTemplateKey: msg.pendingAction.templateKey || undefined,
+      formKey: msg.pendingAction.formKey || undefined,
+      formVersionId: msg.pendingAction.formVersionId ?? undefined,
+      requireAllRequiredFields: true
+    });
+    msg.pendingStatus = 'started';
+    msg.pendingResult = { processInstanceId: result.processInstanceId };
+    ElMessage.success('已发起申请');
+    syncCurrentConversation();
+  } catch (e) {
+    console.error(e);
+    const errMsg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+    msg.pendingStatus = 'pending';
+    msg.pendingError = errMsg || '发起失败，请稍后再试或在「发起申请」页面手工补充';
+    ElMessage.error(msg.pendingError);
+  }
+}
+
+function cancelPending(msg: ChatMessage) {
+  if (msg.pendingStatus !== 'pending') return;
+  msg.pendingStatus = 'cancelled';
+  syncCurrentConversation();
+}
+
+function formatPendingValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 async function handleParseAndStart() {
-  if (!ctx || ctx.mode !== 'form-command' || !commandState.command.trim()) {
+  if (!ctx.value || ctx.value.mode !== 'form-command' || !commandState.command.trim()) {
     ElMessage.warning('请输入表单指令');
     return;
   }
+  const formCtx = ctx.value;
   commandState.starting = true;
   commandState.result = null;
   try {
     const result = await parseAndStartByFormCommand({
       command: commandState.command.trim(),
-      requestTemplateKey: ctx.templateKey.value || undefined,
-      formKey: ctx.formKey.value || undefined,
-      formVersionId: ctx.formVersionId.value ?? undefined,
+      requestTemplateKey: formCtx.templateKey.value || undefined,
+      formKey: formCtx.formKey.value || undefined,
+      formVersionId: formCtx.formVersionId.value ?? undefined,
       requireAllRequiredFields: true
     });
 
@@ -642,7 +741,7 @@ async function handleParseAndStart() {
       details
     };
     ElMessage.success('AI 已发起申请');
-    ctx.onStartProcess();
+    formCtx.onStartProcess();
   } catch (e) {
     console.error(e);
     const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
@@ -1092,6 +1191,101 @@ async function handleParseAndStart() {
   margin-top: 4px;
   opacity: 0.6;
   text-align: right;
+}
+
+.chat-bubble-wrapper {
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.chat-bubble-row.user .chat-bubble-wrapper {
+  align-items: flex-end;
+}
+
+.pending-action-card {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(102, 126, 234, 0.1);
+  font-size: 12px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.pa-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #4f46e5;
+  margin-bottom: 4px;
+}
+
+.pa-meta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.pa-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.pa-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.pa-row code {
+  font-size: 11px;
+  color: #7c3aed;
+  background: #f5f3ff;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.pa-row span {
+  color: #334155;
+  word-break: break-all;
+}
+
+.pa-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.pa-missing {
+  color: #d97706;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.pa-error {
+  color: #dc2626;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.pa-success {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.pa-cancelled {
+  color: #94a3b8;
+}
+
+.pa-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .chat-bubble.typing {

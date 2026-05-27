@@ -6,9 +6,23 @@ export interface ChatTurn {
   answer: string;
 }
 
+export interface AiPendingAction {
+  id: string;
+  kind: "start_process";
+  command: string;
+  templateKey?: string | null;
+  templateName?: string | null;
+  formKey?: string | null;
+  formVersionId?: number | null;
+  formData?: Record<string, unknown>;
+  missingRequiredFields?: string[];
+  confidence?: number;
+}
+
 export interface ChatResponse {
   reply: string;
   model: string;
+  pendingAction?: AiPendingAction | null;
 }
 
 export async function aiChat(payload: {

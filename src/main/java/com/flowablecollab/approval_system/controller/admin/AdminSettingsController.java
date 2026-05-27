@@ -21,6 +21,21 @@ public class AdminSettingsController {
 
     private final AiProviderSettingsService aiProviderSettingsService;
 
+    @GetMapping("/ai/provider")
+    public ResponseEntity<AiProviderSettingsService.AiProviderAdminView> getAiProvider() {
+        return ResponseEntity.ok(aiProviderSettingsService.getAiProviderAdminView());
+    }
+
+    @PutMapping("/ai/provider")
+    public ResponseEntity<AiProviderSettingsService.AiProviderAdminView> updateAiProvider(
+            @RequestBody UpdateAiProviderRequest request) {
+        Long operatorId = SecurityUtils.currentUserId();
+        if (operatorId == null) {
+            throw new IllegalArgumentException("operator not found");
+        }
+        return ResponseEntity.ok(aiProviderSettingsService.setActiveProvider(request.getProvider(), operatorId));
+    }
+
     @GetMapping("/ai/openai")
     public ResponseEntity<AiProviderSettingsService.OpenAiAdminSettingsView> getOpenAiSettings() {
         return ResponseEntity.ok(aiProviderSettingsService.getOpenAiAdminSettings());
@@ -64,5 +79,10 @@ public class AdminSettingsController {
     public static class OpenAiModelListRequest {
         private String baseUrl;
         private String apiKey;
+    }
+
+    @Data
+    public static class UpdateAiProviderRequest {
+        private String provider;
     }
 }

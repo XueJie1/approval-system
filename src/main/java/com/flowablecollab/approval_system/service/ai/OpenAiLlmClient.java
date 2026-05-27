@@ -8,7 +8,6 @@ import com.flowablecollab.approval_system.service.settings.AiProviderSettingsSer
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -25,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-@ConditionalOnProperty(name = "ai.llm.provider", havingValue = "openai")
 public class OpenAiLlmClient implements LlmClient {
 
     private final RestTemplate restTemplate;
@@ -154,6 +152,111 @@ public class OpenAiLlmClient implements LlmClient {
         result.setReply(chatResult.content() != null ? chatResult.content().trim() : "");
         result.setModel(chatResult.model());
         return result;
+    }
+
+    @Override
+    public ChatWithToolsResult chatWithTools(ChatWithToolsRequest request) {
+        List<Map<String, Object>> openAiMessages = new ArrayList<>();
+        for (ChatMessage msg : request.getMessages()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("role", msg.getRole());
+            entry.put("content", msg.getContent());
+            if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                List<Map<String, Object>> tcArr = new ArrayList<>();
+                for (ToolCall tc : msg.getToolCalls()) {
+                    Map<String, Object> tcMap = new LinkedHashMap<>();
+                    tcMap.put("id", tc.getId());
+                    tcMap.put("type", "function");
+                    Map<String, Object> fn = new LinkedHashMap<>();
+                    fn.put("name", tc.getName());
+                    fn.put("arguments", tc.getArgumentsJson() == null ? "{}" : tc.getArgumentsJson());
+                    tcMap.put("function", fn);
+                    tcArr.add(tcMap);
+                }
+                entry.put("tool_calls", tcArr);
+            }
+            if (msg.getToolCallId() != null) {
+                entry.put("tool_call_id", msg.getToolCallId());
+            }
+            if (msg.getName() != null) {
+                entry.put("name", msg.getName());
+            }
+            openAiMessages.add(entry);
+        }
+
+        List<Map<String, Object>> openAiTools = null;
+        if (request.getTools() != null && !request.getTools().isEmpty()) {
+            openAiTools = new ArrayList<>();
+            for (ToolDefinition tool : request.getTools()) {
+                Map<String, Object> fn = new LinkedHashMap<>();
+                fn.put("name", tool.getName());
+                fn.put("description", tool.getDescription());
+                fn.put("parameters", tool.getParametersSchema() == null
+                        ? Map.of("type", "object", "properties", Map.of())
+                        : tool.getParametersSchema());
+                openAiTools.add(Map.of("type", "function", "function", fn));
+            }
+        }
+
+        AiProviderSettingsService.OpenAiRuntimeSettings runtimeSettings = resolveRuntimeSettings();
+        String resolvedApiKey = runtimeSettings.apiKey();
+        String resolvedModel = runtimeSettings.model();
+        if (resolvedApiKey == null || resolvedApiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "OpenAI api-key is not configured. Set OPENAI_API_KEY or configure it in Admin Settings.");
+        }
+        String endpoint = normalizeBaseUrl(runtimeSettings.baseUrl()) + "/chat/completions";
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", resolvedModel);
+        payload.put("temperature", temperature);
+        payload.put("messages", openAiMessages);
+        if (openAiTools != null) {
+            payload.put("tools", openAiTools);
+            payload.put("tool_choice", "auto");
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(resolvedApiKey);
+
+        ResponseEntity<String> response;
+        try {
+            response = restTemplate.postForEntity(endpoint, new HttpEntity<>(payload, headers), String.class);
+        } catch (RestClientException ex) {
+            throw new IllegalStateException("OpenAI request failed: " + ex.getMessage(), ex);
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(response.getBody());
+            JsonNode messageNode = root.path("choices").path(0).path("message");
+            ChatWithToolsResult result = new ChatWithToolsResult();
+            result.setModel(root.path("model").asText(resolvedModel));
+
+            JsonNode toolCallsNode = messageNode.path("tool_calls");
+            if (toolCallsNode.isArray() && toolCallsNode.size() > 0) {
+                List<ToolCall> calls = new ArrayList<>();
+                for (JsonNode tcNode : toolCallsNode) {
+                    if (!"function".equals(tcNode.path("type").asText("function"))) {
+                        continue;
+                    }
+                    ToolCall call = new ToolCall();
+                    call.setId(tcNode.path("id").asText());
+                    call.setName(tcNode.path("function").path("name").asText());
+                    JsonNode argsNode = tcNode.path("function").path("arguments");
+                    call.setArgumentsJson(argsNode.isTextual() ? argsNode.asText() : argsNode.toString());
+                    calls.add(call);
+                }
+                result.setToolCalls(calls);
+            }
+            String content = extractAssistantContent(root);
+            if (content != null && !content.isBlank()) {
+                result.setContent(content.trim());
+            }
+            return result;
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to parse OpenAI tool-call response", ex);
+        }
     }
 
     @Override

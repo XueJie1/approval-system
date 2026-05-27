@@ -34,11 +34,18 @@ public class AiProviderSettingsService {
     public static final String OPENAI_BASE_URL_KEY = "ai.llm.openai.base-url";
     public static final String OPENAI_API_KEY_KEY = "ai.llm.openai.api-key";
     public static final String OPENAI_MODEL_KEY = "ai.llm.openai.model";
+    public static final String PROVIDER_KEY = "ai.llm.provider";
+
+    public static final String PROVIDER_MOCK = "mock";
+    public static final String PROVIDER_OPENAI = "openai";
 
     private final SystemSettingRepository systemSettingRepository;
     private final SettingsCryptoService settingsCryptoService;
     private final RestTemplateBuilder restTemplateBuilder;
     private final ObjectMapper objectMapper;
+
+    @Value("${ai.llm.provider:mock}")
+    private String defaultProvider;
 
     @Value("${ai.llm.openai.base-url:https://api.openai.com/v1}")
     private String defaultOpenAiBaseUrl;
@@ -179,6 +186,56 @@ public class AiProviderSettingsService {
 
         List<String> models = parseModelIds(response.getBody());
         return new OpenAiModelListView(effectiveBaseUrl, runtimeSettings.model(), models);
+    }
+
+    @Transactional(readOnly = true)
+    public String getActiveProvider() {
+        String raw = systemSettingRepository.findBySettingKey(PROVIDER_KEY)
+                .map(SystemSetting::getSettingValue)
+                .orElse(null);
+        String normalized = normalizeProvider(raw);
+        if (normalized != null) {
+            return normalized;
+        }
+        normalized = normalizeProvider(defaultProvider);
+        return normalized != null ? normalized : PROVIDER_MOCK;
+    }
+
+    @Transactional(readOnly = true)
+    public AiProviderAdminView getAiProviderAdminView() {
+        String provider = getActiveProvider();
+        OpenAiAdminSettingsView openAi = getOpenAiAdminSettings();
+        LocalDateTime updatedAt = systemSettingRepository.findBySettingKey(PROVIDER_KEY)
+                .map(SystemSetting::getUpdatedAt)
+                .orElse(null);
+        return new AiProviderAdminView(provider, openAi.hasApiKey(), updatedAt);
+    }
+
+    @Transactional
+    public AiProviderAdminView setActiveProvider(String rawProvider, Long operatorId) {
+        String provider = normalizeProvider(rawProvider);
+        if (provider == null) {
+            throw new IllegalArgumentException("provider must be one of: mock, openai");
+        }
+        if (PROVIDER_OPENAI.equals(provider)) {
+            OpenAiRuntimeSettings runtime = resolveOpenAiRuntimeSettings(defaultOpenAiBaseUrl, defaultOpenAiApiKey, defaultOpenAiModel);
+            if (runtime.apiKey() == null || runtime.apiKey().isBlank()) {
+                throw new IllegalArgumentException("请先在下方配置 OpenAI API Key 后再切换到 openai");
+            }
+        }
+        upsertSetting(PROVIDER_KEY, provider, false, operatorId);
+        return getAiProviderAdminView();
+    }
+
+    private String normalizeProvider(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String value = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (PROVIDER_MOCK.equals(value) || PROVIDER_OPENAI.equals(value)) {
+            return value;
+        }
+        return null;
     }
 
     private void upsertSetting(String key, String value, boolean encrypted, Long operatorId) {
@@ -357,6 +414,12 @@ public class AiProviderSettingsService {
             boolean hasApiKey,
             String apiKeyMasked,
             String model,
+            LocalDateTime updatedAt) {
+    }
+
+    public record AiProviderAdminView(
+            String provider,
+            boolean openAiReady,
             LocalDateTime updatedAt) {
     }
 }

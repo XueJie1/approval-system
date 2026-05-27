@@ -15,6 +15,20 @@ public interface LlmClient {
 
     ChatResult chat(ChatRequest request);
 
+    /**
+     * Low-level multi-message chat with optional function-calling tools.
+     * Returns either a final assistant reply (content non-null) or a list of tool calls
+     * that the caller must execute and feed back as new tool messages.
+     * Implementations that do not support tools may always return a content-only result.
+     */
+    default ChatWithToolsResult chatWithTools(ChatWithToolsRequest request) {
+        ChatResult basic = chat(new ChatRequest());
+        ChatWithToolsResult result = new ChatWithToolsResult();
+        result.setContent(basic.getReply());
+        result.setModel(basic.getModel());
+        return result;
+    }
+
     @Data
     class SuggestionRequest {
         private String taskId;
@@ -118,6 +132,51 @@ public interface LlmClient {
     @Data
     class ChatResult {
         private String reply;
+        private String model;
+    }
+
+    @Data
+    class ChatMessage {
+        /** "system" | "user" | "assistant" | "tool" */
+        private String role;
+        /** May be null when the assistant turn only carries tool calls. */
+        private String content;
+        /** Populated when role=assistant and the model emitted tool_calls. */
+        private List<ToolCall> toolCalls;
+        /** Populated when role=tool, identifying which assistant tool_call this response answers. */
+        private String toolCallId;
+        /** Populated when role=tool, the function name that was executed. */
+        private String name;
+    }
+
+    @Data
+    class ToolDefinition {
+        private String name;
+        private String description;
+        /** OpenAI JSONSchema for the function parameters (object). */
+        private Map<String, Object> parametersSchema;
+    }
+
+    @Data
+    class ToolCall {
+        private String id;
+        private String name;
+        /** Raw JSON string of arguments as emitted by the model. */
+        private String argumentsJson;
+    }
+
+    @Data
+    class ChatWithToolsRequest {
+        private List<ChatMessage> messages;
+        private List<ToolDefinition> tools;
+    }
+
+    @Data
+    class ChatWithToolsResult {
+        /** Final assistant text, present when the model decided to answer the user directly. */
+        private String content;
+        /** Tool calls the caller must execute. When non-empty, content is typically null. */
+        private List<ToolCall> toolCalls;
         private String model;
     }
 }

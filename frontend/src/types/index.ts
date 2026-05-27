@@ -616,6 +616,18 @@ export interface AdminOpenAiModelListResult {
   models: string[];
 }
 
+export type AdminAiProviderName = "mock" | "openai";
+
+export interface AdminAiProvider {
+  provider: AdminAiProviderName;
+  openAiReady: boolean;
+  updatedAt?: string | null;
+}
+
+export interface UpdateAdminAiProviderPayload {
+  provider: AdminAiProviderName;
+}
+
 export interface FormAttachment {
   id: number;
   formInstanceId?: number | null;

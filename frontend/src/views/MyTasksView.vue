@@ -382,7 +382,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, provide, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   Clock,
@@ -402,7 +402,8 @@ import type { FormInstanceData } from '../api/forms';
 import { getFormInstanceData, fetchAttachmentPreviewBlob, fetchAttachmentBlob, downloadAttachmentBlob } from '../api/forms';
 import { getRequestByProcessInstance } from '../api/requests';
 import { useAuthStore } from '../stores/auth';
-import { AI_ASSISTANT_KEY, type ApprovalAiContext } from '../components/ai/types';
+import type { ApprovalAiContext } from '../components/ai/types';
+import { useAiAssistantStore } from '../stores/aiAssistant';
 import {
   fetchTasks,
   claimTask as claimTaskApi,
@@ -457,7 +458,8 @@ const suggestedUpdatesEntries = computed(() => {
 
 const aiTaskId = computed(() => selectedTask.value?.taskId ?? null);
 
-provide<ApprovalAiContext>(AI_ASSISTANT_KEY, {
+const aiAssistantStore = useAiAssistantStore();
+const aiCtx: ApprovalAiContext = {
   mode: 'approval',
   taskId: aiTaskId,
   onAdopt(comment: string, decision: string) {
@@ -465,6 +467,12 @@ provide<ApprovalAiContext>(AI_ASSISTANT_KEY, {
     if (decision) {
       action.approvalResult = decision;
     }
+  }
+};
+aiAssistantStore.set(aiCtx);
+onBeforeUnmount(() => {
+  if (aiAssistantStore.current === aiCtx) {
+    aiAssistantStore.clear();
   }
 });
 
