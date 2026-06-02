@@ -451,6 +451,7 @@ export interface TaskInfo {
   taskName: string;
   processInstanceId: string;
   assignee?: string;
+  assigneeName?: string;
   owner?: string;
   delegationState?: string;
   createTime?: string;

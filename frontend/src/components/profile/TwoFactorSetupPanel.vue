@@ -33,13 +33,13 @@
 
     <div v-if="setupData.secret" class="setup-block">
       <div class="setup-title">配置详情</div>
-      <div class="setup-row">
-        <span>Secret</span>
-        <code>{{ setupData.secret }}</code>
+      <div class="qr-section">
+        <canvas ref="qrCanvas" class="qr-canvas" />
+        <p class="qr-hint">使用 Microsoft Authenticator、Google Authenticator 等验证器应用扫描二维码以添加验证码。</p>
       </div>
       <div class="setup-row">
-        <span>OtpAuthUri</span>
-        <code class="uri">{{ setupData.otpAuthUri }}</code>
+        <span>Secret（手动输入时使用）</span>
+        <code>{{ setupData.secret }}</code>
       </div>
       <div class="setup-actions">
         <el-button size="small" @click="copySecret">复制 Secret</el-button>
@@ -50,8 +50,9 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { reactive, ref, nextTick } from "vue";
 import { ElMessage } from "element-plus";
+import QRCode from "qrcode";
 import type { UserProfile } from "../../types";
 import { enable2fa, disable2fa, setup2fa } from "../../api/auth";
 
@@ -66,6 +67,7 @@ const emit = defineEmits<{
 const loadingSetup = ref(false);
 const working = ref(false);
 const code = ref("");
+const qrCanvas = ref<HTMLCanvasElement | null>(null);
 const setupData = reactive({
   secret: "",
   otpAuthUri: ""
@@ -78,6 +80,10 @@ async function loadSetup() {
     setupData.secret = data.secret;
     setupData.otpAuthUri = data.otpAuthUri;
     ElMessage.success("2FA 配置已加载");
+    await nextTick();
+    if (qrCanvas.value) {
+      await QRCode.toCanvas(qrCanvas.value, data.otpAuthUri, { width: 200, margin: 2 });
+    }
   } finally {
     loadingSetup.value = false;
   }
@@ -108,6 +114,10 @@ async function disable() {
     code.value = "";
     setupData.secret = "";
     setupData.otpAuthUri = "";
+    if (qrCanvas.value) {
+      const ctx = qrCanvas.value.getContext("2d");
+      ctx?.clearRect(0, 0, qrCanvas.value.width, qrCanvas.value.height);
+    }
     ElMessage.success("2FA 已禁用");
     emit("changed");
   } finally {
@@ -200,6 +210,26 @@ function copyUri() {
 
 .uri {
   font-size: 12px;
+}
+
+.qr-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.qr-canvas {
+  border-radius: 8px;
+  border: 1px solid #d8e4ed;
+}
+
+.qr-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  max-width: 260px;
 }
 
 .setup-actions {

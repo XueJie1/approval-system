@@ -772,6 +772,15 @@ public class WorkflowService {
                 .orElse(null);
     }
 
+    private String resolveUsername(String assignee) {
+        try {
+            long id = Long.parseLong(assignee);
+            return sysUserRepository.findById(id).map(SysUser::getUsername).orElse(assignee);
+        } catch (NumberFormatException ex) {
+            return assignee;
+        }
+    }
+
     private Long parseLongSafe(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -790,6 +799,10 @@ public class WorkflowService {
         info.setTaskName(task.getName());
         info.setProcessInstanceId(task.getProcessInstanceId());
         info.setAssignee(task.getAssignee());
+        if (task.getAssignee() != null) {
+            String resolvedName = resolveUsername(task.getAssignee());
+            info.setAssigneeName(resolvedName);
+        }
         info.setOwner(task.getOwner());
         info.setDelegationState(task.getDelegationState() == null ? null : task.getDelegationState().name());
         info.setCreateTime(task.getCreateTime());
@@ -824,6 +837,7 @@ public class WorkflowService {
         private String taskName;
         private String processInstanceId;
         private String assignee;
+        private String assigneeName;
         private String owner;
         private String delegationState;
         private Date createTime;

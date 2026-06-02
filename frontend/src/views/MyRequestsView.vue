@@ -95,9 +95,9 @@
           <div class="section-label">任务列表</div>
           <div class="task-list">
             <div v-for="task in selectedRelatedTasks" :key="task.taskId" class="task-item">
-              <div class="task-name">{{ task.taskName }}</div>
+              <div class="task-name">{{ task.requestTitle || task.taskName }}</div>
               <div class="task-meta">
-                <span>办理人：{{ task.assignee || '待分配' }}</span>
+                <span>办理人：{{ task.assigneeName || '待分配' }}</span>
               </div>
             </div>
           </div>
