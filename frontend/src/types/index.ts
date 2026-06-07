@@ -449,6 +449,7 @@ export interface UserProfile {
 export interface TaskInfo {
   taskId: string;
   taskName: string;
+  taskDefinitionKey?: string;
   processInstanceId: string;
   assignee?: string;
   assigneeName?: string;
@@ -456,6 +457,8 @@ export interface TaskInfo {
   delegationState?: string;
   createTime?: string;
   requestTitle?: string;
+  canReturnToPrevious?: boolean;
+  startUserId?: number;
 }
 
 export interface BizRequest {

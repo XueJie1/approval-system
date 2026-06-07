@@ -14,13 +14,13 @@
 
   <el-dialog v-model="dialogVisible" title="选择会签用户" width="860px">
     <div class="toolbar">
-      <el-input v-model="keyword" placeholder="按用户名搜索" clearable @keyup.enter="reload" />
-      <el-select v-model="status" style="width: 160px" @change="reload">
+      <el-input v-model="keyword" placeholder="按用户名搜索" clearable @keyup.enter="search" />
+      <el-select v-model="status" style="width: 160px" @change="search">
         <el-option label="仅启用用户" :value="1" />
         <el-option label="仅停用用户" :value="0" />
         <el-option label="全部状态" :value="-1" />
       </el-select>
-      <el-button :loading="loading" @click="reload">查询</el-button>
+      <el-button :loading="loading" @click="search">查询</el-button>
     </div>
 
     <el-table
@@ -52,6 +52,18 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="pagination-bar">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        @size-change="reload"
+        @current-change="reload"
+      />
+    </div>
 
     <template #footer>
       <div class="footer">
@@ -86,6 +98,9 @@ const keyword = ref("");
 const status = ref<number>(1);
 const users = ref<UserDirectoryItem[]>([]);
 const draftSelection = ref<UserDirectoryItem[]>([]);
+const currentPage = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 
 const selectedDisplay = computed(() => {
   if (props.modelValue.length === 0) {
@@ -106,13 +121,22 @@ watch(dialogVisible, async (open) => {
   syncSelectionToTable();
 });
 
+function search() {
+  currentPage.value = 1;
+  reload();
+}
+
 async function reload() {
   loading.value = true;
   try {
-    users.value = await listUsers({
+    const result = await listUsers({
       keyword: keyword.value.trim() || undefined,
-      status: status.value >= 0 ? status.value : undefined
+      status: status.value >= 0 ? status.value : undefined,
+      page: currentPage.value - 1,
+      size: pageSize.value,
     });
+    users.value = result.content;
+    total.value = result.total;
     await nextTick();
     syncSelectionToTable();
   } finally {
@@ -160,6 +184,12 @@ function confirmSelection() {
   gap: 10px;
   margin-bottom: 14px;
   flex-wrap: wrap;
+}
+
+.pagination-bar {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .footer {

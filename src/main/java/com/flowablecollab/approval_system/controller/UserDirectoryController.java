@@ -21,9 +21,11 @@ public class UserDirectoryController {
     private final RbacService rbacService;
 
     @GetMapping
-    public ResponseEntity<List<UserListItem>> listUsers(
+    public ResponseEntity<PageResult<UserListItem>> listUsers(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(required = false) Integer status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         List<SysUser> matchedUsers = rbacService.listUsers(keyword, status);
         Map<Long, List<String>> roleCodesByUserId = rbacService.getUserRoleCodes(
                 matchedUsers.stream().map(SysUser::getId).toList());
@@ -31,7 +33,12 @@ public class UserDirectoryController {
                 .map(user -> UserListItem.from(user, roleCodesByUserId.getOrDefault(user.getId(), List.of())))
                 .filter(UserListItem::isApproverEligible)
                 .toList();
-        return ResponseEntity.ok(users);
+        int safeSize = Math.max(1, Math.min(size, 200));
+        int total = users.size();
+        int fromIndex = Math.min(page * safeSize, total);
+        int toIndex = Math.min(fromIndex + safeSize, total);
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / safeSize);
+        return ResponseEntity.ok(new PageResult<>(users.subList(fromIndex, toIndex), total, page, safeSize, totalPages));
     }
 
     @Data
@@ -58,4 +65,6 @@ public class UserDirectoryController {
             return item;
         }
     }
+
+    public record PageResult<T>(List<T> content, int total, int page, int size, int totalPages) {}
 }

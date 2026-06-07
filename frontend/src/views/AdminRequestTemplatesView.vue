@@ -311,7 +311,8 @@ onMounted(() => {
 
 async function loadApproverOptions() {
   try {
-    approverOptions.value = await listUsers({ status: 1 });
+    const result = await listUsers({ status: 1, size: 200 });
+    approverOptions.value = result.content;
   } catch (e) {
     console.error(e);
     ElMessage.error('加载审批人列表失败');

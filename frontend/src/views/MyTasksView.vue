@@ -224,11 +224,18 @@
               <el-collapse-item title="委派给他人" name="delegate">
                 <div class="collapse-form">
                   <p class="collapse-hint">将任务临时委派给他人处理，处理后返回给你确认</p>
-                  <el-input v-model="action.delegateUserId" placeholder="输入被委派人ID" />
+                  <UserPickerInput v-model="action.delegateUserId" placeholder="请选择被委派人" :exclude-user-ids="delegateExcludeIds" />
+                  <el-input
+                    v-model="action.delegateComment"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="请输入委派说明（必填）"
+                    style="margin-top: 8px"
+                  />
                   <el-button
                     type="warning"
                     :loading="actionLoading"
-                    :disabled="!action.delegateUserId.trim() || !action.comment.trim()"
+                    :disabled="!action.delegateUserId.trim() || !action.delegateComment.trim()"
                     @click="handleDelegateTask"
                   >
                     确认委派
@@ -239,12 +246,19 @@
               <el-collapse-item title="转办给他人" name="reassign">
                 <div class="collapse-form">
                   <p class="collapse-hint">将任务永久转给他人处理，责任转移</p>
-                  <el-input v-model="action.newAssigneeId" placeholder="输入转办人ID" />
+                  <UserPickerInput v-model="action.newAssigneeId" placeholder="请选择转办人" :exclude-user-ids="delegateExcludeIds" />
+                  <el-input
+                    v-model="action.reassignComment"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="请输入转办说明（必填）"
+                    style="margin-top: 8px"
+                  />
                   <el-button
                     type="danger"
                     plain
                     :loading="actionLoading"
-                    :disabled="!action.newAssigneeId.trim() || !action.comment.trim()"
+                    :disabled="!action.newAssigneeId.trim() || !action.reassignComment.trim()"
                     @click="handleReassignTask"
                   >
                     确认转办
@@ -256,26 +270,53 @@
                 <div class="collapse-form">
                   <p class="collapse-hint">将任务退回到指定环节重新处理</p>
                   <div class="return-buttons">
-                    <el-button :loading="actionLoading" :disabled="!action.comment.trim()" @click="returnPrevious">
-                      回退上一步
-                    </el-button>
-                    <el-button :loading="actionLoading" :disabled="!action.comment.trim()" @click="returnApplicant">
-                      回退发起人
-                    </el-button>
+                    <el-tooltip :content="selectedTask?.canReturnToPrevious ? '' : '当前已是第一个审批节点，无法回退'" placement="top" :disabled="!!selectedTask?.canReturnToPrevious">
+                      <span>
+                        <el-button :loading="actionLoading" :disabled="!action.comment.trim() || !selectedTask?.canReturnToPrevious" @click="returnPrevious">
+                          回退上一步
+                        </el-button>
+                      </span>
+                    </el-tooltip>
+                    <el-tooltip :content="selectedTask?.taskDefinitionKey === 'applicantRework' ? '当前已是发起人环节' : !action.comment.trim() ? '请填写备注' : ''" placement="top" :disabled="!(!action.comment.trim() || selectedTask?.taskDefinitionKey === 'applicantRework')">
+                      <span>
+                        <el-button :loading="actionLoading" :disabled="!action.comment.trim() || selectedTask?.taskDefinitionKey === 'applicantRework'" @click="returnApplicant">
+                          回退发起人
+                        </el-button>
+                      </span>
+                    </el-tooltip>
                   </div>
-                  <el-input
+                  <el-select
                     v-model="action.targetActivityId"
-                    placeholder="指定节点ID（如 countersignTask）"
-                    style="margin-top: 12px"
-                  />
-                  <el-button
-                    :loading="actionLoading"
-                    :disabled="!action.targetActivityId.trim() || !action.comment.trim()"
-                    style="margin-top: 8px"
-                    @click="returnTarget"
+                    placeholder="选择要回退到的节点"
+                    style="margin-top: 12px; width: 100%"
+                    clearable
                   >
-                    回退指定节点
-                  </el-button>
+                    <el-option
+                      v-for="node in returnableNodes"
+                      :key="node.activityId"
+                      :label="node.activityName"
+                      :value="node.activityId"
+                    />
+                    <template v-if="returnableNodes.length === 0" #empty>
+                      <span style="padding: 8px 12px; color: #999; font-size: 13px">暂无可回退节点</span>
+                    </template>
+                  </el-select>
+                  <el-tooltip
+                    :content="!action.comment.trim() ? '请填写备注' : !action.targetActivityId ? '请选择目标节点' : ''"
+                    placement="top"
+                    :disabled="!!(action.comment.trim() && action.targetActivityId)"
+                  >
+                    <span>
+                      <el-button
+                        :loading="actionLoading"
+                        :disabled="!action.targetActivityId || !action.comment.trim()"
+                        style="margin-top: 8px"
+                        @click="returnTarget"
+                      >
+                        回退指定节点
+                      </el-button>
+                    </span>
+                  </el-tooltip>
                 </div>
               </el-collapse-item>
             </el-collapse>
@@ -404,6 +445,7 @@ import { getRequestByProcessInstance } from '../api/requests';
 import { useAuthStore } from '../stores/auth';
 import type { ApprovalAiContext } from '../components/ai/types';
 import { useAiAssistantStore } from '../stores/aiAssistant';
+import UserPickerInput from '../components/requests/UserPickerInput.vue';
 import {
   fetchTasks,
   claimTask as claimTaskApi,
@@ -414,6 +456,7 @@ import {
   returnToPrevious,
   returnToTarget,
   returnToApplicant,
+  fetchReturnableNodes,
   aiSuggestion,
   aiSuggestionFollowUp
 } from '../api/workflow';
@@ -440,9 +483,13 @@ const action = reactive({
   approvalResult: 'APPROVE',
   comment: '',
   delegateUserId: '',
+  delegateComment: '',
   newAssigneeId: '',
+  reassignComment: '',
   targetActivityId: ''
 });
+
+const returnableNodes = ref<{ activityId: string; activityName: string }[]>([]);
 
 const aiPanel = reactive({
   loading: false,
@@ -498,10 +545,14 @@ function selectTask(task: TaskInfo) {
   action.approvalResult = 'APPROVE';
   action.comment = '';
   action.delegateUserId = '';
+  action.delegateComment = '';
   action.newAssigneeId = '';
+  action.reassignComment = '';
   action.targetActivityId = '';
   currentSuggestion.value = null;
   formDetail.value = null;
+  returnableNodes.value = [];
+  fetchReturnableNodes(task.taskId).then(nodes => { returnableNodes.value = nodes; }).catch(() => {});
   detailDrawer.open = true;
   loadFormData(task);
 }
@@ -608,6 +659,13 @@ function isCurrentIdentity(identity?: string) {
   return normalized === currentUserId() || normalized === currentUsername();
 }
 
+const delegateExcludeIds = computed(() => {
+  const ids = new Set<string>();
+  if (currentUserId()) ids.add(currentUserId());
+  if (selectedTask.value?.startUserId != null) ids.add(String(selectedTask.value.startUserId));
+  return Array.from(ids);
+});
+
 function canResolveDelegatedTask(task: TaskInfo) {
   return task.delegationState === 'PENDING' && isCurrentIdentity(task.assignee);
 }
@@ -689,13 +747,13 @@ async function handleResolveTask() {
 }
 
 async function handleDelegateTask() {
-  if (!selectedTask.value || !action.delegateUserId.trim() || !action.comment.trim()) return;
+  if (!selectedTask.value || !action.delegateUserId.trim() || !action.delegateComment.trim()) return;
   actionLoading.value = true;
   try {
     await delegateTaskApi(selectedTask.value.taskId, {
       userId: currentUserId(),
       delegateUserId: action.delegateUserId.trim(),
-      comment: action.comment.trim()
+      comment: action.delegateComment.trim()
     });
     ElMessage.success('委派成功');
     detailDrawer.open = false;
@@ -709,13 +767,13 @@ async function handleDelegateTask() {
 }
 
 async function handleReassignTask() {
-  if (!selectedTask.value || !action.newAssigneeId.trim() || !action.comment.trim()) return;
+  if (!selectedTask.value || !action.newAssigneeId.trim() || !action.reassignComment.trim()) return;
   actionLoading.value = true;
   try {
     await reassignTaskApi(selectedTask.value.taskId, {
       userId: currentUserId(),
       newAssigneeId: action.newAssigneeId.trim(),
-      comment: action.comment.trim()
+      comment: action.reassignComment.trim()
     });
     ElMessage.success('转办成功');
     detailDrawer.open = false;

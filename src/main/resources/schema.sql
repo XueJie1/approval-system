@@ -148,6 +148,10 @@ CREATE INDEX IF NOT EXISTS idx_request_template_status ON request_template(statu
 CREATE INDEX IF NOT EXISTS idx_request_template_sort_order ON request_template(sort_order);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_sys_setting_key ON sys_setting(setting_key);
 
+-- tinytext (255 bytes) is too small for AI-generated JSON with Chinese text
+ALTER TABLE ai_suggestion_record MODIFY COLUMN suggestion_json MEDIUMTEXT NOT NULL;
+ALTER TABLE ai_suggestion_record MODIFY COLUMN conversation_json MEDIUMTEXT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_biz_request_workflow_definition ON biz_request(workflow_definition_id);
 CREATE INDEX IF NOT EXISTS idx_biz_request_workflow_definition_version ON biz_request(workflow_definition_version_id);
 CREATE INDEX IF NOT EXISTS idx_biz_request_form_version ON biz_request(form_version_id);

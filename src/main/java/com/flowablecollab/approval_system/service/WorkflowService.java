@@ -9,11 +9,13 @@ import com.flowablecollab.approval_system.repository.BizRequestLogRepository;
 import com.flowablecollab.approval_system.repository.BizRequestRepository;
 import com.flowablecollab.approval_system.repository.BizRequestTaskRepository;
 import com.flowablecollab.approval_system.repository.rbac.SysUserRepository;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.HistoryService;
+import org.flowable.engine.history.HistoricActivityInstance;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.DelegationState;
@@ -487,8 +489,7 @@ public class WorkflowService {
         String previousActivityId = findPreviousUserTaskActivity(task.getProcessInstanceId(),
                 task.getTaskDefinitionKey());
         if (previousActivityId == null) {
-            // Fall back to the current approval task for this process type
-            previousActivityId = getCurrentApprovalTaskId(task.getProcessInstanceId());
+            throw new IllegalStateException("没有可回退的上一步");
         }
         returnToActivity(task, previousActivityId, userId, comment);
     }
@@ -568,6 +569,31 @@ public class WorkflowService {
                 .map(activity -> activity.getActivityId())
                 .findFirst()
                 .orElse(null);
+    }
+
+    public List<ReturnableNode> findReturnableActivitiesByTaskId(String taskId) {
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task == null) {
+            return List.of();
+        }
+        return findReturnableActivities(task.getProcessInstanceId(), task.getTaskDefinitionKey());
+    }
+
+    public List<ReturnableNode> findReturnableActivities(String processInstanceId, String currentTaskDefinitionKey) {
+        List<HistoricActivityInstance> history = historyService.createHistoricActivityInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .activityType("userTask")
+                .finished()
+                .orderByHistoricActivityInstanceEndTime()
+                .desc()
+                .list();
+        LinkedHashMap<String, ReturnableNode> seen = new LinkedHashMap<>();
+        for (HistoricActivityInstance a : history) {
+            if (!currentTaskDefinitionKey.equals(a.getActivityId()) && !seen.containsKey(a.getActivityId())) {
+                seen.put(a.getActivityId(), new ReturnableNode(a.getActivityId(), a.getActivityName()));
+            }
+        }
+        return new ArrayList<>(seen.values());
     }
 
     /**
@@ -797,17 +823,23 @@ public class WorkflowService {
         TaskInfo info = new TaskInfo();
         info.setTaskId(task.getId());
         info.setTaskName(task.getName());
+        info.setTaskDefinitionKey(task.getTaskDefinitionKey());
         info.setProcessInstanceId(task.getProcessInstanceId());
         info.setAssignee(task.getAssignee());
         if (task.getAssignee() != null) {
-            String resolvedName = resolveUsername(task.getAssignee());
-            info.setAssigneeName(resolvedName);
+            info.setAssigneeName(resolveUsername(task.getAssignee()));
         }
         info.setOwner(task.getOwner());
         info.setDelegationState(task.getDelegationState() == null ? null : task.getDelegationState().name());
         info.setCreateTime(task.getCreateTime());
         bizRequestRepository.findByProcessInstanceId(task.getProcessInstanceId())
-                .ifPresent(request -> info.setRequestTitle(request.getTitle()));
+                .ifPresent(request -> {
+                    info.setRequestTitle(request.getTitle());
+                    info.setStartUserId(request.getApplicantId());
+                });
+        String previousActivityId = findPreviousUserTaskActivity(task.getProcessInstanceId(),
+                task.getTaskDefinitionKey());
+        info.setCanReturnToPrevious(previousActivityId != null);
         return info;
     }
 
@@ -835,6 +867,7 @@ public class WorkflowService {
     public static class TaskInfo {
         private String taskId;
         private String taskName;
+        private String taskDefinitionKey;
         private String processInstanceId;
         private String assignee;
         private String assigneeName;
@@ -842,6 +875,15 @@ public class WorkflowService {
         private String delegationState;
         private Date createTime;
         private String requestTitle;
+        private boolean canReturnToPrevious;
+        private Long startUserId;
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class ReturnableNode {
+        private String activityId;
+        private String activityName;
     }
 
     @Data

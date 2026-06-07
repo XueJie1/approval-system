@@ -65,6 +65,11 @@ export async function returnToApplicant(taskId: string, payload: { userId: strin
   await http.post(`/workflow/tasks/${taskId}/return/applicant`, payload);
 }
 
+export async function fetchReturnableNodes(taskId: string): Promise<{ activityId: string; activityName: string }[]> {
+  const { data } = await http.get(`/workflow/tasks/${taskId}/returnable-nodes`);
+  return data;
+}
+
 export async function cancelProcess(processInstanceId: string, payload: { userId: string; comment: string }) {
   await http.post(`/workflow/process/${processInstanceId}/cancel`, payload);
 }

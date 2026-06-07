@@ -8,7 +8,10 @@
     </div>
 
     <div class="form-grid">
-      <el-form-item v-for="field in fields" :key="field.fieldKey" :label="field.label || field.fieldKey">
+      <el-form-item v-for="field in fields" :key="field.fieldKey">
+        <template #label>
+          <span>{{ field.label || field.fieldKey }}<span v-if="field.required" style="color: red; margin-left: 2px;">*</span></span>
+        </template>
         <el-input
           v-if="field.fieldType === 'string' && !isTemporalField(field)"
           :model-value="resolveValue(field.fieldKey)"

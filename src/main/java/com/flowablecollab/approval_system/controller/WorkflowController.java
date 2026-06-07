@@ -343,6 +343,12 @@ public class WorkflowController {
         return ResponseEntity.ok(ActionResponse.ok("Process activated"));
     }
 
+    @GetMapping("/tasks/{taskId}/returnable-nodes")
+    public ResponseEntity<List<WorkflowService.ReturnableNode>> getReturnableNodes(@PathVariable String taskId) {
+        requireCurrentUserId();
+        return ResponseEntity.ok(workflowService.findReturnableActivitiesByTaskId(taskId));
+    }
+
     @GetMapping("/tasks/{taskId}/ai-suggestion")
     public ResponseEntity<AiSuggestionResponse> getAiSuggestion(@PathVariable String taskId) {
         Long currentUserId = requireCurrentUserId();
